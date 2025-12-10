@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run dev:*)",
+      "Bash(lsof:*)",
+      "Bash(xargs kill:*)",
+      "Bash(npm run build:*)",
+      "Bash(pkill:*)",
+      "Bash(curl:*)",
+      "Bash(grep:*)",
+      "Bash(cat:*)",
+      "Bash(find:*)",
+      "Bash(npm ls:*)",
+      "Bash(npx tsc:*)",
+      "Bash(npm install:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nAdd Beeper Kanban board with AI assistant\n\n- Implement three-column kanban board (Unread, Drafts, Sent) for managing messages\n- Add message panel with chat history and reply functionality\n- Add AI chat assistant per message thread with persistent storage\n- Integrate with Beeper API for fetching/sending messages across platforms\n- Add settings pages for platforms, API keys, tone preferences, and hidden chats\n- Fix sent column to show messages after replying (include isFromMe messages)\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n)\")"
+    ]
+  }
+}
