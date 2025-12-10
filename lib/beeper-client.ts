@@ -27,11 +27,13 @@ export function getBeeperClient(accessToken?: string): BeeperDesktop {
 
 // Helper to extract platform name from account ID
 export function getPlatformFromAccountId(accountId: string): string {
-  // Account IDs typically look like "local-telegram_ba_xxx" or "whatsapp_xxx"
-  const parts = accountId.split('_');
-  if (parts.length > 0) {
-    const firstPart = parts[0]?.replace('local-', '') || 'unknown';
-    return firstPart;
+  // Account IDs typically look like "local-telegram_ba_xxx", "whatsapp_xxx", or "slackgo.T095K8FDQRG-U095K8FDQSE"
+  // First remove "local-" prefix if present
+  const cleaned = accountId.replace('local-', '');
+  // Split by underscore or dot to get platform name
+  const parts = cleaned.split(/[_.]/);
+  if (parts.length > 0 && parts[0]) {
+    return parts[0];
   }
   return 'unknown';
 }
@@ -41,9 +43,11 @@ export const platformInfo: Record<string, { name: string; color: string }> = {
   telegram: { name: 'Telegram', color: '#0088cc' },
   whatsapp: { name: 'WhatsApp', color: '#25D366' },
   instagram: { name: 'Instagram', color: '#E4405F' },
+  instagramgo: { name: 'Instagram', color: '#E4405F' },
   signal: { name: 'Signal', color: '#3A76F0' },
   discord: { name: 'Discord', color: '#5865F2' },
   slack: { name: 'Slack', color: '#4A154B' },
+  slackgo: { name: 'Slack', color: '#4A154B' },
   imessage: { name: 'iMessage', color: '#34C759' },
   googlemessages: { name: 'Google Messages', color: '#1A73E8' },
   messenger: { name: 'Messenger', color: '#0084FF' },
