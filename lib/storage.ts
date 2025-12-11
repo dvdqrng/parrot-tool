@@ -456,3 +456,109 @@ export function clearAiChatForThread(chatId: string): void {
   delete history[chatId];
   saveAiChatHistory(history);
 }
+
+// Thread context storage (persistent conversation context per chat)
+const THREAD_CONTEXT_KEY = 'beeper-kanban-thread-context';
+
+export interface ThreadContextMessage {
+  id: string;
+  text: string;
+  isFromMe: boolean;
+  senderName: string;
+  timestamp: string;
+}
+
+export interface ThreadContext {
+  chatId: string;
+  senderName: string;
+  messages: ThreadContextMessage[];
+  lastUpdated: string;
+}
+
+export interface ThreadContextStore {
+  [chatId: string]: ThreadContext;
+}
+
+export function loadThreadContextStore(): ThreadContextStore {
+  if (typeof window === 'undefined') return {};
+
+  try {
+    const stored = localStorage.getItem(THREAD_CONTEXT_KEY);
+    if (!stored) return {};
+    return JSON.parse(stored) as ThreadContextStore;
+  } catch {
+    console.error('Failed to load thread context from localStorage');
+    return {};
+  }
+}
+
+export function saveThreadContextStore(store: ThreadContextStore): void {
+  if (typeof window === 'undefined') return;
+
+  try {
+    localStorage.setItem(THREAD_CONTEXT_KEY, JSON.stringify(store));
+  } catch {
+    console.error('Failed to save thread context to localStorage');
+  }
+}
+
+export function getThreadContext(chatId: string): ThreadContext | null {
+  const store = loadThreadContextStore();
+  return store[chatId] || null;
+}
+
+export function saveThreadContext(chatId: string, senderName: string, messages: ThreadContextMessage[]): void {
+  const store = loadThreadContextStore();
+  store[chatId] = {
+    chatId,
+    senderName,
+    messages,
+    lastUpdated: new Date().toISOString(),
+  };
+  saveThreadContextStore(store);
+}
+
+export function updateThreadContextWithNewMessages(
+  chatId: string,
+  senderName: string,
+  newMessages: ThreadContextMessage[]
+): ThreadContext {
+  const existing = getThreadContext(chatId);
+  const existingIds = new Set(existing?.messages.map(m => m.id) || []);
+
+  // Add only new messages (by ID)
+  const messagesToAdd = newMessages.filter(m => !existingIds.has(m.id));
+  const allMessages = [...(existing?.messages || []), ...messagesToAdd];
+
+  // Sort by timestamp and keep last 50 messages for context
+  const sortedMessages = allMessages
+    .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+    .slice(-50);
+
+  saveThreadContext(chatId, senderName, sortedMessages);
+
+  return {
+    chatId,
+    senderName,
+    messages: sortedMessages,
+    lastUpdated: new Date().toISOString(),
+  };
+}
+
+export function formatThreadContextForPrompt(context: ThreadContext | null): string {
+  if (!context || context.messages.length === 0) return '';
+
+  return context.messages
+    .map(m => `${m.isFromMe ? 'Me' : m.senderName}: ${m.text}`)
+    .join('\n');
+}
+
+export function formatAiChatSummaryForPrompt(aiMessages: AiChatMessage[]): string {
+  if (aiMessages.length === 0) return '';
+
+  // Get last few exchanges to understand ongoing AI conversation
+  const recentMessages = aiMessages.slice(-10);
+  return recentMessages
+    .map(m => `${m.role === 'user' ? 'User asked' : 'AI responded'}: ${m.content}`)
+    .join('\n');
+}

@@ -10,8 +10,17 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { KanbanCard, BeeperMessage } from '@/lib/types';
 import { getPlatformInfo } from '@/lib/beeper-client';
-import { loadSettings } from '@/lib/storage';
-import { Loader2, Sparkles, Send, Save, ChevronUp, Users, X, MessageSquare } from 'lucide-react';
+import {
+  loadSettings,
+  loadToneSettings,
+  updateThreadContextWithNewMessages,
+  getThreadContext,
+  formatThreadContextForPrompt,
+  getAiChatForThread,
+  formatAiChatSummaryForPrompt,
+  ThreadContextMessage,
+} from '@/lib/storage';
+import { Loader2, Sparkles, Send, Save, ChevronUp, Users, X, MessageSquare, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
@@ -64,6 +73,7 @@ export function MessagePanel({
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [historyLimit, setHistoryLimit] = useState(2);
+  const [isRefreshingContext, setIsRefreshingContext] = useState(false);
 
   const isOpen = card !== null;
   const message = card?.message;
@@ -106,8 +116,20 @@ export function MessagePanel({
           senderAvatarUrl: m.senderAvatarUrl,
         }));
         // Reverse to show oldest first (for chat-style display)
-        setChatHistory(messages.reverse());
+        const sortedMessages = messages.reverse();
+        setChatHistory(sortedMessages);
         setHasMoreHistory(messages.length >= limit);
+
+        // Save to persistent thread context
+        const senderName = message?.senderName || draft?.recipientName || 'Unknown';
+        const contextMessages: ThreadContextMessage[] = sortedMessages.map(m => ({
+          id: m.id,
+          text: m.text,
+          isFromMe: m.isFromMe,
+          senderName: m.senderName,
+          timestamp: m.timestamp,
+        }));
+        updateThreadContextWithNewMessages(chatId, senderName, contextMessages);
       }
     } catch (error) {
       console.error('Failed to fetch chat history:', error);
@@ -135,33 +157,78 @@ export function MessagePanel({
     fetchHistory(newLimit);
   }, [historyLimit, fetchHistory]);
 
+  // Manually refresh thread context with more messages
+  const handleRefreshContext = useCallback(async () => {
+    if (!chatId) return;
+
+    setIsRefreshingContext(true);
+    try {
+      const settings = loadSettings();
+      const headers: HeadersInit = {};
+      if (settings.beeperAccessToken) {
+        headers['x-beeper-token'] = settings.beeperAccessToken;
+      }
+
+      // Fetch more messages (50) to build comprehensive context
+      const response = await fetch(
+        `/api/beeper/chats?chatId=${encodeURIComponent(chatId)}&limit=50`,
+        { headers }
+      );
+      const result = await response.json();
+
+      if (result.data) {
+        const senderName = message?.senderName || draft?.recipientName || 'Unknown';
+        const contextMessages: ThreadContextMessage[] = result.data.map((m: BeeperMessage) => ({
+          id: m.id,
+          text: m.text,
+          isFromMe: m.isFromMe,
+          senderName: m.senderName,
+          timestamp: m.timestamp,
+        }));
+        updateThreadContextWithNewMessages(chatId, senderName, contextMessages);
+        toast.success('Thread context updated with latest messages');
+      }
+    } catch (error) {
+      console.error('Failed to refresh context:', error);
+      toast.error('Failed to refresh thread context');
+    } finally {
+      setIsRefreshingContext(false);
+    }
+  }, [chatId, message, draft]);
+
   // Generate AI suggestion
   const generateAISuggestion = useCallback(async () => {
-    if (!message && !draft) return;
+    if (!message && !draft || !chatId) return;
 
     setIsGenerating(true);
     try {
       const settings = loadSettings();
+      const toneSettings = loadToneSettings();
       const headers: HeadersInit = { 'Content-Type': 'application/json' };
       if (settings.anthropicApiKey) {
         headers['x-anthropic-key'] = settings.anthropicApiKey;
       }
 
-      // Use last few messages as context
-      const contextMessages = chatHistory.slice(-5).map(m =>
-        `${m.isFromMe ? 'Me' : m.senderName}: ${m.text}`
-      ).join('\n');
-
       const senderName = message?.senderName || draft?.recipientName || 'Unknown';
       const originalText = message?.text || draft?.originalText || '';
+
+      // Get persistent thread context
+      const threadContext = getThreadContext(chatId);
+      const threadContextStr = formatThreadContextForPrompt(threadContext);
+
+      // Get AI chat history for this thread
+      const aiChatHistory = getAiChatForThread(chatId);
+      const aiChatSummary = formatAiChatSummaryForPrompt(aiChatHistory);
 
       const response = await fetch('/api/ai/draft', {
         method: 'POST',
         headers,
         body: JSON.stringify({
-          originalMessage: contextMessages || originalText,
+          originalMessage: originalText,
           senderName,
-          tone: 'friendly',
+          toneSettings,
+          threadContext: threadContextStr,
+          aiChatSummary,
         }),
       });
 
@@ -177,7 +244,7 @@ export function MessagePanel({
     } finally {
       setIsGenerating(false);
     }
-  }, [message, draft, chatHistory]);
+  }, [message, draft, chatId]);
 
   // Send message
   const handleSend = useCallback(async () => {
@@ -213,14 +280,16 @@ export function MessagePanel({
 
   // Notify parent about message context changes for AI chat
   useEffect(() => {
-    if (onMessageContextChange && chatHistory.length > 0 && (message || draft)) {
-      const context = chatHistory.map(m =>
-        `${m.isFromMe ? 'Me' : m.senderName}: ${m.text}`
-      ).join('\n');
+    if (onMessageContextChange && chatId && (message || draft)) {
+      // Use persistent thread context instead of just current chatHistory
+      const threadContext = getThreadContext(chatId);
+      const context = formatThreadContextForPrompt(threadContext);
       const senderName = message?.senderName || draft?.recipientName || 'Unknown';
-      onMessageContextChange(context, senderName);
+      if (context) {
+        onMessageContextChange(context, senderName);
+      }
     }
-  }, [chatHistory, message, draft, onMessageContextChange]);
+  }, [chatHistory, chatId, message, draft, onMessageContextChange]);
 
   const title = card?.title || '';
   const initials = title
@@ -240,7 +309,7 @@ export function MessagePanel({
       {isOpen && card && (message || draft) && (
         <>
           {/* Header */}
-          <div className="shrink-0 flex items-center justify-between p-4 border-b">
+          <div className="shrink-0 flex items-center justify-between p-4 border-b h-[76px]">
             <div className="flex items-center gap-3 min-w-0">
               <Avatar className="h-10 w-10 shrink-0">
                 <AvatarImage src={getAvatarSrc(card.avatarUrl)} alt={title} className="object-cover" />
@@ -263,6 +332,19 @@ export function MessagePanel({
               </div>
             </div>
             <div className="flex items-center gap-1 shrink-0">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleRefreshContext}
+                disabled={isRefreshingContext}
+                title="Refresh AI context"
+              >
+                {isRefreshingContext ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-4 w-4" />
+                )}
+              </Button>
               {onToggleAiChat && (
                 <Button
                   variant={isAiChatOpen ? 'secondary' : 'ghost'}

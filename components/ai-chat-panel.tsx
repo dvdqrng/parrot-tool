@@ -145,7 +145,7 @@ export function AiChatPanel({
       {isOpen && (
         <>
           {/* Header */}
-          <div className="shrink-0 flex items-center justify-between p-4 border-b">
+          <div className="shrink-0 flex items-center justify-between p-4 border-b h-[76px]">
             <div className="flex items-center gap-2">
               <span className="font-medium">AI Assistant</span>
             </div>

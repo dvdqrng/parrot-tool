@@ -15,7 +15,14 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Draft, BeeperMessage } from '@/lib/types';
 import { getPlatformInfo } from '@/lib/beeper-client';
-import { loadSettings } from '@/lib/storage';
+import {
+  loadSettings,
+  loadToneSettings,
+  getThreadContext,
+  formatThreadContextForPrompt,
+  getAiChatForThread,
+  formatAiChatSummaryForPrompt,
+} from '@/lib/storage';
 import { Loader2, Sparkles, Send, Save, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -57,14 +64,27 @@ export function DraftComposer({
   const recipientName = existingDraft?.recipientName || originalMessage?.senderName || 'Unknown';
   const platform = existingDraft?.platform || originalMessage?.platform || 'unknown';
   const platformData = getPlatformInfo(platform);
+  const chatId = existingDraft?.chatId || originalMessage?.chatId;
 
   const generateAISuggestion = useCallback(async () => {
     setIsGenerating(true);
     try {
       const settings = loadSettings();
+      const toneSettings = loadToneSettings();
       const headers: HeadersInit = { 'Content-Type': 'application/json' };
       if (settings.anthropicApiKey) {
         headers['x-anthropic-key'] = settings.anthropicApiKey;
+      }
+
+      // Get persistent thread context if available
+      let threadContextStr = '';
+      let aiChatSummary = '';
+      if (chatId) {
+        const threadContext = getThreadContext(chatId);
+        threadContextStr = formatThreadContextForPrompt(threadContext);
+
+        const aiChatHistory = getAiChatForThread(chatId);
+        aiChatSummary = formatAiChatSummaryForPrompt(aiChatHistory);
       }
 
       const response = await fetch('/api/ai/draft', {
@@ -73,7 +93,9 @@ export function DraftComposer({
         body: JSON.stringify({
           originalMessage: originalText,
           senderName: recipientName,
-          tone: 'friendly',
+          toneSettings,
+          threadContext: threadContextStr,
+          aiChatSummary,
         }),
       });
 

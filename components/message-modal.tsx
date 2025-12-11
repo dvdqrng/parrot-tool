@@ -18,7 +18,16 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { KanbanCard, BeeperMessage } from '@/lib/types';
 import { getPlatformInfo } from '@/lib/beeper-client';
-import { loadSettings } from '@/lib/storage';
+import {
+  loadSettings,
+  loadToneSettings,
+  updateThreadContextWithNewMessages,
+  getThreadContext,
+  formatThreadContextForPrompt,
+  getAiChatForThread,
+  formatAiChatSummaryForPrompt,
+  ThreadContextMessage,
+} from '@/lib/storage';
 import { Loader2, Sparkles, Send, Save, ChevronUp, Users } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -103,8 +112,21 @@ export function MessageModal({
           senderAvatarUrl: m.senderAvatarUrl,
         }));
         // Reverse to show oldest first (for chat-style display)
-        setChatHistory(messages.reverse());
+        const sortedMessages = messages.reverse();
+        setChatHistory(sortedMessages);
         setHasMoreHistory(messages.length >= limit);
+
+        // Save to persistent thread context
+        if (message) {
+          const contextMessages: ThreadContextMessage[] = sortedMessages.map(m => ({
+            id: m.id,
+            text: m.text,
+            isFromMe: m.isFromMe,
+            senderName: m.senderName,
+            timestamp: m.timestamp,
+          }));
+          updateThreadContextWithNewMessages(chatId, message.senderName, contextMessages);
+        }
       }
     } catch (error) {
       console.error('Failed to fetch chat history:', error);
@@ -113,7 +135,7 @@ export function MessageModal({
       setIsLoadingHistory(false);
       setIsLoadingMore(false);
     }
-  }, [chatId]);
+  }, [chatId, message]);
 
   // Load initial history when modal opens
   useEffect(() => {
@@ -133,28 +155,34 @@ export function MessageModal({
 
   // Generate AI suggestion
   const generateAISuggestion = useCallback(async () => {
-    if (!message) return;
+    if (!message || !chatId) return;
 
     setIsGenerating(true);
     try {
       const settings = loadSettings();
+      const toneSettings = loadToneSettings();
       const headers: HeadersInit = { 'Content-Type': 'application/json' };
       if (settings.anthropicApiKey) {
         headers['x-anthropic-key'] = settings.anthropicApiKey;
       }
 
-      // Use last few messages as context
-      const contextMessages = chatHistory.slice(-5).map(m =>
-        `${m.isFromMe ? 'Me' : m.senderName}: ${m.text}`
-      ).join('\n');
+      // Get persistent thread context
+      const threadContext = getThreadContext(chatId);
+      const threadContextStr = formatThreadContextForPrompt(threadContext);
+
+      // Get AI chat history for this thread
+      const aiChatHistory = getAiChatForThread(chatId);
+      const aiChatSummary = formatAiChatSummaryForPrompt(aiChatHistory);
 
       const response = await fetch('/api/ai/draft', {
         method: 'POST',
         headers,
         body: JSON.stringify({
-          originalMessage: contextMessages || message.text,
+          originalMessage: message.text,
           senderName: message.senderName,
-          tone: 'friendly',
+          toneSettings,
+          threadContext: threadContextStr,
+          aiChatSummary,
         }),
       });
 
@@ -170,7 +198,7 @@ export function MessageModal({
     } finally {
       setIsGenerating(false);
     }
-  }, [message, chatHistory]);
+  }, [message, chatId]);
 
   // Send message
   const handleSend = useCallback(async () => {
