@@ -58,7 +58,10 @@ When drafting replies:
 - Keep them concise and natural
 - Match the tone of typical chat messages
 - Don't be overly formal unless requested
-- Provide just the reply text without explanations unless asked
+- When providing draft options, wrap EACH draft in <draft> tags like this:
+  <draft>Your draft message here</draft>
+- If providing multiple options, use separate <draft> tags for each one
+- You can include explanatory text before or after the draft tags
 
 Be helpful, concise, and friendly in your responses.`;
 

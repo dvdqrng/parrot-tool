@@ -10,6 +10,44 @@ import { cn } from '@/lib/utils';
 import { loadSettings } from '@/lib/storage';
 import { toast } from 'sonner';
 
+// Parse message content to extract draft sections
+type ContentPart = { type: 'text'; content: string } | { type: 'draft'; content: string };
+
+function parseMessageContent(content: string): ContentPart[] {
+  const parts: ContentPart[] = [];
+  const draftRegex = /<draft>([\s\S]*?)<\/draft>/g;
+  let lastIndex = 0;
+  let match;
+
+  while ((match = draftRegex.exec(content)) !== null) {
+    // Add text before the draft
+    if (match.index > lastIndex) {
+      const text = content.slice(lastIndex, match.index).trim();
+      if (text) {
+        parts.push({ type: 'text', content: text });
+      }
+    }
+    // Add the draft
+    parts.push({ type: 'draft', content: match[1].trim() });
+    lastIndex = match.index + match[0].length;
+  }
+
+  // Add remaining text after last draft
+  if (lastIndex < content.length) {
+    const text = content.slice(lastIndex).trim();
+    if (text) {
+      parts.push({ type: 'text', content: text });
+    }
+  }
+
+  // If no drafts found, return the whole content as text
+  if (parts.length === 0) {
+    parts.push({ type: 'text', content });
+  }
+
+  return parts;
+}
+
 export interface AiChatMessage {
   id: string;
   role: 'user' | 'assistant';
@@ -189,41 +227,52 @@ export function AiChatPanel({
                       msg.role === 'user' ? 'items-end' : 'items-start'
                     )}
                   >
-                    <div
-                      className={cn(
-                        'max-w-[90%] rounded-2xl px-4 py-2',
-                        msg.role === 'user'
-                          ? 'bg-primary text-primary-foreground'
-                          : 'bg-muted'
-                      )}
-                    >
-                      <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
-                    </div>
-                    {msg.role === 'assistant' && (
-                      <div className="flex gap-1 mt-1 px-2">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
-                          onClick={() => handleCopy(msg.id, msg.content)}
-                        >
-                          {copiedId === msg.id ? (
-                            <Check className="h-3 w-3 mr-1" />
-                          ) : (
-                            <Copy className="h-3 w-3 mr-1" />
-                          )}
-                          {copiedId === msg.id ? 'Copied' : 'Copy'}
-                        </Button>
-                        {onUseDraft && (
+                    {msg.role === 'user' ? (
+                      <div className="max-w-[90%] rounded-2xl px-4 py-2 bg-primary text-primary-foreground">
+                        <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                      </div>
+                    ) : (
+                      <div className="max-w-[90%] space-y-2">
+                        {parseMessageContent(msg.content).map((part, idx) => (
+                          <div key={idx}>
+                            {part.type === 'text' ? (
+                              <div className="rounded-2xl px-4 py-2 bg-muted">
+                                <p className="text-sm whitespace-pre-wrap">{part.content}</p>
+                              </div>
+                            ) : (
+                              <div className="border rounded-xl overflow-hidden">
+                                <div className="px-4 py-2 bg-muted/50">
+                                  <p className="text-sm whitespace-pre-wrap">{part.content}</p>
+                                </div>
+                                {onUseDraft && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="w-full h-8 text-xs text-muted-foreground hover:text-foreground hover:bg-muted rounded-none border-t"
+                                    onClick={() => handleUseDraft(part.content)}
+                                  >
+                                    Use as draft
+                                  </Button>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                        <div className="flex gap-1 px-2">
                           <Button
                             variant="ghost"
                             size="sm"
                             className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
-                            onClick={() => handleUseDraft(msg.content)}
+                            onClick={() => handleCopy(msg.id, msg.content.replace(/<\/?draft>/g, ''))}
                           >
-                            Use as draft
+                            {copiedId === msg.id ? (
+                              <Check className="h-3 w-3 mr-1" />
+                            ) : (
+                              <Copy className="h-3 w-3 mr-1" />
+                            )}
+                            {copiedId === msg.id ? 'Copied' : 'Copy all'}
                           </Button>
-                        )}
+                        </div>
                       </div>
                     )}
                   </div>
