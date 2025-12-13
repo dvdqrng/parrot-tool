@@ -68,8 +68,8 @@ export default function HiddenChatsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-2xl font-bold">Hidden Chats</h2>
-        <p className="text-muted-foreground">
+        <h2 className="text-xs font-medium">Hidden Chats</h2>
+        <p className="text-xs text-muted-foreground">
           Manage chats you&apos;ve hidden from the Kanban board
         </p>
       </div>
@@ -97,8 +97,8 @@ export default function HiddenChatsPage() {
         <CardContent>
           {hiddenChatsData.length === 0 ? (
             <div className="rounded-lg bg-muted p-4 text-center">
-              <p className="text-muted-foreground">No hidden chats</p>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-xs text-muted-foreground">No hidden chats</p>
+              <p className="text-xs text-muted-foreground">
                 When you hide a chat from the Kanban board, it will appear here.
               </p>
             </div>
@@ -129,7 +129,7 @@ export default function HiddenChatsPage() {
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium text-sm truncate">{chat.name}</p>
+                      <p className="font-medium text-xs truncate">{chat.name}</p>
                       <p className="text-xs text-muted-foreground truncate">{chat.chatId}</p>
                     </div>
                     <Button

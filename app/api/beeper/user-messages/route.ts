@@ -11,8 +11,9 @@ interface UserMessage {
 // GET /api/beeper/user-messages - Get a sample of messages sent by the user for tone analysis
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
-  const maxMessages = parseInt(searchParams.get('maxMessages') || '100', 10);
-  const maxChats = parseInt(searchParams.get('maxChats') || '15', 10);
+  // Increased defaults: 500 messages from up to 50 chats for better voice analysis
+  const maxMessages = parseInt(searchParams.get('maxMessages') || '500', 10);
+  const maxChats = parseInt(searchParams.get('maxChats') || '50', 10);
 
   try {
     const beeperToken = request.headers.get('x-beeper-token') || undefined;
@@ -27,7 +28,7 @@ export async function GET(request: NextRequest) {
       chatCount++;
 
       let messagesChecked = 0;
-      const maxMessagesPerChat = 20; // Check up to 20 messages per chat
+      const maxMessagesPerChat = 50; // Check up to 50 messages per chat for better sampling
 
       // Get messages from this chat
       try {

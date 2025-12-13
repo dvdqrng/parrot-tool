@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { ArrowLeft, Key, MessageSquare, Layers, EyeOff } from 'lucide-react';
+import { ArrowLeft, Key, MessageSquare, Layers, EyeOff, Database } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
@@ -31,6 +31,12 @@ const navItems = [
     icon: EyeOff,
     description: 'Manage hidden conversations',
   },
+  {
+    title: 'Data',
+    href: '/settings/data',
+    icon: Database,
+    description: 'Manage stored data',
+  },
 ];
 
 export default function SettingsLayout({
@@ -54,7 +60,7 @@ export default function SettingsLayout({
                 </Button>
               </Link>
               <div>
-                <h1 className="text-lg font-semibold">Settings</h1>
+                <h1 className="text-xs font-medium">Settings</h1>
               </div>
             </div>
 
@@ -69,7 +75,7 @@ export default function SettingsLayout({
                     key={item.href}
                     href={item.href}
                     className={cn(
-                      'flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors',
+                      'flex items-center gap-3 rounded-lg px-3 py-2 text-xs transition-colors',
                       isActive
                         ? 'bg-primary text-primary-foreground'
                         : 'text-muted-foreground hover:bg-muted hover:text-foreground'
@@ -77,7 +83,7 @@ export default function SettingsLayout({
                   >
                     <Icon className="h-4 w-4" />
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium truncate">{item.title}</p>
+                      <p className="text-xs font-medium truncate">{item.title}</p>
                     </div>
                   </Link>
                 );

@@ -2,23 +2,29 @@
 
 import { useState, useCallback } from 'react';
 import Link from 'next/link';
-import { Settings, RefreshCw, Loader2 } from 'lucide-react';
+import { Settings, RefreshCw, Loader2, Plus, Archive } from 'lucide-react';
+import { ThemeToggle } from '@/components/theme-toggle';
 import { Button } from '@/components/ui/button';
 import { MessageBoard } from '@/components/kanban/message-board';
 import { MessageDetail } from '@/components/message-detail';
 import { DraftComposer } from '@/components/draft-composer';
 import { MessagePanel } from '@/components/message-panel';
 import { AiChatPanel } from '@/components/ai-chat-panel';
+import { ContactsDialog } from '@/components/contacts-dialog';
+import type { Contact } from '@/app/api/beeper/contacts/route';
 import { useSettingsContext } from '@/contexts/settings-context';
 import { useMessages } from '@/hooks/use-messages';
+import { useArchived } from '@/hooks/use-archived';
 import { useDrafts } from '@/hooks/use-drafts';
 import { useAiChatHistory } from '@/hooks/use-ai-chat-history';
+import { useBatchDraftGenerator } from '@/hooks/use-batch-draft-generator';
+import { useBatchSend } from '@/hooks/use-batch-send';
 import { KanbanCard, ColumnId, BeeperMessage, Draft } from '@/lib/types';
-import { loadHiddenChats, addHiddenChat } from '@/lib/storage';
+import { loadHiddenChats, addHiddenChat, loadWritingStylePatterns, loadToneSettings } from '@/lib/storage';
 import { toast } from 'sonner';
 
 export default function Home() {
-  const { settings, isLoaded: settingsLoaded } = useSettingsContext();
+  const { settings, isLoaded: settingsLoaded, updateSettings } = useSettingsContext();
 
   // Hidden chats state - load on mount
   const [hiddenChats, setHiddenChats] = useState<Set<string>>(() => {
@@ -41,10 +47,78 @@ export default function Home() {
     avatars,
     chatInfo,
   } = useMessages(settings.selectedAccountIds, hiddenChats);
+
+  // Fetch archived messages only when showArchivedColumn is enabled
+  const {
+    archivedMessages,
+    refetch: refetchArchived,
+  } = useArchived(settings.selectedAccountIds, settings.showArchivedColumn);
+
   const { drafts, createDraft, updateDraft, deleteDraft } = useDrafts();
 
-  // Filter out optimistically archived chats for immediate UI feedback
-  const filteredUnreadMessages = unreadMessages.filter(m => !archivedChats.has(m.chatId));
+  // Filter out optimistically archived chats and messages that have drafts
+  const draftChatIds = new Set(drafts.map(d => d.chatId));
+  const filteredUnreadMessages = unreadMessages.filter(m =>
+    !archivedChats.has(m.chatId) && !draftChatIds.has(m.chatId)
+  );
+
+  // Batch draft generation
+  const handleDraftGenerated = useCallback((message: BeeperMessage, draftText: string) => {
+    const avatarUrl = chatInfo?.[message.chatId]?.isGroup
+      ? undefined
+      : (avatars?.[message.chatId] || message.senderAvatarUrl);
+    const isGroup = chatInfo?.[message.chatId]?.isGroup;
+    createDraft(message, draftText, avatarUrl, isGroup);
+  }, [createDraft, avatars, chatInfo]);
+
+  const {
+    isGenerating: isGeneratingDrafts,
+    progress: generatingProgress,
+    generateAllDrafts,
+    cancelGeneration,
+  } = useBatchDraftGenerator({
+    onDraftGenerated: handleDraftGenerated,
+  });
+
+  const handleGenerateAllDrafts = useCallback(() => {
+    // Filter out messages that already have drafts
+    const existingDraftChatIds = new Set(drafts.map(d => d.chatId));
+    const messagesWithoutDrafts = filteredUnreadMessages.filter(
+      m => !existingDraftChatIds.has(m.chatId)
+    );
+
+    if (messagesWithoutDrafts.length === 0) {
+      toast.info('All messages already have drafts');
+      return;
+    }
+
+    toast.info(`Generating drafts for ${messagesWithoutDrafts.length} messages...`);
+    generateAllDrafts(messagesWithoutDrafts);
+  }, [filteredUnreadMessages, drafts, generateAllDrafts]);
+
+  // Batch send drafts
+  const handleDraftSent = useCallback((draft: Draft) => {
+    deleteDraft(draft.id);
+  }, [deleteDraft]);
+
+  const {
+    isSending: isSendingAllDrafts,
+    progress: sendingProgress,
+    sendAllDrafts,
+    cancelSending,
+  } = useBatchSend({
+    onDraftSent: handleDraftSent,
+  });
+
+  const handleSendAllDrafts = useCallback(() => {
+    if (drafts.length === 0) {
+      toast.info('No drafts to send');
+      return;
+    }
+
+    toast.info(`Sending ${drafts.length} drafts...`);
+    sendAllDrafts(drafts);
+  }, [drafts, sendAllDrafts]);
 
   // UI state
   const [selectedCard, setSelectedCard] = useState<KanbanCard | null>(null);
@@ -59,6 +133,9 @@ export default function Home() {
   const [messageContext, setMessageContext] = useState('');
   const [senderName, setSenderName] = useState('');
   const [draftTextFromAi, setDraftTextFromAi] = useState<string | undefined>(undefined);
+
+  // Contacts dialog state
+  const [contactsDialogOpen, setContactsDialogOpen] = useState(false);
 
   // Get the current chat ID from selected card (for per-thread AI chat)
   const currentChatId = selectedCard?.message?.chatId || selectedCard?.draft?.chatId || null;
@@ -87,13 +164,66 @@ export default function Home() {
     }
   }, []);
 
-  // Handle dragging card to drafts column
-  const handleMoveToColumn = useCallback((card: KanbanCard, fromColumn: ColumnId, toColumn: ColumnId) => {
+  // Handle dragging card to drafts column - auto-generate draft with optimistic UI
+  const handleMoveToColumn = useCallback(async (card: KanbanCard, fromColumn: ColumnId, toColumn: ColumnId) => {
     if (fromColumn === 'unread' && toColumn === 'drafts' && card.type === 'message' && card.message) {
-      // Open the message panel (same as clicking the card)
-      setSelectedCard(card);
+      const message = card.message;
+
+      // Immediately create an optimistic draft with placeholder text
+      const avatarUrl = chatInfo?.[message.chatId]?.isGroup
+        ? undefined
+        : (avatars?.[message.chatId] || message.senderAvatarUrl);
+      const isGroup = chatInfo?.[message.chatId]?.isGroup;
+      const optimisticDraft = createDraft(message, 'Generating response...', avatarUrl, isGroup);
+
+      // Show loading toast
+      const toastId = toast.loading('Generating draft...');
+
+      try {
+        const headers: HeadersInit = { 'Content-Type': 'application/json' };
+        if (settings.anthropicApiKey && settings.aiProvider !== 'ollama') {
+          headers['x-anthropic-key'] = settings.anthropicApiKey;
+        }
+
+        const toneSettings = loadToneSettings();
+        const writingStyle = loadWritingStylePatterns();
+
+        const response = await fetch('/api/ai/draft', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            originalMessage: message.text,
+            senderName: message.senderName,
+            toneSettings,
+            writingStyle: writingStyle.sampleMessages.length > 0 ? writingStyle : undefined,
+            provider: settings.aiProvider || 'anthropic',
+            ollamaModel: settings.ollamaModel,
+            ollamaBaseUrl: settings.ollamaBaseUrl,
+          }),
+        });
+
+        const result = await response.json();
+
+        if (result.data?.suggestedReply) {
+          // Update the optimistic draft with AI-generated text
+          updateDraft(optimisticDraft.id, { draftText: result.data.suggestedReply });
+          toast.success('Draft created', { id: toastId });
+        } else if (result.error) {
+          // Keep the draft but show error
+          updateDraft(optimisticDraft.id, { draftText: '' });
+          toast.error(result.error, { id: toastId });
+        } else {
+          updateDraft(optimisticDraft.id, { draftText: '' });
+          toast.error('Failed to generate draft', { id: toastId });
+        }
+      } catch (error) {
+        console.error('Failed to generate draft:', error);
+        // Keep the draft but clear placeholder
+        updateDraft(optimisticDraft.id, { draftText: '' });
+        toast.error('Failed to generate draft', { id: toastId });
+      }
     }
-  }, []);
+  }, [settings.anthropicApiKey, settings.aiProvider, settings.ollamaModel, settings.ollamaBaseUrl, avatars, chatInfo, createDraft, updateDraft]);
 
   // Handle archive chat
   const handleArchive = useCallback(async (card: KanbanCard) => {
@@ -128,6 +258,10 @@ export default function Home() {
       }
 
       toast.success('Chat archived');
+      // Refresh archived list if showing
+      if (settings.showArchivedColumn) {
+        refetchArchived();
+      }
     } catch {
       // Revert optimistic update on error
       setArchivedChats(prev => {
@@ -137,7 +271,39 @@ export default function Home() {
       });
       toast.error('Failed to archive chat');
     }
-  }, [settings.beeperAccessToken]);
+  }, [settings.beeperAccessToken, settings.showArchivedColumn, refetchArchived]);
+
+  // Handle unarchive chat
+  const handleUnarchive = useCallback(async (card: KanbanCard) => {
+    const chatId = card.message?.chatId;
+    if (!chatId) return;
+
+    try {
+      const headers: HeadersInit = { 'Content-Type': 'application/json' };
+      if (settings.beeperAccessToken) {
+        headers['x-beeper-token'] = settings.beeperAccessToken;
+      }
+
+      const response = await fetch(`/api/beeper/chats/${encodeURIComponent(chatId)}/unarchive`, {
+        method: 'POST',
+        headers,
+      });
+
+      const result = await response.json();
+
+      if (result.error) {
+        toast.error(`Failed to unarchive: ${result.error}`);
+        return;
+      }
+
+      toast.success('Chat unarchived');
+      // Refresh both lists
+      refetch();
+      refetchArchived();
+    } catch {
+      toast.error('Failed to unarchive chat');
+    }
+  }, [settings.beeperAccessToken, refetch, refetchArchived]);
 
   // Handle hide chat (local only)
   const handleHide = useCallback((card: KanbanCard) => {
@@ -218,49 +384,77 @@ export default function Home() {
     setDraftTextFromAi(undefined);
   }, []);
 
+  // Handle contact selection from contacts dialog
+  const handleContactSelect = useCallback((contact: Contact) => {
+    // Create a synthetic message to represent the new conversation
+    const syntheticMessage: BeeperMessage = {
+      id: `new-${contact.chatId}-${Date.now()}`,
+      chatId: contact.chatId,
+      accountId: contact.accountId,
+      senderId: '',
+      senderName: contact.name,
+      senderAvatarUrl: contact.avatarUrl,
+      text: '',
+      timestamp: new Date().toISOString(),
+      isFromMe: false,
+      isRead: true,
+      chatName: contact.name,
+      platform: contact.platform,
+      isGroup: contact.isGroup,
+    };
+
+    // Create a card for the message panel
+    const card: KanbanCard = {
+      id: syntheticMessage.id,
+      type: 'message',
+      message: syntheticMessage,
+      title: contact.name,
+      preview: '',
+      timestamp: syntheticMessage.timestamp,
+      platform: contact.platform,
+      avatarUrl: contact.avatarUrl,
+      isGroup: contact.isGroup,
+    };
+
+    // Open the side panel with this card
+    setSelectedCard(card);
+  }, []);
+
   // Handle send message
   const handleSend = useCallback(async (draftText: string) => {
     const chatId = composerDraft?.chatId || composerMessage?.chatId;
 
     if (!chatId) {
-      toast.error('Cannot send: missing chat ID');
-      return;
+      throw new Error('Cannot send: missing chat ID');
     }
 
-    try {
-      const headers: HeadersInit = { 'Content-Type': 'application/json' };
-      if (settings.beeperAccessToken) {
-        headers['x-beeper-token'] = settings.beeperAccessToken;
-      }
-
-      const response = await fetch('/api/beeper/send', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ chatId, text: draftText }),
-      });
-
-      const result = await response.json();
-
-      if (result.error) {
-        toast.error(`Failed to send: ${result.error}`);
-        return;
-      }
-
-      // Delete draft if it exists
-      if (composerDraft) {
-        deleteDraft(composerDraft.id);
-      }
-
-      toast.success('Message sent!');
-
-      // Refresh messages after a short delay
-      setTimeout(refetch, 1000);
-    } catch (err) {
-      toast.error('Failed to send message');
+    const headers: HeadersInit = { 'Content-Type': 'application/json' };
+    if (settings.beeperAccessToken) {
+      headers['x-beeper-token'] = settings.beeperAccessToken;
     }
-  }, [composerDraft, composerMessage, deleteDraft, refetch]);
 
-  // Handle delete draft
+    const response = await fetch('/api/beeper/send', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ chatId, text: draftText }),
+    });
+
+    const result = await response.json();
+
+    if (result.error) {
+      throw new Error(result.error);
+    }
+
+    // Delete draft if it exists
+    if (composerDraft) {
+      deleteDraft(composerDraft.id);
+    }
+
+    // Refresh messages after a short delay
+    setTimeout(refetch, 1000);
+  }, [composerDraft, composerMessage, deleteDraft, refetch, settings.beeperAccessToken]);
+
+  // Handle delete draft (from composer)
   const handleDeleteDraft = useCallback(() => {
     if (composerDraft) {
       deleteDraft(composerDraft.id);
@@ -268,47 +462,46 @@ export default function Home() {
     }
   }, [composerDraft, deleteDraft]);
 
+  // Handle delete draft from card (in kanban board)
+  const handleDeleteDraftFromCard = useCallback((card: KanbanCard) => {
+    if (card.type === 'draft' && card.draft) {
+      deleteDraft(card.draft.id);
+      toast.success('Draft deleted');
+    }
+  }, [deleteDraft]);
+
   // Handle send from message panel
   const handleSendFromPanel = useCallback(async (text: string) => {
     const chatId = selectedCard?.message?.chatId || selectedCard?.draft?.chatId;
 
     if (!chatId) {
-      toast.error('Cannot send: missing chat ID');
-      return;
+      throw new Error('Cannot send: missing chat ID');
     }
 
-    try {
-      const headers: HeadersInit = { 'Content-Type': 'application/json' };
-      if (settings.beeperAccessToken) {
-        headers['x-beeper-token'] = settings.beeperAccessToken;
-      }
-
-      const response = await fetch('/api/beeper/send', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ chatId, text }),
-      });
-
-      const result = await response.json();
-
-      if (result.error) {
-        toast.error(`Failed to send: ${result.error}`);
-        throw new Error(result.error);
-      }
-
-      // Delete draft if sending from a draft card
-      if (selectedCard?.type === 'draft' && selectedCard.draft) {
-        deleteDraft(selectedCard.draft.id);
-      }
-
-      toast.success('Message sent!');
-
-      // Refresh messages after a short delay
-      setTimeout(refetch, 1000);
-    } catch (err) {
-      toast.error('Failed to send message');
-      throw err;
+    const headers: HeadersInit = { 'Content-Type': 'application/json' };
+    if (settings.beeperAccessToken) {
+      headers['x-beeper-token'] = settings.beeperAccessToken;
     }
+
+    const response = await fetch('/api/beeper/send', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ chatId, text }),
+    });
+
+    const result = await response.json();
+
+    if (result.error) {
+      throw new Error(result.error);
+    }
+
+    // Delete draft if sending from a draft card
+    if (selectedCard?.type === 'draft' && selectedCard.draft) {
+      deleteDraft(selectedCard.draft.id);
+    }
+
+    // Refresh messages after a short delay
+    setTimeout(refetch, 1000);
   }, [selectedCard, settings.beeperAccessToken, refetch, deleteDraft]);
 
 
@@ -326,8 +519,8 @@ export default function Home() {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-4 p-8">
         <div className="text-center">
-          <h1 className="text-2xl font-bold">Welcome to Beeper Kanban</h1>
-          <p className="mt-2 text-muted-foreground">
+          <h1 className="text-xs font-medium">Welcome to Beeper Kanban</h1>
+          <p className="mt-2 text-xs text-muted-foreground">
             Configure your platforms to get started
           </p>
         </div>
@@ -347,12 +540,12 @@ export default function Home() {
     <div className="flex h-screen">
       {/* Main content area */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        <main className="flex-1 overflow-hidden p-6">
+        <main className="flex-1 overflow-hidden pt-6 pl-6">
           {error ? (
             <div className="flex h-full items-center justify-center">
               <div className="rounded-lg bg-destructive/10 p-6 text-center text-destructive">
-                <p className="font-medium">Connection Error</p>
-                <p className="text-sm">{error}</p>
+                <p className="text-xs font-medium">Connection Error</p>
+                <p className="text-xs">{error}</p>
                 <Button variant="outline" className="mt-4" onClick={refetch}>
                   Try Again
                 </Button>
@@ -363,48 +556,86 @@ export default function Home() {
               <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
             </div>
           ) : (
-            <div className="h-full flex justify-center">
-              <div className="max-w-4xl w-full">
-                <MessageBoard
-                  unreadMessages={filteredUnreadMessages}
-                  drafts={drafts}
-                  sentMessages={sentMessages}
-                  avatars={avatars}
-                  chatInfo={chatInfo}
-                  onCardClick={handleCardClick}
-                  onMoveToColumn={handleMoveToColumn}
-                  onArchive={handleArchive}
-                  onHide={handleHide}
-                  hasMore={hasMore}
-                  isLoadingMore={isLoadingMore}
-                  onLoadMore={loadMore}
-                />
-              </div>
+            <div className="h-full overflow-x-auto">
+              <MessageBoard
+                unreadMessages={filteredUnreadMessages}
+                drafts={drafts}
+                sentMessages={sentMessages}
+                archivedMessages={archivedMessages}
+                showArchivedColumn={settings.showArchivedColumn}
+                avatars={avatars}
+                chatInfo={chatInfo}
+                onCardClick={handleCardClick}
+                onMoveToColumn={handleMoveToColumn}
+                onArchive={handleArchive}
+                onUnarchive={handleUnarchive}
+                onHide={handleHide}
+                onDeleteDraft={handleDeleteDraftFromCard}
+                hasMore={hasMore}
+                isLoadingMore={isLoadingMore}
+                onLoadMore={loadMore}
+                onGenerateAllDrafts={handleGenerateAllDrafts}
+                isGeneratingDrafts={isGeneratingDrafts}
+                generatingProgress={generatingProgress ?? undefined}
+                onCancelGeneration={cancelGeneration}
+                onSendAllDrafts={handleSendAllDrafts}
+                isSendingAllDrafts={isSendingAllDrafts}
+                sendingProgress={sendingProgress ?? undefined}
+                onCancelSending={cancelSending}
+              />
             </div>
           )}
         </main>
 
-        {/* Floating bottom bar */}
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-2 rounded-full bg-white shadow-lg px-2 py-2 z-10">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="rounded-full"
-            onClick={refetch}
-            disabled={isLoading}
-          >
-            <RefreshCw className={`h-5 w-5 ${isLoading ? 'animate-spin' : ''}`} />
-          </Button>
-          <Link href="/settings">
-            <Button variant="ghost" size="icon" className="rounded-full">
-              <Settings className="h-5 w-5" />
+        {/* Floating bottom bar with contacts overlay */}
+        <div className="fixed bottom-6 left-[320px] -translate-x-1/2 z-10 flex flex-col items-center">
+          {/* Contacts overlay - positioned above bottom bar */}
+          <ContactsDialog
+            open={contactsDialogOpen}
+            onOpenChange={setContactsDialogOpen}
+            onSelectContact={handleContactSelect}
+          />
+
+          {/* Bottom nav */}
+          <div className="flex items-center gap-2 rounded-full bg-white dark:bg-card shadow-lg dark:border px-2 py-2">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="rounded-full"
+              onClick={() => setContactsDialogOpen(true)}
+            >
+              <Plus className="h-5 w-5" />
             </Button>
-          </Link>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="rounded-full"
+              onClick={refetch}
+              disabled={isLoading}
+            >
+              <RefreshCw className={`h-5 w-5 ${isLoading ? 'animate-spin' : ''}`} />
+            </Button>
+            <Button
+              variant={settings.showArchivedColumn ? "default" : "ghost"}
+              size="icon"
+              className="rounded-full"
+              onClick={() => updateSettings({ showArchivedColumn: !settings.showArchivedColumn })}
+              title={settings.showArchivedColumn ? "Hide archived column" : "Show archived column"}
+            >
+              <Archive className="h-5 w-5" />
+            </Button>
+            <ThemeToggle />
+            <Link href="/settings">
+              <Button variant="ghost" size="icon" className="rounded-full">
+                <Settings className="h-5 w-5" />
+              </Button>
+            </Link>
+          </div>
         </div>
       </div>
 
-      {/* Message panel sidebar with padding */}
-      <div className={`shrink-0 flex gap-2 transition-all duration-300 ease-in-out ${isPanelOpen ? 'py-2 pr-2' : 'w-0'}`}>
+      {/* Floating panels - fixed position on right side */}
+      <div className={`fixed top-4 right-4 bottom-4 flex gap-4 transition-all duration-300 ease-in-out z-20 ${isPanelOpen ? 'pointer-events-auto' : 'pointer-events-none'}`}>
         <MessagePanel
           card={isPanelOpen ? selectedCard : null}
           onClose={handleClosePanel}

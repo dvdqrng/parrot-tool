@@ -1,4 +1,4 @@
-import { Draft, AppSettings, BeeperMessage, BeeperAccount, ToneSettings } from './types';
+import { Draft, AppSettings, BeeperMessage, BeeperAccount, ToneSettings, WritingStylePatterns } from './types';
 
 const DRAFTS_KEY = 'beeper-kanban-drafts';
 const SETTINGS_KEY = 'beeper-kanban-settings';
@@ -337,10 +337,29 @@ export function clearAllHiddenChats(): void {
 
 // Tone settings storage
 const TONE_SETTINGS_KEY = 'beeper-kanban-tone-settings';
+const WRITING_STYLE_KEY = 'beeper-kanban-writing-style';
 
 const DEFAULT_TONE_SETTINGS: ToneSettings = {
   briefDetailed: 50,
   formalCasual: 50,
+};
+
+const DEFAULT_WRITING_STYLE: WritingStylePatterns = {
+  sampleMessages: [],
+  commonPhrases: [],
+  frequentEmojis: [],
+  greetingPatterns: [],
+  signOffPatterns: [],
+  punctuationStyle: {
+    usesMultipleExclamation: false,
+    usesEllipsis: false,
+    usesAllCaps: false,
+    endsWithPunctuation: true,
+  },
+  capitalizationStyle: 'proper',
+  avgWordsPerMessage: 10,
+  abbreviations: [],
+  languageQuirks: [],
 };
 
 export function loadToneSettings(): ToneSettings {
@@ -363,6 +382,29 @@ export function saveToneSettings(settings: ToneSettings): void {
     localStorage.setItem(TONE_SETTINGS_KEY, JSON.stringify(settings));
   } catch {
     console.error('Failed to save tone settings to localStorage');
+  }
+}
+
+export function loadWritingStylePatterns(): WritingStylePatterns {
+  if (typeof window === 'undefined') return DEFAULT_WRITING_STYLE;
+
+  try {
+    const stored = localStorage.getItem(WRITING_STYLE_KEY);
+    if (!stored) return DEFAULT_WRITING_STYLE;
+    return JSON.parse(stored) as WritingStylePatterns;
+  } catch {
+    console.error('Failed to load writing style from localStorage');
+    return DEFAULT_WRITING_STYLE;
+  }
+}
+
+export function saveWritingStylePatterns(patterns: WritingStylePatterns): void {
+  if (typeof window === 'undefined') return;
+
+  try {
+    localStorage.setItem(WRITING_STYLE_KEY, JSON.stringify(patterns));
+  } catch {
+    console.error('Failed to save writing style to localStorage');
   }
 }
 
@@ -561,4 +603,64 @@ export function formatAiChatSummaryForPrompt(aiMessages: AiChatMessage[]): strin
   return recentMessages
     .map(m => `${m.role === 'user' ? 'User asked' : 'AI responded'}: ${m.content}`)
     .join('\n');
+}
+
+// Clear all app data from localStorage (keeps API keys)
+export function clearAllData(): void {
+  if (typeof window === 'undefined') return;
+
+  // Preserve API keys from settings
+  const currentSettings = loadSettings();
+  const preservedSettings: AppSettings = {
+    selectedAccountIds: [],
+    beeperAccessToken: currentSettings.beeperAccessToken,
+    anthropicApiKey: currentSettings.anthropicApiKey,
+  };
+
+  const keysToRemove = [
+    DRAFTS_KEY,
+    SETTINGS_KEY,
+    MESSAGES_KEY,
+    ACCOUNTS_KEY,
+    AVATARS_KEY,
+    CHAT_INFO_KEY,
+    CACHE_TIMESTAMP_KEY,
+    `${CACHE_TIMESTAMP_KEY}-messages`,
+    `${CACHE_TIMESTAMP_KEY}-accounts`,
+    HIDDEN_CHATS_KEY,
+    HIDDEN_CHATS_META_KEY,
+    TONE_SETTINGS_KEY,
+    USER_MESSAGES_CACHE_KEY,
+    AI_CHAT_HISTORY_KEY,
+    THREAD_CONTEXT_KEY,
+  ];
+
+  keysToRemove.forEach(key => {
+    localStorage.removeItem(key);
+  });
+
+  // Restore API keys
+  saveSettings(preservedSettings);
+}
+
+// Clear only cached/synced data (keeps user settings like API keys, tone, hidden chats)
+export function clearCachedData(): void {
+  if (typeof window === 'undefined') return;
+
+  const keysToRemove = [
+    MESSAGES_KEY,
+    ACCOUNTS_KEY,
+    AVATARS_KEY,
+    CHAT_INFO_KEY,
+    CACHE_TIMESTAMP_KEY,
+    `${CACHE_TIMESTAMP_KEY}-messages`,
+    `${CACHE_TIMESTAMP_KEY}-accounts`,
+    USER_MESSAGES_CACHE_KEY,
+    THREAD_CONTEXT_KEY,
+    AI_CHAT_HISTORY_KEY, // Also clear AI chat history as it contains participant names
+  ];
+
+  keysToRemove.forEach(key => {
+    localStorage.removeItem(key);
+  });
 }

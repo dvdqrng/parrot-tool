@@ -18,12 +18,14 @@ import { getPlatformInfo } from '@/lib/beeper-client';
 import {
   loadSettings,
   loadToneSettings,
+  loadWritingStylePatterns,
   getThreadContext,
   formatThreadContextForPrompt,
   getAiChatForThread,
   formatAiChatSummaryForPrompt,
 } from '@/lib/storage';
-import { Loader2, Sparkles, Send, Save, Trash2 } from 'lucide-react';
+import { Loader2, Sparkles, Send, Save, Trash2, Check } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
 interface DraftComposerProps {
@@ -51,6 +53,7 @@ export function DraftComposer({
   const [draftText, setDraftText] = useState(existingDraft?.draftText || '');
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [sendSuccess, setSendSuccess] = useState(false);
 
   // Reset state when dialog opens with new content
   const handleOpenChange = useCallback((newOpen: boolean) => {
@@ -71,8 +74,9 @@ export function DraftComposer({
     try {
       const settings = loadSettings();
       const toneSettings = loadToneSettings();
+      const writingStyle = loadWritingStylePatterns();
       const headers: HeadersInit = { 'Content-Type': 'application/json' };
-      if (settings.anthropicApiKey) {
+      if (settings.anthropicApiKey && settings.aiProvider !== 'ollama') {
         headers['x-anthropic-key'] = settings.anthropicApiKey;
       }
 
@@ -94,8 +98,13 @@ export function DraftComposer({
           originalMessage: originalText,
           senderName: recipientName,
           toneSettings,
+          writingStyle: writingStyle.sampleMessages.length > 0 ? writingStyle : undefined,
           threadContext: threadContextStr,
           aiChatSummary,
+          // Provider settings
+          provider: settings.aiProvider || 'anthropic',
+          ollamaModel: settings.ollamaModel,
+          ollamaBaseUrl: settings.ollamaBaseUrl,
         }),
       });
 
@@ -122,9 +131,17 @@ export function DraftComposer({
     if (!draftText.trim()) return;
 
     setIsSending(true);
+    setSendSuccess(false);
     try {
       await onSend(draftText);
-      onOpenChange(false);
+      setSendSuccess(true);
+      // Close dialog after showing success briefly
+      setTimeout(() => {
+        onOpenChange(false);
+        setSendSuccess(false);
+      }, 1000);
+    } catch (error) {
+      setSendSuccess(false);
     } finally {
       setIsSending(false);
     }
@@ -145,7 +162,6 @@ export function DraftComposer({
             Reply to {recipientName}
             <Badge
               variant="secondary"
-              className="text-xs"
               style={{
                 backgroundColor: `${platformData.color}20`,
                 color: platformData.color,
@@ -165,7 +181,7 @@ export function DraftComposer({
             <p className="text-xs font-medium text-muted-foreground mb-1">
               Original message from {recipientName}:
             </p>
-            <p className="text-sm line-clamp-3">{originalText}</p>
+            <p className="text-xs line-clamp-3">{originalText}</p>
           </div>
 
           <Separator />
@@ -173,7 +189,7 @@ export function DraftComposer({
           {/* Draft text area */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <label className="text-sm font-medium">Your reply:</label>
+              <label className="text-xs font-medium">Your reply:</label>
               <Button
                 variant="outline"
                 size="sm"
@@ -212,13 +228,22 @@ export function DraftComposer({
             <Save className="mr-2 h-4 w-4" />
             Save Draft
           </Button>
-          <Button onClick={handleSend} disabled={!draftText.trim() || isSending}>
+          <Button
+            onClick={handleSend}
+            disabled={!draftText.trim() || isSending || sendSuccess}
+            className={cn(
+              "transition-colors",
+              sendSuccess && "bg-green-600 hover:bg-green-600"
+            )}
+          >
             {isSending ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : sendSuccess ? (
+              <Check className="mr-2 h-4 w-4" />
             ) : (
               <Send className="mr-2 h-4 w-4" />
             )}
-            {isSending ? 'Sending...' : 'Send'}
+            {isSending ? 'Sending...' : sendSuccess ? 'Sent!' : 'Send'}
           </Button>
         </DialogFooter>
       </DialogContent>

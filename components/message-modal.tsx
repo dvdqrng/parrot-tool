@@ -21,6 +21,7 @@ import { getPlatformInfo } from '@/lib/beeper-client';
 import {
   loadSettings,
   loadToneSettings,
+  loadWritingStylePatterns,
   updateThreadContextWithNewMessages,
   getThreadContext,
   formatThreadContextForPrompt,
@@ -161,6 +162,7 @@ export function MessageModal({
     try {
       const settings = loadSettings();
       const toneSettings = loadToneSettings();
+      const writingStyle = loadWritingStylePatterns();
       const headers: HeadersInit = { 'Content-Type': 'application/json' };
       if (settings.anthropicApiKey) {
         headers['x-anthropic-key'] = settings.anthropicApiKey;
@@ -181,6 +183,7 @@ export function MessageModal({
           originalMessage: message.text,
           senderName: message.senderName,
           toneSettings,
+          writingStyle: writingStyle.sampleMessages.length > 0 ? writingStyle : undefined,
           threadContext: threadContextStr,
           aiChatSummary,
         }),

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { formatDistanceToNow } from 'date-fns';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -13,6 +13,7 @@ import { getPlatformInfo } from '@/lib/beeper-client';
 import {
   loadSettings,
   loadToneSettings,
+  loadWritingStylePatterns,
   updateThreadContextWithNewMessages,
   getThreadContext,
   formatThreadContextForPrompt,
@@ -20,9 +21,35 @@ import {
   formatAiChatSummaryForPrompt,
   ThreadContextMessage,
 } from '@/lib/storage';
-import { Loader2, Sparkles, Send, Save, ChevronUp, Users, X, MessageSquare, RefreshCw } from 'lucide-react';
+import { Loader2, Sparkles, Send, Save, ChevronUp, Users, X, MessageSquare, RefreshCw, Check } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+
+// Helper to render text with clickable links
+function renderTextWithLinks(text: string): React.ReactNode {
+  const urlRegex = /(https?:\/\/[^\s]+)/g;
+  const parts = text.split(urlRegex);
+
+  return parts.map((part, index) => {
+    if (urlRegex.test(part)) {
+      // Reset regex lastIndex since we're reusing it
+      urlRegex.lastIndex = 0;
+      return (
+        <a
+          key={index}
+          href={part}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="underline hover:opacity-80"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {part}
+        </a>
+      );
+    }
+    return part;
+  });
+}
 
 interface MessagePanelProps {
   card: KanbanCard | null;
@@ -72,8 +99,10 @@ export function MessagePanel({
   const [draftText, setDraftText] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [sendSuccess, setSendSuccess] = useState(false);
   const [historyLimit, setHistoryLimit] = useState(2);
   const [isRefreshingContext, setIsRefreshingContext] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   const isOpen = card !== null;
   const message = card?.message;
@@ -150,6 +179,16 @@ export function MessagePanel({
     }
   }, [isOpen, chatId, draft?.draftText, fetchHistory]);
 
+  // Auto-scroll to bottom when chat history changes
+  useEffect(() => {
+    if (scrollRef.current && chatHistory.length > 0) {
+      const viewport = scrollRef.current.querySelector('[data-slot="scroll-area-viewport"]');
+      if (viewport) {
+        viewport.scrollTop = viewport.scrollHeight;
+      }
+    }
+  }, [chatHistory]);
+
   // Load more messages
   const handleLoadMore = useCallback(() => {
     const newLimit = historyLimit + 10;
@@ -204,8 +243,9 @@ export function MessagePanel({
     try {
       const settings = loadSettings();
       const toneSettings = loadToneSettings();
+      const writingStyle = loadWritingStylePatterns();
       const headers: HeadersInit = { 'Content-Type': 'application/json' };
-      if (settings.anthropicApiKey) {
+      if (settings.anthropicApiKey && settings.aiProvider !== 'ollama') {
         headers['x-anthropic-key'] = settings.anthropicApiKey;
       }
 
@@ -227,8 +267,13 @@ export function MessagePanel({
           originalMessage: originalText,
           senderName,
           toneSettings,
+          writingStyle: writingStyle.sampleMessages.length > 0 ? writingStyle : undefined,
           threadContext: threadContextStr,
           aiChatSummary,
+          // Provider settings
+          provider: settings.aiProvider || 'anthropic',
+          ollamaModel: settings.ollamaModel,
+          ollamaBaseUrl: settings.ollamaBaseUrl,
         }),
       });
 
@@ -251,13 +296,18 @@ export function MessagePanel({
     if (!draftText.trim() || !onSend) return;
 
     setIsSending(true);
+    setSendSuccess(false);
     try {
       await onSend(draftText);
       setDraftText('');
+      setSendSuccess(true);
+      // Reset success state after 2 seconds
+      setTimeout(() => setSendSuccess(false), 2000);
       // Refresh history after sending
       setTimeout(() => fetchHistory(historyLimit), 500);
     } catch (error) {
       // Error handling is done in parent
+      setSendSuccess(false);
     } finally {
       setIsSending(false);
     }
@@ -302,8 +352,8 @@ export function MessagePanel({
   return (
     <div
       className={cn(
-        'h-full bg-white rounded-2xl flex flex-col transition-all duration-300 ease-in-out overflow-hidden',
-        isOpen ? 'w-96' : 'w-0'
+        'h-full bg-card rounded-2xl flex flex-col transition-all duration-300 ease-in-out overflow-hidden shadow-lg',
+        isOpen ? 'w-96 dark:border' : 'w-0'
       )}
     >
       {isOpen && card && (message || draft) && (
@@ -318,10 +368,10 @@ export function MessagePanel({
                 </AvatarFallback>
               </Avatar>
               <div className="flex flex-col min-w-0">
-                <span className="font-medium truncate">{title}</span>
+                <span className="text-xs font-medium truncate">{title}</span>
                 <Badge
                   variant="secondary"
-                  className="text-xs w-fit"
+                  className="w-fit"
                   style={{
                     backgroundColor: `${platformData.color}20`,
                     color: platformData.color,
@@ -362,8 +412,8 @@ export function MessagePanel({
           </div>
 
           {/* Chat history */}
-          <ScrollArea className="flex-1 min-h-0">
-            <div className="p-4 space-y-3">
+          <ScrollArea className="flex-1 min-h-0 w-full" ref={scrollRef}>
+            <div className="p-4 space-y-3 overflow-hidden">
               {/* Load more button */}
               {hasMoreHistory && !isLoadingHistory && (
                 <Button
@@ -387,28 +437,28 @@ export function MessagePanel({
                   <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                 </div>
               ) : chatHistory.length === 0 ? (
-                <div className="text-center py-8 text-sm text-muted-foreground">
+                <div className="text-center py-8 text-xs text-muted-foreground">
                   No messages found
                 </div>
               ) : (
                 chatHistory.map((msg) => (
                   <div
                     key={msg.id}
-                    className={`flex flex-col ${msg.isFromMe ? 'items-end' : 'items-start'}`}
+                    className={`flex flex-col w-full min-w-0 ${msg.isFromMe ? 'items-end' : 'items-start'}`}
                   >
                     <div
-                      className={`max-w-[85%] rounded-2xl px-4 py-2 ${
+                      className={`max-w-[85%] rounded-2xl px-4 py-2 overflow-hidden ${
                         msg.isFromMe
                           ? 'bg-primary text-primary-foreground'
                           : 'bg-muted'
                       }`}
                     >
                       {!msg.isFromMe && card.isGroup && (
-                        <p className="text-xs font-medium mb-1 opacity-70">
+                        <p className="text-xs font-medium mb-1 opacity-70 break-words">
                           {msg.senderName}
                         </p>
                       )}
-                      <p className="text-sm whitespace-pre-wrap">{msg.text}</p>
+                      <p className="text-xs whitespace-pre-wrap break-words">{renderTextWithLinks(msg.text)}</p>
                     </div>
                     <span className="text-xs text-muted-foreground mt-1 px-2">
                       {formatDistanceToNow(new Date(msg.timestamp), { addSuffix: true })}
@@ -423,31 +473,28 @@ export function MessagePanel({
 
           {/* Draft area */}
           <div className="shrink-0 p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <label className="text-sm font-medium">Your reply:</label>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={generateAISuggestion}
-                disabled={isGenerating}
-              >
-                {isGenerating ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <Sparkles className="mr-2 h-4 w-4" />
-                )}
-                {isGenerating ? 'Generating...' : 'AI Draft'}
-              </Button>
-            </div>
             <Textarea
               placeholder="Type your reply..."
               value={draftText}
               onChange={(e) => setDraftText(e.target.value)}
-              className="min-h-[80px] resize-none"
+              className="min-h-[80px] resize-none shadow-none"
             />
             <div className="flex gap-2">
               <Button
-                variant="outline"
+                variant="ghost"
+                size="icon"
+                onClick={generateAISuggestion}
+                disabled={isGenerating}
+                title="AI Draft"
+              >
+                {isGenerating ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Sparkles className="h-4 w-4" />
+                )}
+              </Button>
+              <Button
+                variant="ghost"
                 className="flex-1"
                 onClick={handleSaveDraft}
                 disabled={!draftText.trim()}
@@ -456,16 +503,21 @@ export function MessagePanel({
                 Save Draft
               </Button>
               <Button
-                className="flex-1"
+                className={cn(
+                  "flex-1 transition-colors",
+                  sendSuccess && "bg-green-600 hover:bg-green-600"
+                )}
                 onClick={handleSend}
-                disabled={!draftText.trim() || isSending}
+                disabled={!draftText.trim() || isSending || sendSuccess}
               >
                 {isSending ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : sendSuccess ? (
+                  <Check className="mr-2 h-4 w-4" />
                 ) : (
                   <Send className="mr-2 h-4 w-4" />
                 )}
-                {isSending ? 'Sending...' : 'Send'}
+                {isSending ? 'Sending...' : sendSuccess ? 'Sent!' : 'Send'}
               </Button>
             </div>
           </div>

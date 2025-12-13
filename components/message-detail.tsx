@@ -59,7 +59,6 @@ export function MessageDetail({ card, open, onOpenChange, onReply }: MessageDeta
                 {card.title}
                 <Badge
                   variant="secondary"
-                  className="text-xs"
                   style={{
                     backgroundColor: `${platformData.color}20`,
                     color: platformData.color,
@@ -79,12 +78,12 @@ export function MessageDetail({ card, open, onOpenChange, onReply }: MessageDeta
           {isDraft && card.draft && (
             <div className="rounded-lg bg-muted p-3">
               <p className="text-xs font-medium text-muted-foreground mb-1">Original message:</p>
-              <p className="text-sm">{card.draft.originalText}</p>
+              <p className="text-xs">{card.draft.originalText}</p>
             </div>
           )}
 
           <div className="rounded-lg border p-4">
-            <p className="whitespace-pre-wrap text-sm">
+            <p className="whitespace-pre-wrap text-xs">
               {isDraft ? card.draft?.draftText || '(Empty draft)' : card.preview}
             </p>
           </div>

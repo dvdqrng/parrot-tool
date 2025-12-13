@@ -52,15 +52,23 @@ export interface Draft {
   updatedAt: string;
 }
 
+export type AiProvider = 'anthropic' | 'ollama';
+
 export interface AppSettings {
   selectedAccountIds: string[];
   beeperAccessToken?: string;
   anthropicApiKey?: string;
+  // AI provider settings
+  aiProvider?: AiProvider;
+  ollamaModel?: string;
+  ollamaBaseUrl?: string;
+  // UI settings
+  showArchivedColumn?: boolean;
 }
 
 // Kanban types
 
-export type ColumnId = 'unread' | 'drafts' | 'sent';
+export type ColumnId = 'unread' | 'drafts' | 'sent' | 'archived';
 
 export interface KanbanCard {
   id: string;
@@ -99,4 +107,33 @@ export interface ToneSettings {
   // Sample messages used for analysis
   analyzedMessageCount?: number;
   lastAnalyzedAt?: string;
+}
+
+// Detailed writing style patterns extracted from user messages
+export interface WritingStylePatterns {
+  // Sample messages that exemplify the user's writing style
+  sampleMessages: string[];
+  // Common phrases/expressions the user uses
+  commonPhrases: string[];
+  // Emojis the user frequently uses
+  frequentEmojis: string[];
+  // Greeting patterns (how they start messages)
+  greetingPatterns: string[];
+  // Sign-off patterns (how they end messages)
+  signOffPatterns: string[];
+  // Punctuation style: multiple exclamation marks, ellipsis usage, etc.
+  punctuationStyle: {
+    usesMultipleExclamation: boolean;
+    usesEllipsis: boolean;
+    usesAllCaps: boolean;
+    endsWithPunctuation: boolean;
+  };
+  // Capitalization style
+  capitalizationStyle: 'proper' | 'lowercase' | 'mixed';
+  // Average words per message
+  avgWordsPerMessage: number;
+  // Common abbreviations used
+  abbreviations: string[];
+  // Language quirks (e.g., "haha" vs "lol", "u" vs "you")
+  languageQuirks: string[];
 }

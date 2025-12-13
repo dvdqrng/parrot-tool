@@ -6,19 +6,256 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Slider } from '@/components/ui/slider';
 import { Label } from '@/components/ui/label';
-import { loadToneSettings, saveToneSettings, loadCachedUserMessages, saveCachedUserMessages, loadSettings, CachedUserMessage } from '@/lib/storage';
-import { ToneSettings as ToneSettingsType } from '@/lib/types';
+import { Badge } from '@/components/ui/badge';
+import { loadToneSettings, saveToneSettings, loadCachedUserMessages, saveCachedUserMessages, loadSettings, CachedUserMessage, loadWritingStylePatterns, saveWritingStylePatterns } from '@/lib/storage';
+import { ToneSettings as ToneSettingsType, WritingStylePatterns } from '@/lib/types';
 import { toast } from 'sonner';
 
 interface ToneAnalysis {
   briefDetailed: number;
   formalCasual: number;
   messageCount: number;
+  writingStyle: WritingStylePatterns;
+}
+
+// Extract emojis from text using Intl.Segmenter for accurate emoji detection
+function extractEmojis(text: string): string[] {
+  const emojis: string[] = [];
+
+  // Use Intl.Segmenter if available (modern browsers)
+  if (typeof Intl !== 'undefined' && Intl.Segmenter) {
+    const segmenter = new Intl.Segmenter('en', { granularity: 'grapheme' });
+    for (const { segment } of segmenter.segment(text)) {
+      // Check if this grapheme is an emoji by testing against emoji regex
+      // This catches all emojis including compound ones like 👨‍👩‍👧‍👦
+      if (/\p{Emoji}/u.test(segment) && !/^[0-9#*]$/.test(segment)) {
+        emojis.push(segment);
+      }
+    }
+    return emojis;
+  }
+
+  // Fallback: use a comprehensive regex for emoji sequences
+  // This matches most emojis including ZWJ sequences and skin tone modifiers
+  const emojiRegex = /(?:\p{Emoji_Presentation}|\p{Emoji}\uFE0F)(?:\u200D(?:\p{Emoji_Presentation}|\p{Emoji}\uFE0F))*/gu;
+  return text.match(emojiRegex) || [];
+}
+
+// Common abbreviations to look for
+const COMMON_ABBREVIATIONS = [
+  'u', 'ur', 'r', 'y', 'k', 'ok', 'bc', 'b4', 'cuz', 'tho', 'thx', 'pls', 'plz',
+  'rn', 'imo', 'imho', 'tbh', 'ngl', 'idk', 'idc', 'omg', 'omfg', 'wtf', 'wth',
+  'lol', 'lmao', 'rofl', 'brb', 'gtg', 'ttyl', 'ty', 'yw', 'np', 'jk', 'ik',
+  'gonna', 'wanna', 'gotta', 'kinda', 'sorta', 'dunno', 'lemme', 'gimme',
+  'msg', 'txt', 'pic', 'pics', 'vid', 'vids', 'w/', 'w/o', '&', 'n', 'vs'
+];
+
+// Common greeting patterns
+const GREETING_PATTERNS = [
+  'hey', 'hi', 'hello', 'yo', 'sup', 'whats up', "what's up", 'hiya', 'heya',
+  'morning', 'good morning', 'afternoon', 'evening', 'howdy'
+];
+
+// Common sign-off patterns
+const SIGNOFF_PATTERNS = [
+  'thanks', 'thx', 'ty', 'cheers', 'later', 'bye', 'cya', 'ttyl', 'talk soon',
+  'take care', 'best', 'regards', 'love', 'xo', 'xx', '❤️', '💕'
+];
+
+// Language quirks to detect (pairs of formal vs casual)
+const LANGUAGE_QUIRKS_MAP: Record<string, string> = {
+  'haha': 'uses "haha"',
+  'hehe': 'uses "hehe"',
+  'lol': 'uses "lol"',
+  'lmao': 'uses "lmao"',
+  '...': 'uses ellipsis...',
+  '!!': 'uses multiple exclamation!!',
+  '??': 'uses multiple question marks??',
+  'yeah': 'says "yeah"',
+  'yep': 'says "yep"',
+  'nope': 'says "nope"',
+  'nah': 'says "nah"',
+  'cool': 'says "cool"',
+  'awesome': 'says "awesome"',
+  'nice': 'says "nice"',
+  'sounds good': 'says "sounds good"',
+  'for sure': 'says "for sure"',
+  'def': 'says "def"',
+  'totally': 'says "totally"',
+  'literally': 'says "literally"',
+  'basically': 'says "basically"',
+  'honestly': 'says "honestly"',
+  'actually': 'says "actually"',
+};
+
+function analyzeWritingStyle(messages: { text: string }[]): WritingStylePatterns {
+  if (messages.length === 0) {
+    return {
+      sampleMessages: [],
+      commonPhrases: [],
+      frequentEmojis: [],
+      greetingPatterns: [],
+      signOffPatterns: [],
+      punctuationStyle: {
+        usesMultipleExclamation: false,
+        usesEllipsis: false,
+        usesAllCaps: false,
+        endsWithPunctuation: true,
+      },
+      capitalizationStyle: 'proper',
+      avgWordsPerMessage: 10,
+      abbreviations: [],
+      languageQuirks: [],
+    };
+  }
+
+  // Collect stats
+  const emojiCounts: Record<string, number> = {};
+  const abbreviationCounts: Record<string, number> = {};
+  const greetingCounts: Record<string, number> = {};
+  const signOffCounts: Record<string, number> = {};
+  const quirkCounts: Record<string, number> = {};
+
+  let totalWords = 0;
+  let multipleExclamationCount = 0;
+  let ellipsisCount = 0;
+  let allCapsWordCount = 0;
+  let endsWithPunctuationCount = 0;
+  let startsWithLowercaseCount = 0;
+  let startsWithUppercaseCount = 0;
+
+  // Analyze each message
+  for (const msg of messages) {
+    const text = msg.text;
+    const words = text.split(/\s+/).filter(w => w.length > 0);
+    totalWords += words.length;
+
+    // Extract emojis
+    const emojis = extractEmojis(text);
+    for (const emoji of emojis) {
+      emojiCounts[emoji] = (emojiCounts[emoji] || 0) + 1;
+    }
+
+    // Check for abbreviations
+    const lowerText = text.toLowerCase();
+    for (const abbr of COMMON_ABBREVIATIONS) {
+      const regex = new RegExp(`\\b${abbr}\\b`, 'gi');
+      const matches = lowerText.match(regex);
+      if (matches) {
+        abbreviationCounts[abbr] = (abbreviationCounts[abbr] || 0) + matches.length;
+      }
+    }
+
+    // Check for greetings at start of message
+    const firstWords = lowerText.slice(0, 20);
+    for (const greeting of GREETING_PATTERNS) {
+      if (firstWords.startsWith(greeting)) {
+        greetingCounts[greeting] = (greetingCounts[greeting] || 0) + 1;
+      }
+    }
+
+    // Check for sign-offs at end of message
+    const lastWords = lowerText.slice(-30);
+    for (const signOff of SIGNOFF_PATTERNS) {
+      if (lastWords.includes(signOff)) {
+        signOffCounts[signOff] = (signOffCounts[signOff] || 0) + 1;
+      }
+    }
+
+    // Check for language quirks
+    for (const [quirk, description] of Object.entries(LANGUAGE_QUIRKS_MAP)) {
+      if (lowerText.includes(quirk)) {
+        quirkCounts[description] = (quirkCounts[description] || 0) + 1;
+      }
+    }
+
+    // Punctuation style
+    if (/!{2,}/.test(text)) multipleExclamationCount++;
+    if (/\.{3,}|…/.test(text)) ellipsisCount++;
+    if (/[.!?]$/.test(text.trim())) endsWithPunctuationCount++;
+
+    // Check for ALL CAPS words (not just single letters)
+    const capsWords = words.filter(w => w.length > 2 && w === w.toUpperCase() && /[A-Z]/.test(w));
+    allCapsWordCount += capsWords.length;
+
+    // Capitalization style
+    const firstChar = text.trim()[0];
+    if (firstChar && /[a-z]/.test(firstChar)) startsWithLowercaseCount++;
+    if (firstChar && /[A-Z]/.test(firstChar)) startsWithUppercaseCount++;
+  }
+
+  // Sort and get top items
+  const sortByCount = (counts: Record<string, number>, limit: number): string[] => {
+    return Object.entries(counts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, limit)
+      .filter(([, count]) => count >= 2) // Only include if used at least twice
+      .map(([item]) => item);
+  };
+
+  // Get diverse sample messages (different lengths, styles)
+  const sortedByLength = [...messages].sort((a, b) => a.text.length - b.text.length);
+  const sampleMessages: string[] = [];
+
+  // Get short, medium, and long examples
+  if (sortedByLength.length > 0) {
+    const shortIdx = Math.floor(sortedByLength.length * 0.2);
+    const medIdx = Math.floor(sortedByLength.length * 0.5);
+    const longIdx = Math.floor(sortedByLength.length * 0.8);
+
+    // Add diverse samples, filtering for good examples
+    const candidates = [
+      sortedByLength[shortIdx],
+      sortedByLength[medIdx],
+      sortedByLength[longIdx],
+      ...messages.slice(0, 20) // Recent messages
+    ].filter(m => m && m.text.length > 5 && m.text.length < 500);
+
+    // Pick unique, representative samples
+    const seen = new Set<string>();
+    for (const msg of candidates) {
+      if (!seen.has(msg.text) && sampleMessages.length < 10) {
+        seen.add(msg.text);
+        sampleMessages.push(msg.text);
+      }
+    }
+  }
+
+  // Determine capitalization style
+  let capitalizationStyle: 'proper' | 'lowercase' | 'mixed' = 'mixed';
+  if (startsWithUppercaseCount > startsWithLowercaseCount * 2) {
+    capitalizationStyle = 'proper';
+  } else if (startsWithLowercaseCount > startsWithUppercaseCount * 2) {
+    capitalizationStyle = 'lowercase';
+  }
+
+  return {
+    sampleMessages,
+    commonPhrases: [], // Could be enhanced with n-gram analysis
+    frequentEmojis: sortByCount(emojiCounts, 10),
+    greetingPatterns: sortByCount(greetingCounts, 5),
+    signOffPatterns: sortByCount(signOffCounts, 5),
+    punctuationStyle: {
+      usesMultipleExclamation: multipleExclamationCount > messages.length * 0.1,
+      usesEllipsis: ellipsisCount > messages.length * 0.1,
+      usesAllCaps: allCapsWordCount > messages.length * 0.05,
+      endsWithPunctuation: endsWithPunctuationCount > messages.length * 0.5,
+    },
+    capitalizationStyle,
+    avgWordsPerMessage: Math.round(totalWords / messages.length),
+    abbreviations: sortByCount(abbreviationCounts, 15),
+    languageQuirks: sortByCount(quirkCounts, 10),
+  };
 }
 
 function analyzeTone(messages: { text: string }[]): ToneAnalysis {
   if (messages.length === 0) {
-    return { briefDetailed: 50, formalCasual: 50, messageCount: 0 };
+    return {
+      briefDetailed: 50,
+      formalCasual: 50,
+      messageCount: 0,
+      writingStyle: analyzeWritingStyle([])
+    };
   }
 
   let totalLength = 0;
@@ -31,7 +268,7 @@ function analyzeTone(messages: { text: string }[]): ToneAnalysis {
     /\.\.\./g,
     /\b(gonna|wanna|gotta|kinda|sorta)\b/gi,
     /\b(yeah|yep|nope|nah)\b/gi,
-    /😀|😁|😂|🤣|😊|😍|🥰|😘|🤗|😜|😝|🤪|👍|👎|❤️|💕|💖|🔥|✨|🎉|💯/g,
+    /[\u{1F300}-\u{1F9FF}]|[\u{2600}-\u{26FF}]/gu, // Emojis
   ];
 
   const formalPatterns = [
@@ -73,6 +310,7 @@ function analyzeTone(messages: { text: string }[]): ToneAnalysis {
     briefDetailed: Math.round(briefDetailed),
     formalCasual: Math.round(formalCasual),
     messageCount: messages.length,
+    writingStyle: analyzeWritingStyle(messages),
   };
 }
 
@@ -81,6 +319,7 @@ export function ToneSettingsSection() {
     briefDetailed: 50,
     formalCasual: 50,
   });
+  const [writingStyle, setWritingStyle] = useState<WritingStylePatterns | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [cachedMessageCount, setCachedMessageCount] = useState(0);
   const [hasBeeperToken, setHasBeeperToken] = useState(false);
@@ -88,6 +327,10 @@ export function ToneSettingsSection() {
   useEffect(() => {
     const loaded = loadToneSettings();
     setSettings(loaded);
+    const loadedStyle = loadWritingStylePatterns();
+    if (loadedStyle.sampleMessages.length > 0) {
+      setWritingStyle(loadedStyle);
+    }
     const cachedMessages = loadCachedUserMessages();
     setCachedMessageCount(cachedMessages.length);
     const appSettings = loadSettings();
@@ -142,6 +385,10 @@ export function ToneSettingsSection() {
       setSettings(newSettings);
       saveToneSettings(newSettings);
 
+      // Save the writing style patterns
+      setWritingStyle(analysis.writingStyle);
+      saveWritingStylePatterns(analysis.writingStyle);
+
       if (analysis.messageCount > 0) {
         toast.success(`Analyzed ${analysis.messageCount} messages from ${result.stats?.chatsScanned || 0} chats`);
       } else {
@@ -173,6 +420,10 @@ export function ToneSettingsSection() {
 
     setSettings(newSettings);
     saveToneSettings(newSettings);
+
+    // Save the writing style patterns
+    setWritingStyle(analysis.writingStyle);
+    saveWritingStylePatterns(analysis.writingStyle);
 
     toast.success(`Re-analyzed ${analysis.messageCount} cached messages`);
   }, []);
@@ -257,7 +508,7 @@ export function ToneSettingsSection() {
         {/* Analyze Button */}
         <div className="rounded-lg border p-4 bg-muted/30 space-y-3">
           <div className="space-y-1">
-            <p className="text-sm font-medium">Analyze Your Messages</p>
+            <p className="text-xs font-medium">Analyze Your Messages</p>
             <p className="text-xs text-muted-foreground">
               {cachedMessageCount > 0
                 ? `${cachedMessageCount} messages cached from your conversations`
@@ -306,7 +557,7 @@ export function ToneSettingsSection() {
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <Label>Message Length</Label>
-            <span className="text-sm text-muted-foreground">
+            <span className="text-xs text-muted-foreground">
               {getBriefDetailedLabel(settings.briefDetailed)}
             </span>
           </div>
@@ -326,7 +577,7 @@ export function ToneSettingsSection() {
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <Label>Communication Style</Label>
-            <span className="text-sm text-muted-foreground">
+            <span className="text-xs text-muted-foreground">
               {getFormalCasualLabel(settings.formalCasual)}
             </span>
           </div>
@@ -347,9 +598,106 @@ export function ToneSettingsSection() {
           <Label className="text-muted-foreground">Sample Response</Label>
           <div className="rounded-lg border bg-muted/50 p-3">
             <p className="text-xs text-muted-foreground mb-1">To: &quot;Can we meet tomorrow?&quot;</p>
-            <p className="text-sm">{getSampleMessage(settings.briefDetailed, settings.formalCasual)}</p>
+            <p className="text-xs">{getSampleMessage(settings.briefDetailed, settings.formalCasual)}</p>
           </div>
         </div>
+
+        {/* Detected Writing Style Patterns */}
+        {writingStyle && (writingStyle.frequentEmojis.length > 0 || writingStyle.abbreviations.length > 0 || writingStyle.languageQuirks.length > 0) && (
+          <div className="space-y-4 pt-4 border-t">
+            <div>
+              <Label className="text-muted-foreground">Detected Writing Patterns</Label>
+              <p className="text-xs text-muted-foreground mt-1">
+                These patterns were found in your messages and will help make AI drafts sound more like you.
+              </p>
+            </div>
+
+            {/* Emojis */}
+            {writingStyle.frequentEmojis.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-xs font-medium">Your Emojis</p>
+                <div className="flex flex-wrap gap-2">
+                  {writingStyle.frequentEmojis.map((emoji, i) => (
+                    <span
+                      key={i}
+                      className="text-2xl"
+                      role="img"
+                      aria-label="emoji"
+                      style={{ fontFamily: '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif' }}
+                    >
+                      {emoji}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Abbreviations */}
+            {writingStyle.abbreviations.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-xs font-medium">Your Abbreviations</p>
+                <div className="flex flex-wrap gap-1">
+                  {writingStyle.abbreviations.map((abbr, i) => (
+                    <Badge key={i} variant="outline" className="text-xs">
+                      {abbr}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Language Quirks */}
+            {writingStyle.languageQuirks.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-xs font-medium">Your Expressions</p>
+                <div className="flex flex-wrap gap-1">
+                  {writingStyle.languageQuirks.map((quirk, i) => (
+                    <Badge key={i} variant="outline" className="text-xs">
+                      {quirk}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Style Summary */}
+            <div className="space-y-2">
+              <p className="text-xs font-medium">Style Summary</p>
+              <div className="flex flex-wrap gap-1">
+                <Badge variant="secondary" className="text-xs">
+                  ~{writingStyle.avgWordsPerMessage} words/msg
+                </Badge>
+                <Badge variant="secondary" className="text-xs">
+                  {writingStyle.capitalizationStyle === 'lowercase' ? 'lowercase style' :
+                   writingStyle.capitalizationStyle === 'proper' ? 'Proper Case' : 'Mixed case'}
+                </Badge>
+                {writingStyle.punctuationStyle.usesEllipsis && (
+                  <Badge variant="secondary" className="text-xs">uses...</Badge>
+                )}
+                {writingStyle.punctuationStyle.usesMultipleExclamation && (
+                  <Badge variant="secondary" className="text-xs">uses!!</Badge>
+                )}
+                {!writingStyle.punctuationStyle.endsWithPunctuation && (
+                  <Badge variant="secondary" className="text-xs">skips periods</Badge>
+                )}
+              </div>
+            </div>
+
+            {/* Sample Messages */}
+            {writingStyle.sampleMessages.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-xs font-medium">Your Sample Messages</p>
+                <div className="space-y-1 max-h-32 overflow-y-auto">
+                  {writingStyle.sampleMessages.slice(0, 5).map((msg, i) => (
+                    <p key={i} className="text-xs text-muted-foreground bg-muted/50 rounded px-2 py-1 truncate">
+                      &quot;{msg}&quot;
+                    </p>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         <p className="text-xs text-muted-foreground">
           Your tone preferences are saved automatically and will be used to personalize AI-generated draft suggestions.

@@ -12,18 +12,18 @@ export async function POST(
     const beeperToken = request.headers.get('x-beeper-token') || undefined;
     const client = getBeeperClient(beeperToken);
 
-    await client.chats.archive(decodedChatId, { archived: true });
+    await client.chats.archive(decodedChatId, { archived: false });
 
     return NextResponse.json({ success: true });
   } catch (error: unknown) {
     // The Beeper SDK may throw a JSON parse error for empty responses
-    // but the archive action still succeeds. Check if it's this case.
+    // but the unarchive action still succeeds. Check if it's this case.
     if (error instanceof SyntaxError && error.message.includes('JSON')) {
-      // Archive likely succeeded but SDK couldn't parse empty response
+      // Unarchive likely succeeded but SDK couldn't parse empty response
       return NextResponse.json({ success: true });
     }
 
-    console.error('Error archiving chat:', error);
+    console.error('Error unarchiving chat:', error);
     // Extract detailed error info
     let errorMessage = 'Unknown error';
     if (error instanceof Error) {
@@ -35,7 +35,7 @@ export async function POST(
       }
     }
     return NextResponse.json(
-      { error: `Failed to archive chat: ${errorMessage}` },
+      { error: `Failed to unarchive chat: ${errorMessage}` },
       { status: 500 }
     );
   }

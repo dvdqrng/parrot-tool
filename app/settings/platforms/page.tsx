@@ -27,8 +27,8 @@ export default function PlatformsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-2xl font-bold">Connected Platforms</h2>
-        <p className="text-muted-foreground">
+        <h2 className="text-xs font-medium">Connected Platforms</h2>
+        <p className="text-xs text-muted-foreground">
           Select which messaging platforms to include in your Kanban board
         </p>
       </div>
@@ -54,9 +54,9 @@ export default function PlatformsPage() {
         <CardContent>
           {error ? (
             <div className="rounded-lg bg-destructive/10 p-4 text-destructive">
-              <p className="font-medium">Connection Error</p>
-              <p className="text-sm">{error}</p>
-              <p className="mt-2 text-sm">
+              <p className="text-xs font-medium">Connection Error</p>
+              <p className="text-xs">{error}</p>
+              <p className="mt-2 text-xs">
                 Make sure Beeper Desktop is running and the API is enabled in Settings → Developers.
               </p>
             </div>
@@ -66,8 +66,8 @@ export default function PlatformsPage() {
             </div>
           ) : accounts.length === 0 ? (
             <div className="rounded-lg bg-muted p-4 text-center">
-              <p className="text-muted-foreground">No connected accounts found</p>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-xs text-muted-foreground">No connected accounts found</p>
+              <p className="text-xs text-muted-foreground">
                 {settings.beeperAccessToken
                   ? 'Connect messaging platforms in Beeper Desktop first.'
                   : 'Enter your Beeper access token in API Keys settings, then click Refresh.'}
@@ -114,7 +114,7 @@ export default function PlatformsPage() {
                       >
                         <div className="flex items-center gap-3">
                           <PlatformIcon platform={account.service} className="h-5 w-5" />
-                          <span className="font-medium">{platformData.name}</span>
+                          <span className="text-xs font-medium">{platformData.name}</span>
                         </div>
                         <Badge variant="secondary" className="font-mono text-xs">
                           {account.service}

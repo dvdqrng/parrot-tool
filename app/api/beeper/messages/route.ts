@@ -98,11 +98,11 @@ export async function GET(request: NextRequest) {
       chatCount++;
       nextCursor = chat.id;
 
-      // Limit results per page
-      if (chatCount >= 50) break;
+      // Limit results per page (set high to load all messages)
+      if (chatCount >= 500) break;
     }
 
-    const hasMore = chatCount === 50;
+    const hasMore = chatCount === 500;
 
     return NextResponse.json({
       data: resultMessages,
