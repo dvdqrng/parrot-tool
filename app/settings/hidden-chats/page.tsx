@@ -79,7 +79,7 @@ export default function HiddenChatsPage() {
           <div className="flex items-center justify-between">
             <div>
               <CardTitle className="flex items-center gap-2">
-                <EyeOff className="h-5 w-5" />
+                <EyeOff className="h-4 w-4" strokeWidth={1.5} />
                 Hidden Conversations
               </CardTitle>
               <CardDescription>
@@ -88,7 +88,7 @@ export default function HiddenChatsPage() {
             </div>
             {hiddenChatsData.length > 0 && (
               <Button variant="outline" size="sm" onClick={handleClearAllHidden}>
-                <Trash2 className="mr-2 h-4 w-4" />
+                <Trash2 className="h-4 w-4 mr-2" strokeWidth={1.5} />
                 Clear All
               </Button>
             )}
@@ -137,7 +137,7 @@ export default function HiddenChatsPage() {
                       size="sm"
                       onClick={() => handleUnhideChat(chat.chatId)}
                     >
-                      <Eye className="mr-2 h-4 w-4" />
+                      <Eye className="h-4 w-4 mr-2" strokeWidth={1.5} />
                       Unhide
                     </Button>
                   </div>

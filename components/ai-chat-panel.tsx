@@ -2,8 +2,9 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Loader2, X, Copy, Check, Trash2, Plus, Mic, MicOff, Volume2, Square, Paperclip, ImageIcon } from 'lucide-react';
+import { Loader2, X, Copy, Check, Trash2, Plus, Mic, MicOff, Volume2, Square, Paperclip, Image, Send } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { loadSettings } from '@/lib/storage';
 import { toast } from 'sonner';
@@ -385,11 +386,11 @@ export function AiChatPanel({
                   onClick={handleClearChat}
                   title="Clear chat"
                 >
-                  <Trash2 className="h-4 w-4" />
+                  <Trash2 className="h-4 w-4" strokeWidth={1.5} />
                 </Button>
               )}
               <Button variant="ghost" size="icon" onClick={onClose}>
-                <X className="h-4 w-4" />
+                <X className="h-4 w-4" strokeWidth={1.5} />
               </Button>
             </div>
           </div>
@@ -456,9 +457,9 @@ export function AiChatPanel({
                             onClick={() => handleCopy(msg.id, msg.content.replace(/<\/?draft>/g, ''))}
                           >
                             {copiedId === msg.id ? (
-                              <Check className="h-3 w-3 mr-1" />
+                              <Check className="h-4 w-4 mr-1" strokeWidth={1.5} />
                             ) : (
-                              <Copy className="h-3 w-3 mr-1" />
+                              <Copy className="h-4 w-4 mr-1" strokeWidth={1.5} />
                             )}
                             <span className="text-xs">{copiedId === msg.id ? 'Copied' : 'Copy all'}</span>
                           </Button>
@@ -473,9 +474,9 @@ export function AiChatPanel({
                             title={isSpeaking ? "Stop speaking" : "Read aloud"}
                           >
                             {isSpeaking ? (
-                              <Square className="h-3 w-3 mr-1" />
+                              <Square className="h-4 w-4 mr-1" strokeWidth={1.5} />
                             ) : (
-                              <Volume2 className="h-3 w-3 mr-1" />
+                              <Volume2 className="h-4 w-4 mr-1" strokeWidth={1.5} />
                             )}
                             <span className="text-xs">{isSpeaking ? 'Stop' : 'Listen'}</span>
                           </Button>
@@ -488,7 +489,7 @@ export function AiChatPanel({
               {isLoading && (
                 <div className="flex items-start">
                   <div className="bg-muted rounded-2xl px-4 py-2">
-                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <Loader2 className="h-4 w-4 animate-spin" strokeWidth={1.5} />
                   </div>
                 </div>
               )}
@@ -514,12 +515,14 @@ export function AiChatPanel({
                     className="flex items-center gap-1 rounded-full bg-muted px-3 py-1"
                   >
                     <span className="max-w-[100px] truncate text-xs">{file.name}</span>
-                    <button
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-4 w-4 ml-1"
                       onClick={() => removeAttachment(index)}
-                      className="ml-1 text-muted-foreground hover:text-foreground"
                     >
-                      <X className="h-3 w-3" />
-                    </button>
+                      <X className="h-4 w-4" strokeWidth={1.5} />
+                    </Button>
                   </div>
                 ))}
               </div>
@@ -537,7 +540,7 @@ export function AiChatPanel({
                   className="flex-1"
                   onClick={() => handleFileSelect('file')}
                 >
-                  <Paperclip className="mr-2 h-4 w-4" />
+                  <Paperclip className="h-4 w-4 mr-2" strokeWidth={1.5} />
                   File
                 </Button>
                 <Button
@@ -546,7 +549,7 @@ export function AiChatPanel({
                   className="flex-1"
                   onClick={() => handleFileSelect('image')}
                 >
-                  <ImageIcon className="mr-2 h-4 w-4" />
+                  <Image className="h-4 w-4 mr-2" strokeWidth={1.5} />
                   Image
                 </Button>
               </div>
@@ -563,18 +566,18 @@ export function AiChatPanel({
                 disabled={isLoading}
               >
                 <Plus className={cn(
-                  "h-5 w-5 text-muted-foreground transition-transform",
+                  "h-4 w-4 text-muted-foreground transition-transform",
                   showAttachMenu && "rotate-45"
-                )} />
+                )} strokeWidth={1.5} />
               </Button>
-              <input
+              <Input
                 ref={inputRef}
                 type="text"
                 placeholder="Ask anything"
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}
                 onKeyDown={handleKeyDown}
-                className="flex-1 bg-transparent text-xs outline-none placeholder:text-muted-foreground"
+                className="flex-1 border-0 bg-transparent text-xs shadow-none focus-visible:ring-0 h-8"
                 disabled={isLoading}
               />
               <Button
@@ -589,9 +592,9 @@ export function AiChatPanel({
                 title={isRecording ? "Stop recording" : "Voice input"}
               >
                 {isRecording ? (
-                  <MicOff className="h-5 w-5" />
+                  <MicOff className="h-4 w-4" strokeWidth={1.5} />
                 ) : (
-                  <Mic className="h-5 w-5 text-muted-foreground" />
+                  <Mic className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
                 )}
               </Button>
               <Button
@@ -603,9 +606,9 @@ export function AiChatPanel({
                 title="Send message"
               >
                 {isLoading ? (
-                  <Loader2 className="h-5 w-5 animate-spin" />
+                  <Loader2 className="h-4 w-4 animate-spin" strokeWidth={1.5} />
                 ) : (
-                  <Volume2 className="h-5 w-5 text-muted-foreground" />
+                  <Send className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
                 )}
               </Button>
             </div>

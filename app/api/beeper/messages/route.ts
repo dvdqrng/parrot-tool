@@ -1,6 +1,35 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getBeeperClient, getPlatformFromAccountId } from '@/lib/beeper-client';
-import { BeeperMessage } from '@/lib/types';
+import { BeeperMessage, BeeperAttachment } from '@/lib/types';
+
+// Convert Beeper API attachment to our type
+function mapAttachment(att: {
+  type: 'unknown' | 'img' | 'video' | 'audio';
+  duration?: number;
+  fileName?: string;
+  fileSize?: number;
+  isGif?: boolean;
+  isSticker?: boolean;
+  isVoiceNote?: boolean;
+  mimeType?: string;
+  posterImg?: string;
+  srcURL?: string;
+  size?: { height?: number; width?: number };
+}): BeeperAttachment {
+  return {
+    type: att.type,
+    duration: att.duration,
+    fileName: att.fileName,
+    fileSize: att.fileSize,
+    isGif: att.isGif,
+    isSticker: att.isSticker,
+    isVoiceNote: att.isVoiceNote,
+    mimeType: att.mimeType,
+    posterImg: att.posterImg,
+    srcURL: att.srcURL,
+    size: att.size,
+  };
+}
 
 // Cache for chat info (chatId -> { avatarUrl, isGroup, title })
 interface ChatInfo {
@@ -64,35 +93,79 @@ export async function GET(request: NextRequest) {
       const isGroup = chat.type === 'group';
       const participants = chat.participants?.items || [];
 
-      // Get avatar for single chats
+      // For DMs, find the OTHER participant (not self) to get their avatar and name
+      const otherParticipant = participants.find(p => !p.isSelf) || participants[0];
+
+      // Debug: Log participant info to understand the data structure
+      if (!isGroup && participants.length > 0) {
+        console.log(`[Messages] Chat ${chat.id} (title: "${chat.title}") otherParticipant:`, {
+          selected: otherParticipant ? {
+            id: otherParticipant.id,
+            fullName: otherParticipant.fullName,
+            username: otherParticipant.username,
+            isSelf: otherParticipant.isSelf,
+          } : null,
+          allParticipants: participants.map(p => ({
+            id: p.id,
+            fullName: p.fullName,
+            isSelf: p.isSelf,
+          })),
+        });
+      }
+
+      // Get avatar for single chats from the other participant
       let avatarUrl: string | undefined;
-      if (!isGroup && participants[0]?.imgURL) {
-        avatarUrl = participants[0].imgURL;
+      if (!isGroup && otherParticipant?.imgURL) {
+        avatarUrl = otherParticipant.imgURL;
         avatarsToReturn[chat.id] = avatarUrl;
       }
 
+      // For DMs, always use the other participant's name as the chat name
+      // (not the preview sender, which could be "me" if I sent the last message)
+      let chatDisplayName: string;
+      if (isGroup) {
+        chatDisplayName = chat.title || 'Group Chat';
+      } else if (otherParticipant) {
+        chatDisplayName = otherParticipant.fullName || otherParticipant.username || chat.title || 'Unknown';
+      } else {
+        chatDisplayName = chat.title || 'Unknown';
+      }
+
+      // Debug: Log the final display name
+      if (!isGroup) {
+        console.log(`[Messages] FINAL: Chat ${chat.id} -> displayName: "${chatDisplayName}" (otherParticipant.fullName: "${otherParticipant?.fullName}", otherParticipant.isSelf: ${otherParticipant?.isSelf})`);
+      }
+
       // Cache and return chat info
+      // Use chatDisplayName (the computed name) for title instead of chat.title
+      // This ensures DMs show the other participant's name, not the raw Beeper title
       chatInfoCache.set(chat.id, {
         avatarUrl,
         isGroup,
-        title: chat.title || undefined,
+        title: chatDisplayName,
       });
-      chatInfoToReturn[chat.id] = { isGroup, title: chat.title || undefined };
+      chatInfoToReturn[chat.id] = { isGroup, title: chatDisplayName };
+
+      // Extract attachments from preview
+      const attachments = preview?.attachments?.map(mapAttachment);
 
       resultMessages.push({
         id: preview?.id || chat.id,
         chatId: chat.id,
         accountId: chat.accountID || '',
         senderId: preview?.senderID || '',
-        senderName: preview?.senderName || chat.title || 'Unknown',
+        // For the card title, use the chat display name (other participant for DMs)
+        // The senderName field is used as the card title in the UI
+        senderName: chatDisplayName,
         senderAvatarUrl: avatarUrl,
         text: preview?.text || '',
         timestamp: preview?.timestamp || chat.lastActivity || new Date().toISOString(),
         isFromMe,
         isRead: !hasUnread,
-        chatName: chat.title || undefined,
+        chatName: chatDisplayName,
         platform,
         unreadCount: chat.unreadCount,
+        attachments,
       });
 
       chatCount++;

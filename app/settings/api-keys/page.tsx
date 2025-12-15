@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Eye, EyeOff, Key, Check, Cpu, RefreshCw, CheckCircle2, XCircle } from 'lucide-react';
+import { Eye, EyeOff, Key, Check, Cpu, RefreshCw, CheckCircle, XCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -104,7 +104,7 @@ export default function ApiKeysPage() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Key className="h-5 w-5" />
+            <Key className="h-4 w-4" strokeWidth={1.5} />
             Beeper Access Token
           </CardTitle>
           <CardDescription>
@@ -129,14 +129,14 @@ export default function ApiKeysPage() {
                 onClick={() => setShowBeeperToken(!showBeeperToken)}
               >
                 {showBeeperToken ? (
-                  <EyeOff className="h-4 w-4" />
+                  <EyeOff className="h-4 w-4" strokeWidth={1.5} />
                 ) : (
-                  <Eye className="h-4 w-4" />
+                  <Eye className="h-4 w-4" strokeWidth={1.5} />
                 )}
               </Button>
             </div>
             <Button onClick={handleSaveBeeperToken} size="icon">
-              <Check className="h-4 w-4" />
+              <Check className="h-4 w-4" strokeWidth={1.5} />
             </Button>
           </div>
           {settings.beeperAccessToken && (
@@ -149,7 +149,7 @@ export default function ApiKeysPage() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Cpu className="h-5 w-5" />
+            <Cpu className="h-4 w-4" strokeWidth={1.5} />
             AI Provider
           </CardTitle>
           <CardDescription>
@@ -206,14 +206,14 @@ export default function ApiKeysPage() {
                       onClick={() => setShowAnthropicKey(!showAnthropicKey)}
                     >
                       {showAnthropicKey ? (
-                        <EyeOff className="h-4 w-4" />
+                        <EyeOff className="h-4 w-4" strokeWidth={1.5} />
                       ) : (
-                        <Eye className="h-4 w-4" />
+                        <Eye className="h-4 w-4" strokeWidth={1.5} />
                       )}
                     </Button>
                   </div>
                   <Button onClick={handleSaveAnthropicKey} size="icon">
-                    <Check className="h-4 w-4" />
+                    <Check className="h-4 w-4" strokeWidth={1.5} />
                   </Button>
                 </div>
                 {settings.anthropicApiKey && (
@@ -229,11 +229,11 @@ export default function ApiKeysPage() {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   {isCheckingOllama ? (
-                    <RefreshCw className="h-4 w-4 animate-spin" />
+                    <RefreshCw className="h-4 w-4 animate-spin" strokeWidth={1.5} />
                   ) : ollamaStatus?.available ? (
-                    <CheckCircle2 className="h-4 w-4 text-green-600" />
+                    <CheckCircle className="h-4 w-4 text-green-600" strokeWidth={1.5} />
                   ) : (
-                    <XCircle className="h-4 w-4 text-red-500" />
+                    <XCircle className="h-4 w-4 text-red-500" strokeWidth={1.5} />
                   )}
                   <span className="text-xs">
                     {isCheckingOllama
@@ -249,7 +249,7 @@ export default function ApiKeysPage() {
                   onClick={checkOllamaStatus}
                   disabled={isCheckingOllama}
                 >
-                  <RefreshCw className={`h-4 w-4 ${isCheckingOllama ? 'animate-spin' : ''}`} />
+                  <RefreshCw className={`h-4 w-4 ${isCheckingOllama ? 'animate-spin' : ''}`} strokeWidth={1.5} />
                 </Button>
               </div>
 

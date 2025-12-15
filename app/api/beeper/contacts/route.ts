@@ -45,19 +45,25 @@ export async function GET(request: NextRequest) {
       let avatarUrl: string | undefined;
 
       const participants = chat.participants?.items || [];
-      const firstParticipant = participants[0];
+      // For DMs, find the OTHER participant (not self)
+      const otherParticipant = participants.find(p => !p.isSelf) || participants[0];
 
       if (isGroup) {
         // For groups, use the chat title or fallback
         displayName = chat.title || 'Group Chat';
       } else {
-        // For DMs, get participant info
-        if (firstParticipant) {
-          displayName = firstParticipant.fullName || firstParticipant.username || chat.title || 'Unknown';
-          avatarUrl = firstParticipant.imgURL;
+        // For DMs, get the other participant's info (not self)
+        if (otherParticipant) {
+          displayName = otherParticipant.fullName || otherParticipant.username || chat.title || 'Unknown';
+          avatarUrl = otherParticipant.imgURL;
         } else if (chat.title) {
           displayName = chat.title;
         }
+      }
+
+      // Debug: Log final contact name for DMs
+      if (!isGroup) {
+        console.log(`[Contacts] FINAL: Chat ${chat.id} -> name: "${displayName}" (otherParticipant.fullName: "${otherParticipant?.fullName}", isSelf: ${otherParticipant?.isSelf})`);
       }
 
       // Apply search filter (skip contacts that don't match)

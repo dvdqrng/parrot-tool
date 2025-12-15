@@ -65,6 +65,7 @@ export function ContactsDialog({ open, onOpenChange, onSelectContact }: Contacts
     setTimeout(() => inputRef.current?.focus(), 100);
 
     async function fetchContacts() {
+      console.log('[ContactsDialog] Fetching contacts...');
       setIsLoading(true);
       setError(null);
 
@@ -81,6 +82,12 @@ export function ContactsDialog({ open, onOpenChange, onSelectContact }: Contacts
 
         const response = await fetch(`/api/beeper/contacts?${params}`, { headers });
         const result = await response.json();
+
+        console.log('[ContactsDialog] Received contacts:', result.data?.length, 'contacts');
+        // Log first few contacts to debug
+        if (result.data?.length > 0) {
+          console.log('[ContactsDialog] First 5 contacts:', result.data.slice(0, 5).map((c: { name: string; chatId: string }) => ({ name: c.name, chatId: c.chatId })));
+        }
 
         if (result.error) {
           setError(result.error);
@@ -138,13 +145,9 @@ export function ContactsDialog({ open, onOpenChange, onSelectContact }: Contacts
       />
       {/* Dialog - positioned relative to parent (bottom nav wrapper) */}
       <div
-        className={`absolute bottom-full mb-2 left-1/2 -translate-x-1/2 w-[420px] bg-card border rounded-[24px] shadow-lg overflow-hidden flex flex-col transition-all duration-300 ${
+        className={`absolute bottom-full mb-2 left-1/2 -translate-x-1/2 w-[420px] h-[400px] bg-card border rounded-3xl shadow-lg overflow-hidden flex flex-col transition-all duration-300 ease-out ${
           isVisible ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 translate-y-4 scale-95'
         }`}
-        style={{
-          height: '400px',
-          transitionTimingFunction: 'cubic-bezier(0.175, 0.885, 0.32, 1.1)'
-        }}
       >
       {/* Header */}
       <div className="flex items-center justify-between px-4 pt-4 pb-2">
@@ -155,14 +158,14 @@ export function ContactsDialog({ open, onOpenChange, onSelectContact }: Contacts
           className="h-8 w-8 rounded-full"
           onClick={() => onOpenChange(false)}
         >
-          <X className="h-4 w-4" />
+          <X className="h-4 w-4" strokeWidth={1.5} />
         </Button>
       </div>
 
       {/* Search input */}
       <div className="px-4 pb-3">
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" strokeWidth={1.5} />
           <Input
             ref={inputRef}
             placeholder="Search contacts..."
@@ -177,7 +180,7 @@ export function ContactsDialog({ open, onOpenChange, onSelectContact }: Contacts
       <div className="flex-1 overflow-y-auto px-2 pb-4 min-h-0">
         {isLoading ? (
           <div className="flex items-center justify-center py-8">
-            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" strokeWidth={1.5} />
           </div>
         ) : error ? (
           <div className="flex items-center justify-center py-8 text-xs text-destructive">
@@ -198,10 +201,11 @@ export function ContactsDialog({ open, onOpenChange, onSelectContact }: Contacts
                 .toUpperCase();
 
               return (
-                <button
+                <Button
                   key={contact.chatId}
+                  variant="ghost"
                   onClick={() => handleSelectContact(contact)}
-                  className="flex w-full items-center gap-3 rounded-xl p-2 hover:bg-muted transition-colors text-left"
+                  className="flex w-full items-center gap-3 rounded-xl p-2 h-auto justify-start"
                 >
                   <div className="relative shrink-0">
                     <Avatar className="h-10 w-10">
@@ -211,20 +215,20 @@ export function ContactsDialog({ open, onOpenChange, onSelectContact }: Contacts
                         className="object-cover"
                       />
                       <AvatarFallback className="text-xs">
-                        {contact.isGroup ? <Users className="h-5 w-5" /> : initials}
+                        {contact.isGroup ? <Users className="h-4 w-4" strokeWidth={1.5} /> : initials}
                       </AvatarFallback>
                     </Avatar>
                     <div className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-background">
                       <PlatformIcon platform={contact.platform} className="h-3.5 w-3.5" />
                     </div>
                   </div>
-                  <div className="min-w-0 flex-1">
+                  <div className="min-w-0 flex-1 text-left">
                     <div className="truncate font-medium text-xs">{contact.name}</div>
                     {contact.isGroup && (
                       <div className="text-xs text-muted-foreground">Group</div>
                     )}
                   </div>
-                </button>
+                </Button>
               );
             })}
           </div>

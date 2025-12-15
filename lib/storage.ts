@@ -1,4 +1,16 @@
-import { Draft, AppSettings, BeeperMessage, BeeperAccount, ToneSettings, WritingStylePatterns } from './types';
+import {
+  Draft,
+  AppSettings,
+  BeeperMessage,
+  BeeperAccount,
+  ToneSettings,
+  WritingStylePatterns,
+  AutopilotAgent,
+  ChatAutopilotConfig,
+  AutopilotActivityEntry,
+  ScheduledAutopilotAction,
+  ConversationHandoffSummary,
+} from './types';
 
 const DRAFTS_KEY = 'beeper-kanban-drafts';
 const SETTINGS_KEY = 'beeper-kanban-settings';
@@ -61,6 +73,41 @@ export function deleteDraft(id: string): Draft[] {
 export function getDraftById(id: string): Draft | undefined {
   const drafts = loadDrafts();
   return drafts.find(d => d.id === id);
+}
+
+// Update draft recipient names from a name map
+// nameMap: chatId -> correct display name
+export function updateDraftRecipientNames(nameMap: Record<string, { name: string; avatarUrl?: string }>): number {
+  if (typeof window === 'undefined') return 0;
+
+  try {
+    const drafts = loadDrafts();
+    let updatedCount = 0;
+
+    const updatedDrafts = drafts.map(draft => {
+      const correction = nameMap[draft.chatId];
+      if (correction && draft.recipientName !== correction.name) {
+        updatedCount++;
+        return {
+          ...draft,
+          recipientName: correction.name,
+          avatarUrl: correction.avatarUrl || draft.avatarUrl,
+          updatedAt: new Date().toISOString(),
+        };
+      }
+      return draft;
+    });
+
+    if (updatedCount > 0) {
+      saveDrafts(updatedDrafts);
+      console.log(`[Storage] Updated ${updatedCount} drafts with correct recipient names`);
+    }
+
+    return updatedCount;
+  } catch (error) {
+    console.error('Failed to update draft recipient names:', error);
+    return 0;
+  }
 }
 
 // Settings storage
@@ -129,6 +176,41 @@ export function getMessagesCacheTimestamp(): number | null {
     return timestamp ? parseInt(timestamp, 10) : null;
   } catch {
     return null;
+  }
+}
+
+// Update cached messages with correct participant names from a name map
+// nameMap: chatId -> correct display name
+export function updateCachedMessageNames(nameMap: Record<string, { name: string; avatarUrl?: string }>): number {
+  if (typeof window === 'undefined') return 0;
+
+  try {
+    const messages = loadCachedMessages();
+    let updatedCount = 0;
+
+    const updatedMessages = messages.map(msg => {
+      const correction = nameMap[msg.chatId];
+      if (correction && (msg.senderName !== correction.name || msg.chatName !== correction.name)) {
+        updatedCount++;
+        return {
+          ...msg,
+          senderName: correction.name,
+          chatName: correction.name,
+          senderAvatarUrl: correction.avatarUrl || msg.senderAvatarUrl,
+        };
+      }
+      return msg;
+    });
+
+    if (updatedCount > 0) {
+      saveCachedMessages(updatedMessages);
+      console.log(`[Storage] Updated ${updatedCount} cached messages with correct names`);
+    }
+
+    return updatedCount;
+  } catch (error) {
+    console.error('Failed to update cached message names:', error);
+    return 0;
   }
 }
 
@@ -235,6 +317,37 @@ export function mergeCachedChatInfo(newChatInfo: Record<string, CachedChatInfo>)
   const merged = { ...existing, ...newChatInfo };
   saveCachedChatInfo(merged);
   return merged;
+}
+
+// Update cached chat info with correct names (e.g., when API fixes participant name resolution)
+export function updateCachedChatInfoTitles(nameMap: Record<string, string>): number {
+  if (typeof window === 'undefined') return 0;
+
+  try {
+    const chatInfo = loadCachedChatInfo();
+    let updatedCount = 0;
+
+    const updatedChatInfo: Record<string, CachedChatInfo> = {};
+    for (const [chatId, info] of Object.entries(chatInfo)) {
+      const correctName = nameMap[chatId];
+      if (correctName && info.title !== correctName) {
+        updatedCount++;
+        updatedChatInfo[chatId] = { ...info, title: correctName };
+      } else {
+        updatedChatInfo[chatId] = info;
+      }
+    }
+
+    if (updatedCount > 0) {
+      saveCachedChatInfo(updatedChatInfo);
+      console.log(`[Storage] Updated ${updatedCount} cached chat info entries with correct names`);
+    }
+
+    return updatedCount;
+  } catch (error) {
+    console.error('Failed to update cached chat info titles:', error);
+    return 0;
+  }
 }
 
 // Hidden chats storage with metadata
@@ -572,10 +685,9 @@ export function updateThreadContextWithNewMessages(
   const messagesToAdd = newMessages.filter(m => !existingIds.has(m.id));
   const allMessages = [...(existing?.messages || []), ...messagesToAdd];
 
-  // Sort by timestamp and keep last 50 messages for context
+  // Sort by timestamp - keep all messages (no limit) so user sees all loaded history
   const sortedMessages = allMessages
-    .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
-    .slice(-50);
+    .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 
   saveThreadContext(chatId, senderName, sortedMessages);
 
@@ -633,6 +745,12 @@ export function clearAllData(): void {
     USER_MESSAGES_CACHE_KEY,
     AI_CHAT_HISTORY_KEY,
     THREAD_CONTEXT_KEY,
+    // Autopilot keys
+    'beeper-kanban-autopilot-agents',
+    'beeper-kanban-autopilot-chat-configs',
+    'beeper-kanban-autopilot-activity',
+    'beeper-kanban-autopilot-scheduled',
+    'beeper-kanban-autopilot-handoffs',
   ];
 
   keysToRemove.forEach(key => {
@@ -663,4 +781,291 @@ export function clearCachedData(): void {
   keysToRemove.forEach(key => {
     localStorage.removeItem(key);
   });
+}
+
+// ============================================
+// AUTOPILOT STORAGE
+// ============================================
+
+const AUTOPILOT_AGENTS_KEY = 'beeper-kanban-autopilot-agents';
+const AUTOPILOT_CHAT_CONFIGS_KEY = 'beeper-kanban-autopilot-chat-configs';
+const AUTOPILOT_ACTIVITY_KEY = 'beeper-kanban-autopilot-activity';
+const AUTOPILOT_SCHEDULED_KEY = 'beeper-kanban-autopilot-scheduled';
+const AUTOPILOT_HANDOFFS_KEY = 'beeper-kanban-autopilot-handoffs';
+
+const MAX_ACTIVITY_ENTRIES = 500;
+
+// Agent CRUD operations
+
+export function loadAutopilotAgents(): AutopilotAgent[] {
+  if (typeof window === 'undefined') return [];
+
+  try {
+    const stored = localStorage.getItem(AUTOPILOT_AGENTS_KEY);
+    if (!stored) return [];
+    return JSON.parse(stored) as AutopilotAgent[];
+  } catch {
+    console.error('Failed to load autopilot agents from localStorage');
+    return [];
+  }
+}
+
+export function saveAutopilotAgents(agents: AutopilotAgent[]): void {
+  if (typeof window === 'undefined') return;
+
+  try {
+    localStorage.setItem(AUTOPILOT_AGENTS_KEY, JSON.stringify(agents));
+  } catch {
+    console.error('Failed to save autopilot agents to localStorage');
+  }
+}
+
+export function getAutopilotAgentById(id: string): AutopilotAgent | undefined {
+  const agents = loadAutopilotAgents();
+  return agents.find(a => a.id === id);
+}
+
+export function addAutopilotAgent(agent: AutopilotAgent): AutopilotAgent[] {
+  const agents = loadAutopilotAgents();
+  const updated = [...agents, agent];
+  saveAutopilotAgents(updated);
+  return updated;
+}
+
+export function updateAutopilotAgent(id: string, updates: Partial<AutopilotAgent>): AutopilotAgent[] {
+  const agents = loadAutopilotAgents();
+  const updated = agents.map(a =>
+    a.id === id
+      ? { ...a, ...updates, updatedAt: new Date().toISOString() }
+      : a
+  );
+  saveAutopilotAgents(updated);
+  return updated;
+}
+
+export function deleteAutopilotAgent(id: string): AutopilotAgent[] {
+  const agents = loadAutopilotAgents();
+  const updated = agents.filter(a => a.id !== id);
+  saveAutopilotAgents(updated);
+  return updated;
+}
+
+// Chat autopilot config operations
+
+export function loadChatAutopilotConfigs(): Record<string, ChatAutopilotConfig> {
+  if (typeof window === 'undefined') return {};
+
+  try {
+    const stored = localStorage.getItem(AUTOPILOT_CHAT_CONFIGS_KEY);
+    if (!stored) return {};
+    return JSON.parse(stored) as Record<string, ChatAutopilotConfig>;
+  } catch {
+    console.error('Failed to load chat autopilot configs from localStorage');
+    return {};
+  }
+}
+
+export function saveChatAutopilotConfigs(configs: Record<string, ChatAutopilotConfig>): void {
+  if (typeof window === 'undefined') return;
+
+  try {
+    localStorage.setItem(AUTOPILOT_CHAT_CONFIGS_KEY, JSON.stringify(configs));
+  } catch {
+    console.error('Failed to save chat autopilot configs to localStorage');
+  }
+}
+
+export function getChatAutopilotConfig(chatId: string): ChatAutopilotConfig | null {
+  const configs = loadChatAutopilotConfigs();
+  return configs[chatId] || null;
+}
+
+export function saveChatAutopilotConfig(config: ChatAutopilotConfig): void {
+  const configs = loadChatAutopilotConfigs();
+  configs[config.chatId] = { ...config, updatedAt: new Date().toISOString() };
+  saveChatAutopilotConfigs(configs);
+}
+
+export function deleteChatAutopilotConfig(chatId: string): void {
+  const configs = loadChatAutopilotConfigs();
+  delete configs[chatId];
+  saveChatAutopilotConfigs(configs);
+}
+
+export function getActiveAutopilotChats(): ChatAutopilotConfig[] {
+  const configs = loadChatAutopilotConfigs();
+  return Object.values(configs).filter(c => c.enabled && c.status === 'active');
+}
+
+// Activity log operations
+
+export function loadAutopilotActivity(): AutopilotActivityEntry[] {
+  if (typeof window === 'undefined') return [];
+
+  try {
+    const stored = localStorage.getItem(AUTOPILOT_ACTIVITY_KEY);
+    if (!stored) return [];
+    return JSON.parse(stored) as AutopilotActivityEntry[];
+  } catch {
+    console.error('Failed to load autopilot activity from localStorage');
+    return [];
+  }
+}
+
+export function saveAutopilotActivity(entries: AutopilotActivityEntry[]): void {
+  if (typeof window === 'undefined') return;
+
+  try {
+    localStorage.setItem(AUTOPILOT_ACTIVITY_KEY, JSON.stringify(entries));
+  } catch {
+    console.error('Failed to save autopilot activity to localStorage');
+  }
+}
+
+export function addAutopilotActivityEntry(entry: AutopilotActivityEntry): void {
+  const entries = loadAutopilotActivity();
+  entries.push(entry);
+
+  // Prune if over limit
+  const pruned = entries.length > MAX_ACTIVITY_ENTRIES
+    ? entries.slice(-MAX_ACTIVITY_ENTRIES)
+    : entries;
+
+  saveAutopilotActivity(pruned);
+}
+
+export function getActivityForChat(chatId: string): AutopilotActivityEntry[] {
+  const entries = loadAutopilotActivity();
+  return entries.filter(e => e.chatId === chatId);
+}
+
+export function clearAutopilotActivity(): void {
+  if (typeof window === 'undefined') return;
+  localStorage.removeItem(AUTOPILOT_ACTIVITY_KEY);
+}
+
+// Scheduled actions operations
+
+export function loadScheduledActions(): ScheduledAutopilotAction[] {
+  if (typeof window === 'undefined') return [];
+
+  try {
+    const stored = localStorage.getItem(AUTOPILOT_SCHEDULED_KEY);
+    if (!stored) return [];
+    return JSON.parse(stored) as ScheduledAutopilotAction[];
+  } catch {
+    console.error('Failed to load scheduled actions from localStorage');
+    return [];
+  }
+}
+
+export function saveScheduledActions(actions: ScheduledAutopilotAction[]): void {
+  if (typeof window === 'undefined') return;
+
+  try {
+    localStorage.setItem(AUTOPILOT_SCHEDULED_KEY, JSON.stringify(actions));
+  } catch {
+    console.error('Failed to save scheduled actions to localStorage');
+  }
+}
+
+export function addScheduledAction(action: ScheduledAutopilotAction): void {
+  const actions = loadScheduledActions();
+  actions.push(action);
+  saveScheduledActions(actions);
+}
+
+export function updateScheduledAction(id: string, updates: Partial<ScheduledAutopilotAction>): void {
+  const actions = loadScheduledActions();
+  const updated = actions.map(a =>
+    a.id === id ? { ...a, ...updates } : a
+  );
+  saveScheduledActions(updated);
+}
+
+export function deleteScheduledAction(id: string): void {
+  const actions = loadScheduledActions();
+  const updated = actions.filter(a => a.id !== id);
+  saveScheduledActions(updated);
+}
+
+export function getNextPendingAction(): ScheduledAutopilotAction | null {
+  const actions = loadScheduledActions();
+  const now = new Date().toISOString();
+
+  // Find actions that are pending and due
+  const pending = actions
+    .filter(a => a.status === 'pending' && a.scheduledFor <= now)
+    .sort((a, b) => a.scheduledFor.localeCompare(b.scheduledFor));
+
+  return pending[0] || null;
+}
+
+export function getPendingActionsForChat(chatId: string): ScheduledAutopilotAction[] {
+  const actions = loadScheduledActions();
+  return actions.filter(a => a.chatId === chatId && a.status === 'pending');
+}
+
+export function cancelActionsForChat(chatId: string): void {
+  const actions = loadScheduledActions();
+  const updated = actions.map(a =>
+    a.chatId === chatId && a.status === 'pending'
+      ? { ...a, status: 'cancelled' as const }
+      : a
+  );
+  saveScheduledActions(updated);
+}
+
+export function cleanupCompletedActions(): void {
+  const actions = loadScheduledActions();
+  // Keep only pending and executing actions, plus failed ones from last 24 hours
+  const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const updated = actions.filter(a =>
+    a.status === 'pending' ||
+    a.status === 'executing' ||
+    (a.status === 'failed' && a.createdAt > oneDayAgo)
+  );
+  saveScheduledActions(updated);
+}
+
+// Handoff summaries operations
+
+export function loadHandoffSummaries(): Record<string, ConversationHandoffSummary> {
+  if (typeof window === 'undefined') return {};
+
+  try {
+    const stored = localStorage.getItem(AUTOPILOT_HANDOFFS_KEY);
+    if (!stored) return {};
+    return JSON.parse(stored) as Record<string, ConversationHandoffSummary>;
+  } catch {
+    console.error('Failed to load handoff summaries from localStorage');
+    return {};
+  }
+}
+
+export function saveHandoffSummaries(summaries: Record<string, ConversationHandoffSummary>): void {
+  if (typeof window === 'undefined') return;
+
+  try {
+    localStorage.setItem(AUTOPILOT_HANDOFFS_KEY, JSON.stringify(summaries));
+  } catch {
+    console.error('Failed to save handoff summaries to localStorage');
+  }
+}
+
+export function getHandoffSummary(chatId: string): ConversationHandoffSummary | null {
+  const summaries = loadHandoffSummaries();
+  return summaries[chatId] || null;
+}
+
+export function saveHandoffSummary(summary: ConversationHandoffSummary): void {
+  const summaries = loadHandoffSummaries();
+  summaries[summary.chatId] = summary;
+  saveHandoffSummaries(summaries);
+}
+
+export function deleteHandoffSummary(chatId: string): void {
+  const summaries = loadHandoffSummaries();
+  delete summaries[chatId];
+  saveHandoffSummaries(summaries);
 }

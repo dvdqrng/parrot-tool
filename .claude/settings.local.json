@@ -18,7 +18,11 @@
       "Bash(git push:*)",
       "Bash(gh repo create:*)",
       "Bash(git remote:*)",
-      "Bash(npx shadcn@latest add dropdown-menu:*)"
+      "Bash(npx shadcn@latest add dropdown-menu:*)",
+      "Bash(xargs cat:*)",
+      "Bash(npx shadcn@latest add:*)",
+      "Bash(npm view:*)",
+      "Bash(npx shadcn@latest init:*)"
     ]
   }
 }

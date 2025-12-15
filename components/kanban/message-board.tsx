@@ -8,7 +8,83 @@ import { Button } from '@/components/ui/button';
 import { Loader2, ChevronDown } from 'lucide-react';
 import { MessageCard } from './message-card';
 import { ColumnHeader } from './column-header';
-import { BeeperMessage, Draft, KanbanCard, KanbanColumns, ColumnId } from '@/lib/types';
+import { BeeperMessage, BeeperAttachment, Draft, KanbanCard, KanbanColumns, ColumnId, MediaType } from '@/lib/types';
+
+// URL detection regex
+const URL_REGEX = /(https?:\/\/[^\s]+)/g;
+
+// Detect media types from attachments
+function getMediaTypes(attachments?: BeeperAttachment[], text?: string): MediaType[] {
+  const types: MediaType[] = [];
+
+  if (attachments && attachments.length > 0) {
+    for (const att of attachments) {
+      if (att.isGif) {
+        if (!types.includes('gif')) types.push('gif');
+      } else if (att.isSticker) {
+        if (!types.includes('sticker')) types.push('sticker');
+      } else if (att.isVoiceNote) {
+        if (!types.includes('voice')) types.push('voice');
+      } else if (att.type === 'img') {
+        if (!types.includes('photo')) types.push('photo');
+      } else if (att.type === 'video') {
+        if (!types.includes('video')) types.push('video');
+      } else if (att.type === 'audio') {
+        if (!types.includes('audio')) types.push('audio');
+      } else if (att.type === 'unknown' && att.fileName) {
+        if (!types.includes('file')) types.push('file');
+      }
+    }
+  }
+
+  // Check for links in text
+  if (text && URL_REGEX.test(text)) {
+    if (!types.includes('link')) types.push('link');
+  }
+
+  return types;
+}
+
+// Get media type emoji/label for preview
+function getMediaLabel(type: MediaType): string {
+  switch (type) {
+    case 'photo': return '📷 Photo';
+    case 'video': return '🎥 Video';
+    case 'audio': return '🎵 Audio';
+    case 'voice': return '🎤 Voice message';
+    case 'gif': return 'GIF';
+    case 'sticker': return '🏷️ Sticker';
+    case 'file': return '📎 File';
+    case 'link': return '🔗 Link';
+    default: return '';
+  }
+}
+
+// Generate smart preview text that includes media indicators
+function generatePreview(text?: string, attachments?: BeeperAttachment[]): string {
+  const mediaTypes = getMediaTypes(attachments, text);
+  const hasText = text && text.trim().length > 0;
+
+  // If there's text, use it (possibly with media indicator prefix)
+  if (hasText) {
+    // If there are media attachments, prepend indicator
+    if (mediaTypes.length > 0 && !mediaTypes.every(t => t === 'link')) {
+      const mediaLabels = mediaTypes
+        .filter(t => t !== 'link')
+        .map(getMediaLabel)
+        .join(', ');
+      return `${mediaLabels}: ${text}`;
+    }
+    return text;
+  }
+
+  // No text - generate preview from media types
+  if (mediaTypes.length > 0) {
+    return mediaTypes.map(getMediaLabel).join(', ');
+  }
+
+  return '';
+}
 
 interface ChatInfo {
   isGroup: boolean;
@@ -17,6 +93,7 @@ interface ChatInfo {
 
 interface MessageBoardProps {
   unreadMessages: BeeperMessage[];
+  autopilotMessages?: BeeperMessage[];
   drafts: Draft[];
   sentMessages: BeeperMessage[];
   archivedMessages?: BeeperMessage[];
@@ -50,12 +127,16 @@ function messageToCard(
   const info = chatInfo?.[message.chatId];
   // Use chat title (group name or contact name) if available, fallback to sender name
   const title = info?.title || message.senderName;
+  // Generate smart preview with media indicators
+  const mediaTypes = getMediaTypes(message.attachments, message.text);
+  const preview = generatePreview(message.text, message.attachments);
+
   return {
     id: message.id,
     type: 'message',
     message,
     title,
-    preview: message.text,
+    preview,
     timestamp: message.timestamp,
     platform: message.platform || 'unknown',
     // For groups: no avatar (will show initials from group title)
@@ -63,6 +144,7 @@ function messageToCard(
     avatarUrl: info?.isGroup ? undefined : (avatars?.[message.chatId] || message.senderAvatarUrl),
     unreadCount: message.unreadCount,
     isGroup: info?.isGroup,
+    mediaTypes: mediaTypes.length > 0 ? mediaTypes : undefined,
   };
 }
 
@@ -82,6 +164,7 @@ function draftToCard(draft: Draft): KanbanCard {
 
 export function MessageBoard({
   unreadMessages,
+  autopilotMessages = [],
   drafts,
   sentMessages,
   archivedMessages = [],
@@ -109,19 +192,25 @@ export function MessageBoard({
   // Convert data to kanban format - derive directly from props
   const columns: KanbanColumns = useMemo(() => ({
     unread: unreadMessages.map(m => messageToCard(m, avatars, chatInfo)),
+    autopilot: autopilotMessages.map(m => messageToCard(m, avatars, chatInfo)),
     drafts: drafts.map(draftToCard),
     sent: sentMessages.slice(0, 20).map(m => messageToCard(m, avatars, chatInfo)), // Limit sent messages
     archived: archivedMessages.slice(0, 20).map(m => messageToCard(m, avatars, chatInfo)),
-  }), [unreadMessages, drafts, sentMessages, archivedMessages, avatars, chatInfo]);
+  }), [unreadMessages, autopilotMessages, drafts, sentMessages, archivedMessages, avatars, chatInfo]);
 
   // Determine which columns to show
   const visibleColumns: ColumnId[] = useMemo(() => {
-    const cols: ColumnId[] = ['unread', 'drafts', 'sent'];
+    const cols: ColumnId[] = ['unread'];
+    // Show autopilot column if there are any autopilot messages
+    if (autopilotMessages.length > 0) {
+      cols.push('autopilot');
+    }
+    cols.push('drafts', 'sent');
     if (showArchivedColumn) {
       cols.push('archived');
     }
     return cols;
-  }, [showArchivedColumn]);
+  }, [showArchivedColumn, autopilotMessages.length]);
 
   // Track starting column for drag operations
   const dragStartColumnRef = useRef<ColumnId | null>(null);
@@ -129,6 +218,7 @@ export function MessageBoard({
   // Find which column contains a card by its id
   const findColumnForCard = useCallback((cardId: string): ColumnId | null => {
     if (columns.unread.some(c => c.id === cardId)) return 'unread';
+    if (columns.autopilot.some(c => c.id === cardId)) return 'autopilot';
     if (columns.drafts.some(c => c.id === cardId)) return 'drafts';
     if (columns.sent.some(c => c.id === cardId)) return 'sent';
     if (columns.archived.some(c => c.id === cardId)) return 'archived';
@@ -150,7 +240,7 @@ export function MessageBoard({
 
     // Determine the target column - it could be the column id itself or an item in the column
     let targetColumn: ColumnId | null = null;
-    if (['unread', 'drafts', 'sent', 'archived'].includes(overId)) {
+    if (['unread', 'autopilot', 'drafts', 'sent', 'archived'].includes(overId)) {
       targetColumn = overId as ColumnId;
     } else {
       // Find which column the over item is in
@@ -213,6 +303,7 @@ export function MessageBoard({
                   {columns[columnId].length === 0 ? (
                     <div className="rounded-lg border-2 border-dashed border-muted p-4 text-center text-sm text-muted-foreground">
                       {columnId === 'unread' && 'No unread messages'}
+                      {columnId === 'autopilot' && 'No chats on autopilot'}
                       {columnId === 'drafts' && 'Drag messages here to create drafts'}
                       {columnId === 'sent' && 'No sent messages'}
                       {columnId === 'archived' && 'No archived chats'}
@@ -240,12 +331,12 @@ export function MessageBoard({
                         >
                           {isLoadingMore ? (
                             <>
-                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              <Loader2 className="h-4 w-4 mr-2 animate-spin" strokeWidth={1.5} />
                               Loading...
                             </>
                           ) : (
                             <>
-                              <ChevronDown className="mr-2 h-4 w-4" />
+                              <ChevronDown className="h-4 w-4 mr-2" strokeWidth={1.5} />
                               Load More Messages
                             </>
                           )}

@@ -14,7 +14,7 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { KanbanCard } from '@/lib/types';
 import { getPlatformInfo } from '@/lib/beeper-client';
-import { Reply } from 'lucide-react';
+import { MessageSquare } from 'lucide-react';
 
 interface MessageDetailProps {
   card: KanbanCard | null;
@@ -90,7 +90,7 @@ export function MessageDetail({ card, open, onOpenChange, onReply }: MessageDeta
 
           {isMessage && card.message && !card.message.isFromMe && (
             <Button className="w-full" onClick={() => onReply(card)}>
-              <Reply className="mr-2 h-4 w-4" />
+              <MessageSquare className="h-4 w-4 mr-2" strokeWidth={1.5} />
               Reply
             </Button>
           )}

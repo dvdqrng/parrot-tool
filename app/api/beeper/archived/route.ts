@@ -30,27 +30,42 @@ export async function GET(request: NextRequest) {
       const isGroup = chat.type === 'group';
       const participants = chat.participants?.items || [];
 
-      // Get avatar for single chats
+      // For DMs, find the OTHER participant (not self) to get their avatar and name
+      const otherParticipant = participants.find(p => !p.isSelf) || participants[0];
+
+      // Get avatar for single chats from the other participant
       let avatarUrl: string | undefined;
-      if (!isGroup && participants[0]?.imgURL) {
-        avatarUrl = participants[0].imgURL;
+      if (!isGroup && otherParticipant?.imgURL) {
+        avatarUrl = otherParticipant.imgURL;
         avatarsToReturn[chat.id] = avatarUrl;
       }
 
-      chatInfoToReturn[chat.id] = { isGroup, title: chat.title || undefined };
+      // For DMs, always use the other participant's name as the chat name
+      let chatDisplayName: string;
+      if (isGroup) {
+        chatDisplayName = chat.title || 'Group Chat';
+      } else if (otherParticipant) {
+        chatDisplayName = otherParticipant.fullName || otherParticipant.username || chat.title || 'Unknown';
+      } else {
+        chatDisplayName = chat.title || 'Unknown';
+      }
+
+      // Use chatDisplayName (the computed name) for title instead of chat.title
+      // This ensures DMs show the other participant's name, not the raw Beeper title
+      chatInfoToReturn[chat.id] = { isGroup, title: chatDisplayName };
 
       resultMessages.push({
         id: chat.id,
         chatId: chat.id,
         accountId: chat.accountID || '',
         senderId: '',
-        senderName: chat.title || 'Unknown',
+        senderName: chatDisplayName,
         senderAvatarUrl: avatarUrl,
         text: chat.description || '',
         timestamp: chat.lastActivity || new Date().toISOString(),
         isFromMe: false,
         isRead: true,
-        chatName: chat.title || undefined,
+        chatName: chatDisplayName,
         platform,
         unreadCount: chat.unreadCount || 0,
         isGroup,

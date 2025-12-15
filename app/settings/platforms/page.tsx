@@ -38,7 +38,7 @@ export default function PlatformsPage() {
           <div className="flex items-center justify-between">
             <div>
               <CardTitle className="flex items-center gap-2">
-                <Layers className="h-5 w-5" />
+                <Layers className="h-4 w-4" strokeWidth={1.5} />
                 Messaging Platforms
               </CardTitle>
               <CardDescription>
@@ -46,7 +46,7 @@ export default function PlatformsPage() {
               </CardDescription>
             </div>
             <Button variant="outline" size="sm" onClick={refetch} disabled={isLoading}>
-              <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} strokeWidth={1.5} />
               Refresh
             </Button>
           </div>
@@ -62,7 +62,7 @@ export default function PlatformsPage() {
             </div>
           ) : isLoading ? (
             <div className="flex items-center justify-center py-8">
-              <RefreshCw className="h-6 w-6 animate-spin text-muted-foreground" />
+              <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" strokeWidth={1.5} />
             </div>
           ) : accounts.length === 0 ? (
             <div className="rounded-lg bg-muted p-4 text-center">
@@ -113,7 +113,7 @@ export default function PlatformsPage() {
                         className="flex flex-1 cursor-pointer items-center justify-between"
                       >
                         <div className="flex items-center gap-3">
-                          <PlatformIcon platform={account.service} className="h-5 w-5" />
+                          <PlatformIcon platform={account.service} className="h-4 w-4" />
                           <span className="text-xs font-medium">{platformData.name}</span>
                         </div>
                         <Badge variant="secondary" className="font-mono text-xs">

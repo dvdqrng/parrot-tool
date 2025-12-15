@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { Settings, RefreshCw, Loader2, Plus, Archive } from 'lucide-react';
 import { ThemeToggle } from '@/components/theme-toggle';
@@ -11,6 +11,8 @@ import { DraftComposer } from '@/components/draft-composer';
 import { MessagePanel } from '@/components/message-panel';
 import { AiChatPanel } from '@/components/ai-chat-panel';
 import { ContactsDialog } from '@/components/contacts-dialog';
+import { PendingApprovalCard } from '@/components/autopilot/pending-approval-card';
+import { HandoffSummaryCard } from '@/components/autopilot/handoff-summary-card';
 import type { Contact } from '@/app/api/beeper/contacts/route';
 import { useSettingsContext } from '@/contexts/settings-context';
 import { useMessages } from '@/hooks/use-messages';
@@ -19,8 +21,9 @@ import { useDrafts } from '@/hooks/use-drafts';
 import { useAiChatHistory } from '@/hooks/use-ai-chat-history';
 import { useBatchDraftGenerator } from '@/hooks/use-batch-draft-generator';
 import { useBatchSend } from '@/hooks/use-batch-send';
+import { useAutopilot } from '@/contexts/autopilot-context';
 import { KanbanCard, ColumnId, BeeperMessage, Draft } from '@/lib/types';
-import { loadHiddenChats, addHiddenChat, loadWritingStylePatterns, loadToneSettings } from '@/lib/storage';
+import { loadHiddenChats, addHiddenChat, loadWritingStylePatterns, loadToneSettings, getChatAutopilotConfig } from '@/lib/storage';
 import { toast } from 'sonner';
 
 export default function Home() {
@@ -56,11 +59,68 @@ export default function Home() {
 
   const { drafts, createDraft, updateDraft, deleteDraft } = useDrafts();
 
+  // Autopilot integration
+  const { processNewMessages, pendingApprovals, handoffSummaries, approveDraft, rejectDraft, dismissHandoff, configVersion } = useAutopilot();
+
+  // Process new messages through autopilot when they arrive
+  useEffect(() => {
+    if (unreadMessages.length > 0) {
+      processNewMessages(unreadMessages);
+    }
+  }, [unreadMessages, processNewMessages]);
+
+  // Auto-poll for new messages every 10 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      refetch();
+    }, 10000); // Poll every 10 seconds
+
+    return () => clearInterval(interval);
+  }, [refetch]);
+
   // Filter out optimistically archived chats and messages that have drafts
   const draftChatIds = new Set(drafts.map(d => d.chatId));
-  const filteredUnreadMessages = unreadMessages.filter(m =>
-    !archivedChats.has(m.chatId) && !draftChatIds.has(m.chatId)
-  );
+
+  // Collect autopilot chats from ALL message sources (unread + sent)
+  // The autopilot column should show chats with active autopilot regardless of their other state
+  const { autopilotMessages, filteredUnreadMessages, filteredSentMessages } = useMemo(() => {
+    const autopilotChatIds = new Set<string>();
+    const autopilot: BeeperMessage[] = [];
+    const regularUnread: BeeperMessage[] = [];
+
+    // First, identify all chats with active autopilot by checking unread messages
+    for (const m of unreadMessages) {
+      if (archivedChats.has(m.chatId)) continue;
+      const config = getChatAutopilotConfig(m.chatId);
+      if (config?.enabled && config.status === 'active') {
+        autopilotChatIds.add(m.chatId);
+        autopilot.push(m);
+      } else if (!draftChatIds.has(m.chatId)) {
+        regularUnread.push(m);
+      }
+    }
+
+    // Also check sent messages for active autopilot (chat could be waiting for reply)
+    for (const m of sentMessages) {
+      if (archivedChats.has(m.chatId)) continue;
+      if (autopilotChatIds.has(m.chatId)) continue; // Already added from unread
+      const config = getChatAutopilotConfig(m.chatId);
+      if (config?.enabled && config.status === 'active') {
+        autopilotChatIds.add(m.chatId);
+        autopilot.push(m);
+      }
+    }
+
+    // Filter sent messages to exclude autopilot chats (they show in autopilot column)
+    const regularSent = sentMessages.filter(m => !autopilotChatIds.has(m.chatId));
+
+    return {
+      autopilotMessages: autopilot,
+      filteredUnreadMessages: regularUnread,
+      filteredSentMessages: regularSent,
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [unreadMessages, sentMessages, archivedChats, draftChatIds, configVersion]);
 
   // Batch draft generation
   const handleDraftGenerated = useCallback((message: BeeperMessage, draftText: string) => {
@@ -509,7 +569,7 @@ export default function Home() {
   if (!settingsLoaded) {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" strokeWidth={1.5} />
       </div>
     );
   }
@@ -526,7 +586,7 @@ export default function Home() {
         </div>
         <Link href="/settings">
           <Button size="lg">
-            <Settings className="mr-2 h-5 w-5" />
+            <Settings className="h-4 w-4 mr-2" strokeWidth={1.5} />
             Configure Platforms
           </Button>
         </Link>
@@ -551,16 +611,17 @@ export default function Home() {
                 </Button>
               </div>
             </div>
-          ) : isLoading ? (
+          ) : isLoading && unreadMessages.length === 0 && sentMessages.length === 0 ? (
             <div className="flex h-full items-center justify-center">
-              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" strokeWidth={1.5} />
             </div>
           ) : (
             <div className="h-full overflow-x-auto">
               <MessageBoard
                 unreadMessages={filteredUnreadMessages}
+                autopilotMessages={autopilotMessages}
                 drafts={drafts}
-                sentMessages={sentMessages}
+                sentMessages={filteredSentMessages}
                 archivedMessages={archivedMessages}
                 showArchivedColumn={settings.showArchivedColumn}
                 avatars={avatars}
@@ -604,7 +665,7 @@ export default function Home() {
               className="rounded-full"
               onClick={() => setContactsDialogOpen(true)}
             >
-              <Plus className="h-5 w-5" />
+              <Plus className="h-4 w-4" strokeWidth={1.5} />
             </Button>
             <Button
               variant="ghost"
@@ -613,7 +674,7 @@ export default function Home() {
               onClick={refetch}
               disabled={isLoading}
             >
-              <RefreshCw className={`h-5 w-5 ${isLoading ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} strokeWidth={1.5} />
             </Button>
             <Button
               variant={settings.showArchivedColumn ? "default" : "ghost"}
@@ -622,12 +683,12 @@ export default function Home() {
               onClick={() => updateSettings({ showArchivedColumn: !settings.showArchivedColumn })}
               title={settings.showArchivedColumn ? "Hide archived column" : "Show archived column"}
             >
-              <Archive className="h-5 w-5" />
+              <Archive className="h-4 w-4" strokeWidth={1.5} />
             </Button>
             <ThemeToggle />
             <Link href="/settings">
               <Button variant="ghost" size="icon" className="rounded-full">
-                <Settings className="h-5 w-5" />
+                <Settings className="h-4 w-4" strokeWidth={1.5} />
               </Button>
             </Link>
           </div>
@@ -657,6 +718,33 @@ export default function Home() {
           onMessagesChange={setAiChatMessages}
         />
       </div>
+
+      {/* Autopilot notifications - floating in bottom left */}
+      {(pendingApprovals.length > 0 || handoffSummaries.size > 0) && (
+        <div className="fixed bottom-20 left-6 z-30 w-80 space-y-3 max-h-[calc(100vh-160px)] overflow-y-auto">
+          {/* Pending approvals */}
+          {pendingApprovals.map((approval) => (
+            <PendingApprovalCard
+              key={approval.chatId}
+              chatId={approval.chatId}
+              draftText={approval.draftText}
+              agentName={approval.agentName}
+              recipientName={approval.recipientName}
+              timestamp={approval.timestamp}
+              onApprove={approveDraft}
+              onReject={rejectDraft}
+            />
+          ))}
+          {/* Handoff summaries */}
+          {Array.from(handoffSummaries.values()).map((summary) => (
+            <HandoffSummaryCard
+              key={summary.chatId}
+              summary={summary}
+              onDismiss={dismissHandoff}
+            />
+          ))}
+        </div>
+      )}
 
       {/* Message detail panel (for drafts) */}
       <MessageDetail

@@ -1,12 +1,37 @@
 'use client';
 
+import React, { memo } from 'react';
 import { formatDistanceToNow } from 'date-fns';
-import { Users, Archive, ArchiveRestore, EyeOff, Send, Trash2 } from 'lucide-react';
+import { Users, Archive, ArchiveRestore, EyeOff, Send, Trash2, Image, Video, Music, Mic, FileText, Link2 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { KanbanItem } from '@/components/ui/kanban';
-import { KanbanCard } from '@/lib/types';
+import { KanbanCard, MediaType } from '@/lib/types';
 import { PlatformIcon } from '@/components/platform-icon';
+import { AutopilotStatusBadge } from '@/components/autopilot/autopilot-status-badge';
+import { getChatAutopilotConfig, getAutopilotAgentById } from '@/lib/storage';
+
+// Get icon for media type
+function MediaIcon({ type, className }: { type: MediaType; className?: string }) {
+  switch (type) {
+    case 'photo':
+    case 'gif':
+    case 'sticker':
+      return <Image className={className} strokeWidth={1.5} />;
+    case 'video':
+      return <Video className={className} strokeWidth={1.5} />;
+    case 'audio':
+      return <Music className={className} strokeWidth={1.5} />;
+    case 'voice':
+      return <Mic className={className} strokeWidth={1.5} />;
+    case 'file':
+      return <FileText className={className} strokeWidth={1.5} />;
+    case 'link':
+      return <Link2 className={className} strokeWidth={1.5} />;
+    default:
+      return null;
+  }
+}
 
 interface MessageCardProps {
   card: KanbanCard;
@@ -27,7 +52,7 @@ function getAvatarSrc(url?: string): string | undefined {
   return url;
 }
 
-export function MessageCard({ card, onClick, onArchive, onUnarchive, onHide, onSend, onDeleteDraft }: MessageCardProps) {
+function MessageCardComponent({ card, onClick, onArchive, onUnarchive, onHide, onSend, onDeleteDraft }: MessageCardProps) {
   const timeAgo = (() => {
     try {
       return formatDistanceToNow(new Date(card.timestamp), { addSuffix: true });
@@ -35,6 +60,20 @@ export function MessageCard({ card, onClick, onArchive, onUnarchive, onHide, onS
       return '';
     }
   })();
+
+  // Get autopilot config for this chat
+  const chatId = card.message?.chatId || card.draft?.chatId;
+  const autopilotConfig = chatId ? getChatAutopilotConfig(chatId) : null;
+  const autopilotAgent = autopilotConfig?.agentId ? getAutopilotAgentById(autopilotConfig.agentId) : null;
+
+  // Calculate time remaining for self-driving mode
+  const getTimeRemaining = () => {
+    if (!autopilotConfig?.selfDrivingExpiresAt) return null;
+    const expiresAt = new Date(autopilotConfig.selfDrivingExpiresAt).getTime();
+    const now = Date.now();
+    const remaining = Math.max(0, Math.floor((expiresAt - now) / 1000));
+    return remaining > 0 ? remaining : null;
+  };
 
   const initials = card.title
     .split(' ')
@@ -103,7 +142,7 @@ export function MessageCard({ card, onClick, onArchive, onUnarchive, onHide, onS
             <Avatar className="h-10 w-10">
               <AvatarImage src={avatarSrc} alt={card.title} className="object-cover" />
               <AvatarFallback className="text-xs">
-                {card.isGroup ? <Users className="h-3.5 w-3.5 text-muted-foreground" /> : initials}
+                {card.isGroup ? <Users className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} /> : initials}
               </AvatarFallback>
             </Avatar>
             <div className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-background">
@@ -126,7 +165,7 @@ export function MessageCard({ card, onClick, onArchive, onUnarchive, onHide, onS
                   onClick={handleDeleteDraft}
                   title="Delete draft"
                 >
-                  <Trash2 className="h-3 w-3 text-muted-foreground" />
+                  <Trash2 className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
                 </Button>
                 <Button
                   variant="ghost"
@@ -135,7 +174,7 @@ export function MessageCard({ card, onClick, onArchive, onUnarchive, onHide, onS
                   onClick={handleSend}
                   title="Send"
                 >
-                  <Send className="h-3 w-3 text-muted-foreground" />
+                  <Send className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
                 </Button>
               </div>
             </div>
@@ -162,7 +201,7 @@ export function MessageCard({ card, onClick, onArchive, onUnarchive, onHide, onS
           <Avatar className="h-10 w-10">
             <AvatarImage src={avatarSrc} alt={card.title} className="object-cover" />
             <AvatarFallback className="text-xs">
-              {card.isGroup ? <Users className="h-3.5 w-3.5 text-muted-foreground" /> : initials}
+              {card.isGroup ? <Users className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} /> : initials}
             </AvatarFallback>
           </Avatar>
           <div className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-background">
@@ -189,7 +228,7 @@ export function MessageCard({ card, onClick, onArchive, onUnarchive, onHide, onS
                       onClick={handleArchive}
                       title="Archive"
                     >
-                      <Archive className="h-3 w-3 text-muted-foreground" />
+                      <Archive className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
                     </Button>
                   )}
                   {onUnarchive && (
@@ -200,7 +239,7 @@ export function MessageCard({ card, onClick, onArchive, onUnarchive, onHide, onS
                       onClick={handleUnarchive}
                       title="Unarchive"
                     >
-                      <ArchiveRestore className="h-3 w-3 text-muted-foreground" />
+                      <ArchiveRestore className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
                     </Button>
                   )}
                   {onHide && (
@@ -211,10 +250,18 @@ export function MessageCard({ card, onClick, onArchive, onUnarchive, onHide, onS
                       onClick={handleHide}
                       title="Hide sender"
                     >
-                      <EyeOff className="h-3 w-3 text-muted-foreground" />
+                      <EyeOff className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
                     </Button>
                   )}
                 </div>
+              )}
+              {autopilotConfig && autopilotConfig.enabled && (
+                <AutopilotStatusBadge
+                  status={autopilotConfig.status}
+                  mode={autopilotConfig.mode}
+                  agentName={autopilotAgent?.name}
+                  timeRemaining={getTimeRemaining()}
+                />
               )}
               {unreadCount >= 1 && (
                 <span className="ml-1 shrink-0 h-5 min-w-5 flex items-center justify-center rounded-full bg-muted px-1.5 text-xs font-medium text-muted-foreground">
@@ -223,10 +270,34 @@ export function MessageCard({ card, onClick, onArchive, onUnarchive, onHide, onS
               )}
             </div>
           </div>
-          <p className="line-clamp-2 text-xs text-muted-foreground">{card.preview}</p>
+          <div className="flex items-start gap-1">
+            {card.mediaTypes && card.mediaTypes.length > 0 && (
+              <div className="flex items-center gap-0.5 shrink-0 mt-0.5">
+                {card.mediaTypes.slice(0, 2).map((type, i) => (
+                  <MediaIcon key={i} type={type} className="h-4 w-4 text-muted-foreground" />
+                ))}
+              </div>
+            )}
+            <p className="line-clamp-2 text-xs text-muted-foreground">{card.preview}</p>
+          </div>
           <span className="text-xs text-muted-foreground">{timeAgo}</span>
         </div>
       </div>
     </KanbanItem>
   );
 }
+
+// Memoize the component to prevent re-renders when props haven't changed
+export const MessageCard = memo(MessageCardComponent, (prevProps, nextProps) => {
+  // Only re-render if card data actually changed
+  const prevMedia = prevProps.card.mediaTypes?.join(',') || '';
+  const nextMedia = nextProps.card.mediaTypes?.join(',') || '';
+  return (
+    prevProps.card.id === nextProps.card.id &&
+    prevProps.card.timestamp === nextProps.card.timestamp &&
+    prevProps.card.preview === nextProps.card.preview &&
+    prevProps.card.title === nextProps.card.title &&
+    prevProps.card.unreadCount === nextProps.card.unreadCount &&
+    prevMedia === nextMedia
+  );
+});

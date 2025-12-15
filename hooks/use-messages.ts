@@ -1,8 +1,19 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { BeeperMessage } from '@/lib/types';
-import { loadSettings, loadCachedMessages, saveCachedMessages, loadCachedAvatars, mergeCachedAvatars, loadCachedChatInfo, mergeCachedChatInfo } from '@/lib/storage';
+import { loadSettings, loadCachedMessages, saveCachedMessages, loadCachedAvatars, mergeCachedAvatars, loadCachedChatInfo, mergeCachedChatInfo, updateCachedMessageNames, updateDraftRecipientNames, updateCachedChatInfoTitles } from '@/lib/storage';
+
+// Deep compare messages by their IDs and timestamps to avoid unnecessary re-renders
+function messagesEqual(a: BeeperMessage[], b: BeeperMessage[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i].id !== b[i].id || a[i].timestamp !== b[i].timestamp || a[i].text !== b[i].text) {
+      return false;
+    }
+  }
+  return true;
+}
 
 export function useMessages(accountIds: string[], hiddenChatIds?: Set<string>) {
   const [messages, setMessages] = useState<BeeperMessage[]>([]);
@@ -89,10 +100,16 @@ export function useMessages(accountIds: string[], hiddenChatIds?: Set<string>) {
             return updated;
           });
         } else {
-          // Replace messages and save to cache
+          // Replace messages only if data actually changed
           const newMessages = result.data || [];
-          setMessages(newMessages);
-          saveCachedMessages(newMessages);
+          setMessages(prev => {
+            if (messagesEqual(prev, newMessages)) {
+              // Data hasn't changed, keep previous reference to avoid re-renders
+              return prev;
+            }
+            saveCachedMessages(newMessages);
+            return newMessages;
+          });
           setIsFromCache(false);
         }
         // Merge new avatars with cached ones
@@ -105,6 +122,27 @@ export function useMessages(accountIds: string[], hiddenChatIds?: Set<string>) {
           const mergedChatInfo = mergeCachedChatInfo(result.chatInfo);
           setChatInfo(mergedChatInfo);
         }
+
+        // Build a name map from fresh data and update any stale cached entries
+        // This corrects cached messages that might have wrong participant names
+        if (!cursor && result.data && result.data.length > 0) {
+          const nameMap: Record<string, { name: string; avatarUrl?: string }> = {};
+          const titleMap: Record<string, string> = {};
+          for (const msg of result.data) {
+            if (msg.chatId && msg.senderName) {
+              nameMap[msg.chatId] = {
+                name: msg.senderName,
+                avatarUrl: msg.senderAvatarUrl,
+              };
+              titleMap[msg.chatId] = msg.senderName;
+            }
+          }
+          // This will update any cached messages, drafts, and chat info that have different names
+          updateCachedMessageNames(nameMap);
+          updateDraftRecipientNames(nameMap);
+          updateCachedChatInfoTitles(titleMap);
+        }
+
         setHasMore(result.hasMore || false);
         setNextCursor(result.nextCursor || null);
       }
@@ -140,12 +178,21 @@ export function useMessages(accountIds: string[], hiddenChatIds?: Set<string>) {
     fetchMessages();
   }, [fetchMessages]);
 
-  // Filter helpers - also filter out hidden chats for immediate UI feedback
-  const unreadMessages = messages.filter(m => {
-    const isHidden = hiddenChatIds && hiddenChatIds.has(m.chatId);
-    return !m.isRead && !m.isFromMe && !isHidden;
-  });
-  const sentMessages = messages.filter(m => m.isFromMe);
+  // Convert hiddenChatIds Set to a stable string for memoization
+  const hiddenChatIdsKey = hiddenChatIds ? Array.from(hiddenChatIds).sort().join(',') : '';
+
+  // Memoize filtered messages to avoid re-renders when data hasn't changed
+  const unreadMessages = useMemo(() => {
+    return messages.filter(m => {
+      const isHidden = hiddenChatIds && hiddenChatIds.has(m.chatId);
+      return !m.isRead && !m.isFromMe && !isHidden;
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages, hiddenChatIdsKey]);
+
+  const sentMessages = useMemo(() => {
+    return messages.filter(m => m.isFromMe);
+  }, [messages]);
 
   return {
     messages,

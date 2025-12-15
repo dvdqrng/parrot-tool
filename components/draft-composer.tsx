@@ -197,9 +197,9 @@ export function DraftComposer({
                 disabled={isGenerating}
               >
                 {isGenerating ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" strokeWidth={1.5} />
                 ) : (
-                  <Sparkles className="mr-2 h-4 w-4" />
+                  <Sparkles className="h-4 w-4 mr-2" strokeWidth={1.5} />
                 )}
                 {isGenerating ? 'Generating...' : 'AI Suggest'}
               </Button>
@@ -220,12 +220,12 @@ export function DraftComposer({
               onClick={handleDelete}
               className="sm:mr-auto"
             >
-              <Trash2 className="mr-2 h-4 w-4" />
+              <Trash2 className="h-4 w-4 mr-2" strokeWidth={1.5} />
               Delete
             </Button>
           )}
           <Button variant="outline" onClick={handleSave}>
-            <Save className="mr-2 h-4 w-4" />
+            <Save className="h-4 w-4 mr-2" strokeWidth={1.5} />
             Save Draft
           </Button>
           <Button
@@ -237,11 +237,11 @@ export function DraftComposer({
             )}
           >
             {isSending ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" strokeWidth={1.5} />
             ) : sendSuccess ? (
-              <Check className="mr-2 h-4 w-4" />
+              <Check className="h-4 w-4 mr-2" strokeWidth={1.5} />
             ) : (
-              <Send className="mr-2 h-4 w-4" />
+              <Send className="h-4 w-4 mr-2" strokeWidth={1.5} />
             )}
             {isSending ? 'Sending...' : sendSuccess ? 'Sent!' : 'Send'}
           </Button>

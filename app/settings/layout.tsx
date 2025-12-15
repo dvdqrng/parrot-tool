@@ -2,11 +2,11 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { ArrowLeft, Key, MessageSquare, Layers, EyeOff, Database } from 'lucide-react';
+import { ArrowLeft, Key, MessageSquare, Layers, EyeOff, Database, Brain, LucideIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
-const navItems = [
+const navItems: { title: string; href: string; icon: LucideIcon; description: string }[] = [
   {
     title: 'API Keys',
     href: '/settings/api-keys',
@@ -18,6 +18,12 @@ const navItems = [
     href: '/settings/tone',
     icon: MessageSquare,
     description: 'Personal communication style',
+  },
+  {
+    title: 'Autopilot',
+    href: '/settings/autopilot',
+    icon: Brain,
+    description: 'AI agents for auto-replies',
   },
   {
     title: 'Platforms',
@@ -56,7 +62,7 @@ export default function SettingsLayout({
             <div className="flex items-center gap-3 mb-6">
               <Link href="/">
                 <Button variant="ghost" size="icon" className="h-8 w-8">
-                  <ArrowLeft className="h-4 w-4" />
+                  <ArrowLeft className="h-4 w-4" strokeWidth={1.5} />
                 </Button>
               </Link>
               <div>
@@ -68,7 +74,6 @@ export default function SettingsLayout({
             <nav className="space-y-1 flex-1">
               {navItems.map((item) => {
                 const isActive = pathname === item.href;
-                const Icon = item.icon;
 
                 return (
                   <Link
@@ -81,7 +86,7 @@ export default function SettingsLayout({
                         : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                     )}
                   >
-                    <Icon className="h-4 w-4" />
+                    <item.icon className="h-4 w-4" strokeWidth={1.5} />
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-medium truncate">{item.title}</p>
                     </div>

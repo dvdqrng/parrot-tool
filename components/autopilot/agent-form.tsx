@@ -1,0 +1,483 @@
+'use client';
+
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { Save, X, ChevronDown } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Switch } from '@/components/ui/switch';
+import { Slider } from '@/components/ui/slider';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
+import {
+  AutopilotAgent,
+  AgentBehaviorSettings,
+  GoalCompletionBehavior,
+  DEFAULT_AGENT_BEHAVIOR,
+} from '@/lib/types';
+
+interface AgentFormProps {
+  agent?: AutopilotAgent;
+  onSave: (data: Omit<AutopilotAgent, 'id' | 'createdAt' | 'updatedAt'>) => void;
+  onCancel: () => void;
+}
+
+const TIMEZONE_OPTIONS = [
+  'America/New_York',
+  'America/Chicago',
+  'America/Denver',
+  'America/Los_Angeles',
+  'America/Anchorage',
+  'Pacific/Honolulu',
+  'Europe/London',
+  'Europe/Paris',
+  'Europe/Berlin',
+  'Asia/Tokyo',
+  'Asia/Shanghai',
+  'Asia/Singapore',
+  'Australia/Sydney',
+];
+
+export function AgentForm({ agent, onSave, onCancel }: AgentFormProps) {
+  const router = useRouter();
+  const isEditing = !!agent;
+
+  // Basic info
+  const [name, setName] = useState(agent?.name || '');
+  const [description, setDescription] = useState(agent?.description || '');
+  const [goal, setGoal] = useState(agent?.goal || '');
+  const [systemPrompt, setSystemPrompt] = useState(agent?.systemPrompt || '');
+  const [goalCompletionBehavior, setGoalCompletionBehavior] = useState<GoalCompletionBehavior>(
+    agent?.goalCompletionBehavior || 'auto-disable'
+  );
+
+  // Behavior settings
+  const [behavior, setBehavior] = useState<AgentBehaviorSettings>(
+    agent?.behavior || DEFAULT_AGENT_BEHAVIOR
+  );
+
+  // Collapsible sections state
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({
+    timing: true,
+    activity: false,
+    typing: false,
+    multiMessage: false,
+  });
+
+  const toggleSection = (section: string) => {
+    setOpenSections(prev => ({ ...prev, [section]: !prev[section] }));
+  };
+
+  const updateBehavior = <K extends keyof AgentBehaviorSettings>(
+    key: K,
+    value: AgentBehaviorSettings[K]
+  ) => {
+    setBehavior(prev => ({ ...prev, [key]: value }));
+  };
+
+  const handleSave = () => {
+    if (!name.trim() || !goal.trim()) return;
+
+    onSave({
+      name: name.trim(),
+      description: description.trim(),
+      goal: goal.trim(),
+      systemPrompt: systemPrompt.trim(),
+      behavior,
+      goalCompletionBehavior,
+    });
+  };
+
+  const isValid = name.trim() && goal.trim();
+
+  return (
+    <div className="space-y-6">
+      {/* Basic Info */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm">Basic Information</CardTitle>
+          <CardDescription className="text-xs">
+            Name and describe your agent
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="name" className="text-xs">Name *</Label>
+            <Input
+              id="name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g., Meeting Scheduler"
+              className="text-sm"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="description" className="text-xs">Description</Label>
+            <Input
+              id="description"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="e.g., Schedules meetings with prospects"
+              className="text-sm"
+            />
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Goal & Personality */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm">Goal & Personality</CardTitle>
+          <CardDescription className="text-xs">
+            Define what this agent aims to achieve
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="goal" className="text-xs">Goal *</Label>
+            <Input
+              id="goal"
+              value={goal}
+              onChange={(e) => setGoal(e.target.value)}
+              placeholder="e.g., Schedule a meeting"
+              className="text-sm"
+            />
+            <p className="text-xs text-muted-foreground">
+              The agent will work towards this goal and detect when it&apos;s achieved.
+            </p>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="systemPrompt" className="text-xs">System Prompt</Label>
+            <Textarea
+              id="systemPrompt"
+              value={systemPrompt}
+              onChange={(e) => setSystemPrompt(e.target.value)}
+              placeholder="You are a friendly assistant helping to schedule meetings. Be polite, professional, and suggest specific times when appropriate..."
+              className="text-sm min-h-[120px] resize-y"
+            />
+            <p className="text-xs text-muted-foreground">
+              Custom instructions for the AI&apos;s personality and behavior.
+            </p>
+          </div>
+          <div className="space-y-2">
+            <Label className="text-xs">When Goal is Achieved</Label>
+            <Select
+              value={goalCompletionBehavior}
+              onValueChange={(v: string) => setGoalCompletionBehavior(v as GoalCompletionBehavior)}
+            >
+              <SelectTrigger className="text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="auto-disable">Auto-disable (stop responding)</SelectItem>
+                <SelectItem value="maintenance">Maintenance mode (lighter engagement)</SelectItem>
+                <SelectItem value="handoff">Handoff (notify with summary)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Behavior Settings */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm">Human-like Behavior</CardTitle>
+          <CardDescription className="text-xs">
+            Configure timing and behavior to appear more natural
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Reply Timing */}
+          <Collapsible open={openSections.timing} onOpenChange={() => toggleSection('timing')}>
+            <CollapsibleTrigger className="flex items-center justify-between w-full py-2 text-sm font-medium">
+              Reply Timing
+              <ChevronDown className={`h-4 w-4 transition-transform ${openSections.timing ? 'rotate-180' : ''}`} />
+            </CollapsibleTrigger>
+            <CollapsibleContent className="space-y-4 pt-2">
+              <div className="space-y-3">
+                <div className="flex justify-between text-xs">
+                  <span>Minimum delay</span>
+                  <span className="font-mono">{behavior.replyDelayMin}s</span>
+                </div>
+                <Slider
+                  value={[behavior.replyDelayMin]}
+                  onValueChange={([v]) => updateBehavior('replyDelayMin', v)}
+                  min={5}
+                  max={600}
+                  step={5}
+                />
+              </div>
+              <div className="space-y-3">
+                <div className="flex justify-between text-xs">
+                  <span>Maximum delay</span>
+                  <span className="font-mono">{behavior.replyDelayMax}s</span>
+                </div>
+                <Slider
+                  value={[behavior.replyDelayMax]}
+                  onValueChange={([v]) => updateBehavior('replyDelayMax', Math.max(v, behavior.replyDelayMin))}
+                  min={10}
+                  max={1800}
+                  step={10}
+                />
+              </div>
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label className="text-xs">Context-aware timing</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Reply faster in active conversations
+                  </p>
+                </div>
+                <Switch
+                  checked={behavior.replyDelayContextAware}
+                  onCheckedChange={(v) => updateBehavior('replyDelayContextAware', v)}
+                />
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
+
+          {/* Activity Hours */}
+          <Collapsible open={openSections.activity} onOpenChange={() => toggleSection('activity')}>
+            <CollapsibleTrigger className="flex items-center justify-between w-full py-2 text-sm font-medium border-t pt-4">
+              Activity Hours
+              <ChevronDown className={`h-4 w-4 transition-transform ${openSections.activity ? 'rotate-180' : ''}`} />
+            </CollapsibleTrigger>
+            <CollapsibleContent className="space-y-4 pt-2">
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label className="text-xs">Limit activity hours</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Only respond during specified hours
+                  </p>
+                </div>
+                <Switch
+                  checked={behavior.activityHoursEnabled}
+                  onCheckedChange={(v) => updateBehavior('activityHoursEnabled', v)}
+                />
+              </div>
+              {behavior.activityHoursEnabled && (
+                <>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label className="text-xs">Start hour</Label>
+                      <Select
+                        value={behavior.activityHoursStart.toString()}
+                        onValueChange={(v: string) => updateBehavior('activityHoursStart', parseInt(v))}
+                      >
+                        <SelectTrigger className="text-sm">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {Array.from({ length: 24 }, (_, i) => (
+                            <SelectItem key={i} value={i.toString()}>
+                              {i.toString().padStart(2, '0')}:00
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs">End hour</Label>
+                      <Select
+                        value={behavior.activityHoursEnd.toString()}
+                        onValueChange={(v: string) => updateBehavior('activityHoursEnd', parseInt(v))}
+                      >
+                        <SelectTrigger className="text-sm">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {Array.from({ length: 24 }, (_, i) => (
+                            <SelectItem key={i} value={i.toString()}>
+                              {i.toString().padStart(2, '0')}:00
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs">Timezone</Label>
+                    <Select
+                      value={behavior.activityHoursTimezone}
+                      onValueChange={(v: string) => updateBehavior('activityHoursTimezone', v)}
+                    >
+                      <SelectTrigger className="text-sm">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {TIMEZONE_OPTIONS.map(tz => (
+                          <SelectItem key={tz} value={tz}>{tz}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </>
+              )}
+            </CollapsibleContent>
+          </Collapsible>
+
+          {/* Typing & Read Receipts */}
+          <Collapsible open={openSections.typing} onOpenChange={() => toggleSection('typing')}>
+            <CollapsibleTrigger className="flex items-center justify-between w-full py-2 text-sm font-medium border-t pt-4">
+              Typing & Read Receipts
+              <ChevronDown className={`h-4 w-4 transition-transform ${openSections.typing ? 'rotate-180' : ''}`} />
+            </CollapsibleTrigger>
+            <CollapsibleContent className="space-y-4 pt-2">
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label className="text-xs">Typing indicator</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Show typing before sending (if supported)
+                  </p>
+                </div>
+                <Switch
+                  checked={behavior.typingIndicatorEnabled}
+                  onCheckedChange={(v) => updateBehavior('typingIndicatorEnabled', v)}
+                />
+              </div>
+              {behavior.typingIndicatorEnabled && (
+                <div className="space-y-3">
+                  <div className="flex justify-between text-xs">
+                    <span>Typing speed</span>
+                    <span className="font-mono">{behavior.typingSpeedWpm} WPM</span>
+                  </div>
+                  <Slider
+                    value={[behavior.typingSpeedWpm]}
+                    onValueChange={([v]) => updateBehavior('typingSpeedWpm', v)}
+                    min={20}
+                    max={100}
+                    step={5}
+                  />
+                </div>
+              )}
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label className="text-xs">Read receipts</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Mark as read before responding (if supported)
+                  </p>
+                </div>
+                <Switch
+                  checked={behavior.readReceiptEnabled}
+                  onCheckedChange={(v) => updateBehavior('readReceiptEnabled', v)}
+                />
+              </div>
+              {behavior.readReceiptEnabled && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-3">
+                    <div className="flex justify-between text-xs">
+                      <span>Min delay</span>
+                      <span className="font-mono">{behavior.readReceiptDelayMin}s</span>
+                    </div>
+                    <Slider
+                      value={[behavior.readReceiptDelayMin]}
+                      onValueChange={([v]) => updateBehavior('readReceiptDelayMin', v)}
+                      min={1}
+                      max={60}
+                      step={1}
+                    />
+                  </div>
+                  <div className="space-y-3">
+                    <div className="flex justify-between text-xs">
+                      <span>Max delay</span>
+                      <span className="font-mono">{behavior.readReceiptDelayMax}s</span>
+                    </div>
+                    <Slider
+                      value={[behavior.readReceiptDelayMax]}
+                      onValueChange={([v]) => updateBehavior('readReceiptDelayMax', Math.max(v, behavior.readReceiptDelayMin))}
+                      min={5}
+                      max={120}
+                      step={5}
+                    />
+                  </div>
+                </div>
+              )}
+            </CollapsibleContent>
+          </Collapsible>
+
+          {/* Multi-message */}
+          <Collapsible open={openSections.multiMessage} onOpenChange={() => toggleSection('multiMessage')}>
+            <CollapsibleTrigger className="flex items-center justify-between w-full py-2 text-sm font-medium border-t pt-4">
+              Multi-message Splitting
+              <ChevronDown className={`h-4 w-4 transition-transform ${openSections.multiMessage ? 'rotate-180' : ''}`} />
+            </CollapsibleTrigger>
+            <CollapsibleContent className="space-y-4 pt-2">
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label className="text-xs">Split long messages</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Send multiple shorter messages like a human
+                  </p>
+                </div>
+                <Switch
+                  checked={behavior.multiMessageEnabled}
+                  onCheckedChange={(v) => updateBehavior('multiMessageEnabled', v)}
+                />
+              </div>
+              {behavior.multiMessageEnabled && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-3">
+                    <div className="flex justify-between text-xs">
+                      <span>Min delay between</span>
+                      <span className="font-mono">{behavior.multiMessageDelayMin}s</span>
+                    </div>
+                    <Slider
+                      value={[behavior.multiMessageDelayMin]}
+                      onValueChange={([v]) => updateBehavior('multiMessageDelayMin', v)}
+                      min={1}
+                      max={30}
+                      step={1}
+                    />
+                  </div>
+                  <div className="space-y-3">
+                    <div className="flex justify-between text-xs">
+                      <span>Max delay between</span>
+                      <span className="font-mono">{behavior.multiMessageDelayMax}s</span>
+                    </div>
+                    <Slider
+                      value={[behavior.multiMessageDelayMax]}
+                      onValueChange={([v]) => updateBehavior('multiMessageDelayMax', Math.max(v, behavior.multiMessageDelayMin))}
+                      min={3}
+                      max={60}
+                      step={1}
+                    />
+                  </div>
+                </div>
+              )}
+            </CollapsibleContent>
+          </Collapsible>
+        </CardContent>
+      </Card>
+
+      {/* Actions */}
+      <div className="flex items-center justify-end gap-3 pt-4 border-t">
+        <Button variant="outline" onClick={onCancel}>
+          <X className="h-4 w-4 mr-2" />
+          Cancel
+        </Button>
+        <Button onClick={handleSave} disabled={!isValid}>
+          <Save className="h-4 w-4 mr-2" />
+          {isEditing ? 'Save Changes' : 'Create Agent'}
+        </Button>
+      </div>
+    </div>
+  );
+}

@@ -247,7 +247,7 @@ export function MessageModal({
             <Avatar className="h-10 w-10">
               <AvatarImage src={getAvatarSrc(card.avatarUrl)} alt={title} className="object-cover" />
               <AvatarFallback className="text-xs">
-                {card.isGroup ? <Users className="h-5 w-5" /> : initials}
+                {card.isGroup ? <Users className="h-4 w-4" strokeWidth={1.5} /> : initials}
               </AvatarFallback>
             </Avatar>
             <div className="flex flex-col">
@@ -283,9 +283,9 @@ export function MessageModal({
                   disabled={isLoadingMore}
                 >
                   {isLoadingMore ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" strokeWidth={1.5} />
                   ) : (
-                    <ChevronUp className="mr-2 h-4 w-4" />
+                    <ChevronUp className="h-4 w-4 mr-2" strokeWidth={1.5} />
                   )}
                   Load older messages
                 </Button>
@@ -293,7 +293,7 @@ export function MessageModal({
 
               {isLoadingHistory ? (
                 <div className="flex justify-center py-8">
-                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" strokeWidth={1.5} />
                 </div>
               ) : chatHistory.length === 0 ? (
                 <div className="text-center py-8 text-sm text-muted-foreground">
@@ -342,9 +342,9 @@ export function MessageModal({
               disabled={isGenerating}
             >
               {isGenerating ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" strokeWidth={1.5} />
               ) : (
-                <Sparkles className="mr-2 h-4 w-4" />
+                <Sparkles className="h-4 w-4 mr-2" strokeWidth={1.5} />
               )}
               {isGenerating ? 'Generating...' : 'AI Draft'}
             </Button>
@@ -363,7 +363,7 @@ export function MessageModal({
             onClick={handleSaveDraft}
             disabled={!draftText.trim()}
           >
-            <Save className="mr-2 h-4 w-4" />
+            <Save className="h-4 w-4 mr-2" strokeWidth={1.5} />
             Save Draft
           </Button>
           <Button
@@ -371,9 +371,9 @@ export function MessageModal({
             disabled={!draftText.trim() || isSending}
           >
             {isSending ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" strokeWidth={1.5} />
             ) : (
-              <Send className="mr-2 h-4 w-4" />
+              <Send className="h-4 w-4 mr-2" strokeWidth={1.5} />
             )}
             {isSending ? 'Sending...' : 'Send'}
           </Button>

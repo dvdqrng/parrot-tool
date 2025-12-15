@@ -1,6 +1,6 @@
 'use client';
 
-import { Inbox, PenLine, SendHorizontal, Archive, LucideIcon, Sparkles, Square } from 'lucide-react';
+import { Inbox, Edit, Send, Archive, Brain, Sparkles, Square, LucideIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ColumnId } from '@/lib/types';
 
@@ -22,13 +22,17 @@ const columnConfig: Record<ColumnId, { title: string; icon: LucideIcon }> = {
     title: 'Unread',
     icon: Inbox,
   },
+  autopilot: {
+    title: 'Autopilot',
+    icon: Brain,
+  },
   drafts: {
     title: 'Drafts',
-    icon: PenLine,
+    icon: Edit,
   },
   sent: {
     title: 'Sent',
-    icon: SendHorizontal,
+    icon: Send,
   },
   archived: {
     title: 'Archived',
@@ -49,12 +53,11 @@ export function ColumnHeader({
   onCancelSending,
 }: ColumnHeaderProps) {
   const config = columnConfig[columnId];
-  const Icon = config.icon;
 
   return (
     <div className="flex items-center justify-between px-4 py-2">
       <div className="flex items-center gap-2">
-        <Icon className="h-3 w-3 text-muted-foreground" />
+        <config.icon className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
         <h3 className="text-xs font-medium">{config.title}</h3>
       </div>
       {columnId === 'unread' && count > 0 && onGenerateAllDrafts && (
@@ -65,7 +68,7 @@ export function ColumnHeader({
             className="h-6 px-2 text-xs"
             onClick={onCancelGeneration}
           >
-            <Square className="!h-2.5 !w-2.5 mr-1" />
+            <Square className="h-4 w-4 mr-1" strokeWidth={1.5} />
             {generatingProgress ? `${generatingProgress.current}/${generatingProgress.total}` : 'Stop'}
           </Button>
         ) : (
@@ -76,7 +79,7 @@ export function ColumnHeader({
             onClick={onGenerateAllDrafts}
             title="Generate drafts for all unread messages"
           >
-            <Sparkles className="!h-2.5 !w-2.5 mr-1" />
+            <Sparkles className="h-4 w-4 mr-1" strokeWidth={1.5} />
             Draft All
           </Button>
         )
@@ -89,7 +92,7 @@ export function ColumnHeader({
             className="h-6 px-2 text-xs"
             onClick={onCancelSending}
           >
-            <Square className="!h-2.5 !w-2.5 mr-1" />
+            <Square className="h-4 w-4 mr-1" strokeWidth={1.5} />
             {sendingProgress ? `${sendingProgress.current}/${sendingProgress.total}` : 'Stop'}
           </Button>
         ) : (
@@ -100,7 +103,7 @@ export function ColumnHeader({
             onClick={onSendAllDrafts}
             title="Send all drafts"
           >
-            <SendHorizontal className="!h-2.5 !w-2.5 mr-1" />
+            <Send className="h-4 w-4 mr-1" strokeWidth={1.5} />
             Send All
           </Button>
         )
