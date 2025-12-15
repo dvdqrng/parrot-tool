@@ -66,7 +66,7 @@ export default function ActivityLogPage() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-lg font-semibold flex items-center gap-2">
-            <Activity className="h-5 w-5" />
+            <Activity className="h-4 w-4" strokeWidth={1.5} />
             Activity Log
           </h2>
           <p className="text-sm text-muted-foreground mt-1">
@@ -82,7 +82,7 @@ export default function ActivityLogPage() {
 
       {/* Filters */}
       <div className="flex items-center gap-3">
-        <Filter className="h-4 w-4 text-muted-foreground" />
+        <Filter className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
         <Select value={filter} onValueChange={setFilter}>
           <SelectTrigger className="w-48 text-sm">
             <SelectValue placeholder="Filter by type" />
@@ -105,7 +105,7 @@ export default function ActivityLogPage() {
       {filteredEntries.length === 0 ? (
         <Card className="border-dashed">
           <CardContent className="py-12 text-center">
-            <Activity className="h-10 w-10 mx-auto text-muted-foreground mb-3" />
+            <Activity className="h-4 w-4 mx-auto text-muted-foreground mb-3" strokeWidth={1.5} />
             <h3 className="font-medium mb-1">No activity yet</h3>
             <p className="text-sm text-muted-foreground">
               Autopilot activity will appear here when agents take actions.
@@ -124,7 +124,7 @@ export default function ActivityLogPage() {
                 <CardHeader className="py-3 px-4">
                   <div className="flex items-start gap-3">
                     <div className={`p-1.5 rounded ${isError ? 'bg-destructive/10' : 'bg-muted'}`}>
-                      <Icon className={`h-3.5 w-3.5 ${isError ? 'text-destructive' : 'text-muted-foreground'}`} />
+                      <Icon className={`h-4 w-4 ${isError ? 'text-destructive' : 'text-muted-foreground'}`} strokeWidth={1.5} />
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-2">

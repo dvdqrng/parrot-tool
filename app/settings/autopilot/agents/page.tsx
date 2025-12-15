@@ -62,7 +62,7 @@ export default function AgentsListPage() {
         </div>
         <Link href="/settings/autopilot/agents/new">
           <Button size="sm">
-            <Plus className="h-4 w-4 mr-2" />
+            <Plus className="h-4 w-4 mr-2" strokeWidth={1.5} />
             New Agent
           </Button>
         </Link>
@@ -75,7 +75,7 @@ export default function AgentsListPage() {
       ) : agents.length === 0 ? (
         <Card className="border-dashed">
           <CardContent className="py-12 text-center">
-            <Brain className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+            <Brain className="h-4 w-4 mx-auto text-muted-foreground mb-4" strokeWidth={1.5} />
             <h3 className="font-medium mb-2">No agents created yet</h3>
             <p className="text-sm text-muted-foreground mb-6 max-w-sm mx-auto">
               Agents are AI assistants that can automatically reply to messages
@@ -83,7 +83,7 @@ export default function AgentsListPage() {
             </p>
             <Link href="/settings/autopilot/agents/new">
               <Button>
-                <Plus className="h-4 w-4 mr-2" />
+                <Plus className="h-4 w-4 mr-2" strokeWidth={1.5} />
                 Create Your First Agent
               </Button>
             </Link>
@@ -97,7 +97,7 @@ export default function AgentsListPage() {
                 <div className="flex items-start justify-between">
                   <div className="flex items-start gap-3 flex-1 min-w-0">
                     <div className="p-2 rounded-lg bg-primary/10 shrink-0">
-                      <Brain className="h-4 w-4 text-primary" />
+                      <Brain className="h-4 w-4 text-primary" strokeWidth={1.5} />
                     </div>
                     <div className="flex-1 min-w-0">
                       <CardTitle className="text-sm truncate">{agent.name}</CardTitle>
@@ -113,18 +113,18 @@ export default function AgentsListPage() {
                         size="icon"
                         className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
                       >
-                        <MoreVertical className="h-4 w-4" />
+                        <MoreVertical className="h-4 w-4" strokeWidth={1.5} />
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
                       <Link href={`/settings/autopilot/agents/${agent.id}`}>
                         <DropdownMenuItem>
-                          <Pencil className="h-4 w-4 mr-2" />
+                          <Pencil className="h-4 w-4 mr-2" strokeWidth={1.5} />
                           Edit
                         </DropdownMenuItem>
                       </Link>
                       <DropdownMenuItem onClick={() => handleDuplicate(agent)}>
-                        <Copy className="h-4 w-4 mr-2" />
+                        <Copy className="h-4 w-4 mr-2" strokeWidth={1.5} />
                         Duplicate
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
@@ -135,7 +135,7 @@ export default function AgentsListPage() {
                           setDeleteDialogOpen(true);
                         }}
                       >
-                        <Trash2 className="h-4 w-4 mr-2" />
+                        <Trash2 className="h-4 w-4 mr-2" strokeWidth={1.5} />
                         Delete
                       </DropdownMenuItem>
                     </DropdownMenuContent>
@@ -145,11 +145,11 @@ export default function AgentsListPage() {
               <CardContent className="pt-0">
                 <div className="flex items-center gap-4 text-xs text-muted-foreground">
                   <div className="flex items-center gap-1">
-                    <Target className="h-3 w-3" />
+                    <Target className="h-4 w-4" strokeWidth={1.5} />
                     <span className="truncate max-w-[150px]">{agent.goal}</span>
                   </div>
                   <div className="flex items-center gap-1">
-                    <Clock className="h-3 w-3" />
+                    <Clock className="h-4 w-4" strokeWidth={1.5} />
                     <span>{agent.behavior.replyDelayMin}-{agent.behavior.replyDelayMax}s delay</span>
                   </div>
                   <div className="text-xs bg-muted px-2 py-0.5 rounded">

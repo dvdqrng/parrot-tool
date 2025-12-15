@@ -95,7 +95,7 @@ export function AutopilotStatusBadge({
               className
             )}
           >
-            <config.icon className="h-3 w-3" />
+            <config.icon className="h-4 w-4" strokeWidth={1.5} />
             {showLabel && <span>{config.label}</span>}
             {timeStr && mode === 'self-driving' && status === 'active' && (
               <span className="font-mono">{timeStr}</span>

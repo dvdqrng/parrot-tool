@@ -31,11 +31,11 @@ export function PendingApprovalCard({
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Brain className="h-4 w-4 text-primary" />
+            <Brain className="h-4 w-4 text-primary" strokeWidth={1.5} />
             <CardTitle className="text-sm">Autopilot Draft</CardTitle>
           </div>
           <div className="flex items-center gap-1 text-xs text-muted-foreground">
-            <Clock className="h-3 w-3" />
+            <Clock className="h-4 w-4" strokeWidth={1.5} />
             {formatDistanceToNow(new Date(timestamp), { addSuffix: true })}
           </div>
         </div>
@@ -54,7 +54,7 @@ export function PendingApprovalCard({
             className="flex-1"
             onClick={() => onReject(chatId)}
           >
-            <X className="h-4 w-4 mr-1" />
+            <X className="h-4 w-4 mr-1" strokeWidth={1.5} />
             Reject
           </Button>
           {onEdit && (
@@ -72,7 +72,7 @@ export function PendingApprovalCard({
             className="flex-1"
             onClick={() => onApprove(chatId)}
           >
-            <Check className="h-4 w-4 mr-1" />
+            <Check className="h-4 w-4 mr-1" strokeWidth={1.5} />
             Approve & Send
           </Button>
         </div>

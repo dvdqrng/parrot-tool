@@ -470,11 +470,11 @@ export function AgentForm({ agent, onSave, onCancel }: AgentFormProps) {
       {/* Actions */}
       <div className="flex items-center justify-end gap-3 pt-4 border-t">
         <Button variant="outline" onClick={onCancel}>
-          <X className="h-4 w-4 mr-2" />
+          <X className="h-4 w-4 mr-2" strokeWidth={1.5} />
           Cancel
         </Button>
         <Button onClick={handleSave} disabled={!isValid}>
-          <Save className="h-4 w-4 mr-2" />
+          <Save className="h-4 w-4 mr-2" strokeWidth={1.5} />
           {isEditing ? 'Save Changes' : 'Create Agent'}
         </Button>
       </div>

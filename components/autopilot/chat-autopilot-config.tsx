@@ -135,12 +135,12 @@ export function ChatAutopilotConfig({ chatId, chatName, latestMessage }: ChatAut
       <Popover>
         <PopoverTrigger asChild>
           <Button variant="ghost" size="icon">
-            <Bot className="h-4 w-4" />
+            <Bot className="h-4 w-4" strokeWidth={1.5} />
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-72" align="end">
           <div className="space-y-3 text-center py-2">
-            <Bot className="h-8 w-8 mx-auto text-muted-foreground" />
+            <Bot className="h-4 w-4 mx-auto text-muted-foreground" strokeWidth={1.5} />
             <div>
               <p className="text-sm font-medium">No Agents Created</p>
               <p className="text-xs text-muted-foreground mt-1">
@@ -171,30 +171,30 @@ export function ChatAutopilotConfig({ chatId, chatName, latestMessage }: ChatAut
             variant={hasError ? 'destructive' : isPaused ? 'secondary' : 'default'}
             size="icon"
           >
-            <Bot className="h-4 w-4" />
+            <Bot className="h-4 w-4" strokeWidth={1.5} />
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-80" align="end">
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Bot className="h-4 w-4 text-primary" />
+                <Bot className="h-4 w-4 text-primary" strokeWidth={1.5} />
                 <span className="font-medium text-sm">Autopilot Active</span>
               </div>
               <div className="flex gap-1">
                 {!isGoalCompleted && (
                   isPaused ? (
                     <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleResume}>
-                      <Play className="h-4 w-4" />
+                      <Play className="h-4 w-4" strokeWidth={1.5} />
                     </Button>
                   ) : (
                     <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handlePause}>
-                      <Pause className="h-4 w-4" />
+                      <Pause className="h-4 w-4" strokeWidth={1.5} />
                     </Button>
                   )
                 )}
                 <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={handleDisable}>
-                  <Square className="h-4 w-4" />
+                  <Square className="h-4 w-4" strokeWidth={1.5} />
                 </Button>
               </div>
             </div>
@@ -281,13 +281,13 @@ export function ChatAutopilotConfig({ chatId, chatName, latestMessage }: ChatAut
     <Popover open={isOpen} onOpenChange={setIsOpen}>
       <PopoverTrigger asChild>
         <Button variant="ghost" size="icon">
-          <Bot className="h-4 w-4" />
+          <Bot className="h-4 w-4" strokeWidth={1.5} />
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-80" align="end">
         <div className="space-y-4">
           <div className="flex items-center gap-2">
-            <Bot className="h-4 w-4" />
+            <Bot className="h-4 w-4" strokeWidth={1.5} />
             <span className="font-medium text-sm">Enable Autopilot</span>
           </div>
 
@@ -333,7 +333,7 @@ export function ChatAutopilotConfig({ chatId, chatName, latestMessage }: ChatAut
             {selectedMode === 'self-driving' && (
               <div className="space-y-1.5">
                 <Label className="text-xs flex items-center gap-1">
-                  <Clock className="h-3 w-3" />
+                  <Clock className="h-4 w-4" strokeWidth={1.5} />
                   Duration
                 </Label>
                 <Select
@@ -363,13 +363,13 @@ export function ChatAutopilotConfig({ chatId, chatName, latestMessage }: ChatAut
             disabled={!selectedAgentId}
             className="w-full"
           >
-            <Play className="h-4 w-4 mr-2" />
+            <Play className="h-4 w-4 mr-2" strokeWidth={1.5} />
             Start Autopilot
           </Button>
 
           <Link href="/settings/autopilot/agents" className="block">
             <Button variant="ghost" size="sm" className="w-full text-xs">
-              <Settings className="h-3 w-3 mr-1" />
+              <Settings className="h-4 w-4 mr-1" strokeWidth={1.5} />
               Manage Agents
             </Button>
           </Link>

@@ -33,7 +33,7 @@ export function HandoffSummaryCard({
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <CheckCircle className="h-4 w-4 text-blue-500" />
+            <CheckCircle className="h-4 w-4 text-blue-500" strokeWidth={1.5} />
             <CardTitle className="text-sm">Handoff Summary</CardTitle>
           </div>
           <Button
@@ -42,11 +42,11 @@ export function HandoffSummaryCard({
             className="h-6 w-6"
             onClick={() => onDismiss(summary.chatId)}
           >
-            <X className="h-3 w-3" />
+            <X className="h-4 w-4" strokeWidth={1.5} />
           </Button>
         </div>
         <div className="flex items-center gap-2">
-          <Brain className="h-3 w-3 text-muted-foreground" />
+          <Brain className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
           <span className="text-xs text-muted-foreground">
             Autopilot has completed its goal
           </span>
@@ -85,7 +85,7 @@ export function HandoffSummaryCard({
             <ul className="text-sm text-muted-foreground space-y-1">
               {summary.suggestedNextSteps.map((step, i) => (
                 <li key={i} className="flex items-start gap-2">
-                  <ArrowRight className="h-3 w-3 mt-1 text-blue-500" />
+                  <ArrowRight className="h-4 w-4 mt-1 text-blue-500" strokeWidth={1.5} />
                   <span>{step}</span>
                 </li>
               ))}
