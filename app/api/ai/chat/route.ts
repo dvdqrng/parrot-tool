@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { AiProvider } from '@/lib/types';
-import { ollamaChat, OllamaMessage } from '@/lib/ollama';
+import { ollamaChat, OllamaMessage, getFirstAvailableModel } from '@/lib/ollama';
 
 interface ChatMessage {
   role: 'user' | 'assistant';
@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
       chatHistory,
       userMessage,
       provider = 'anthropic',
-      ollamaModel = 'llama3.1:8b',
+      ollamaModel = 'gemma3:4b',
       ollamaBaseUrl,
     } = body;
 
@@ -68,8 +68,10 @@ Be helpful, concise, and friendly in your responses.`;
     let responseText: string;
 
     if (provider === 'ollama') {
-      // Use Ollama
+      // Use Ollama - validate model or use first available
       try {
+        let modelToUse = ollamaModel;
+
         // Convert chat history to Ollama format with system prompt
         const messages: OllamaMessage[] = [
           { role: 'system', content: systemPrompt },
@@ -78,11 +80,23 @@ Be helpful, concise, and friendly in your responses.`;
             content: msg.content,
           })),
         ];
-        responseText = await ollamaChat(ollamaBaseUrl, ollamaModel, messages, 1024);
+
+        try {
+          responseText = await ollamaChat(ollamaBaseUrl, modelToUse, messages, 1024);
+        } catch (modelError) {
+          console.log(`[Chat] Model ${modelToUse} failed, trying first available model`);
+          const firstAvailable = await getFirstAvailableModel(ollamaBaseUrl);
+          if (firstAvailable) {
+            modelToUse = firstAvailable;
+            responseText = await ollamaChat(ollamaBaseUrl, modelToUse, messages, 1024);
+          } else {
+            throw modelError;
+          }
+        }
       } catch (error) {
         console.error('Ollama error:', error);
         return NextResponse.json(
-          { error: 'Failed to connect to Ollama. Make sure Ollama is running.' },
+          { error: 'Failed to connect to Ollama. Make sure Ollama is running and has models installed.' },
           { status: 503 }
         );
       }

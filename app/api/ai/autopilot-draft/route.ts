@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { ToneSettings, AiProvider, WritingStylePatterns } from '@/lib/types';
-import { ollamaChat, OllamaMessage } from '@/lib/ollama';
+import { ollamaChat, OllamaMessage, getFirstAvailableModel } from '@/lib/ollama';
 
 interface AutopilotDraftBody {
   originalMessage: string;
@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
       writingStyle,
       detectGoalCompletion = true,
       provider = 'anthropic',
-      ollamaModel = 'llama3.1:8b',
+      ollamaModel = 'gemma3:4b',
       ollamaBaseUrl,
     } = body;
 
@@ -155,15 +155,28 @@ Generate a natural reply that works towards your goal:`;
 
     if (provider === 'ollama') {
       try {
+        let modelToUse = ollamaModel;
         const messages: OllamaMessage[] = [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt },
         ];
-        fullResponse = await ollamaChat(ollamaBaseUrl, ollamaModel, messages, 500);
+
+        try {
+          fullResponse = await ollamaChat(ollamaBaseUrl, modelToUse, messages, 500);
+        } catch (modelError) {
+          console.log(`[AutopilotDraft] Model ${modelToUse} failed, trying first available model`);
+          const firstAvailable = await getFirstAvailableModel(ollamaBaseUrl);
+          if (firstAvailable) {
+            modelToUse = firstAvailable;
+            fullResponse = await ollamaChat(ollamaBaseUrl, modelToUse, messages, 500);
+          } else {
+            throw modelError;
+          }
+        }
       } catch (error) {
         console.error('Ollama error:', error);
         return NextResponse.json(
-          { error: 'Failed to connect to Ollama' },
+          { error: 'Failed to connect to Ollama. Make sure Ollama is running and has models installed.' },
           { status: 503 }
         );
       }

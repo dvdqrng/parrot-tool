@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { AiProvider } from '@/lib/types';
-import { ollamaChat, OllamaMessage } from '@/lib/ollama';
+import { ollamaChat, OllamaMessage, getFirstAvailableModel } from '@/lib/ollama';
 
 interface ConversationSummaryBody {
   threadContext: string;
@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
       agentGoal,
       senderName,
       provider = 'anthropic',
-      ollamaModel = 'llama3.1:8b',
+      ollamaModel = 'gemma3:4b',
       ollamaBaseUrl,
     } = body;
 
@@ -69,15 +69,28 @@ Provide a handoff summary:`;
 
     if (provider === 'ollama') {
       try {
+        let modelToUse = ollamaModel;
         const messages: OllamaMessage[] = [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt },
         ];
-        responseText = await ollamaChat(ollamaBaseUrl, ollamaModel, messages, 500);
+
+        try {
+          responseText = await ollamaChat(ollamaBaseUrl, modelToUse, messages, 500);
+        } catch (modelError) {
+          console.log(`[ConversationSummary] Model ${modelToUse} failed, trying first available model`);
+          const firstAvailable = await getFirstAvailableModel(ollamaBaseUrl);
+          if (firstAvailable) {
+            modelToUse = firstAvailable;
+            responseText = await ollamaChat(ollamaBaseUrl, modelToUse, messages, 500);
+          } else {
+            throw modelError;
+          }
+        }
       } catch (error) {
         console.error('Ollama error:', error);
         return NextResponse.json(
-          { error: 'Failed to connect to Ollama' },
+          { error: 'Failed to connect to Ollama. Make sure Ollama is running and has models installed.' },
           { status: 503 }
         );
       }

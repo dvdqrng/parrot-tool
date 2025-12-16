@@ -96,6 +96,15 @@ export async function checkOllamaHealth(baseUrl?: string): Promise<boolean> {
   }
 }
 
+export async function getFirstAvailableModel(baseUrl?: string): Promise<string | null> {
+  try {
+    const models = await listOllamaModels(baseUrl);
+    return models.length > 0 ? models[0].name : null;
+  } catch {
+    return null;
+  }
+}
+
 // Default recommended models for different tasks
 export const RECOMMENDED_MODELS = [
   { name: 'llama3.1:8b', description: 'Best balance of quality and speed' },

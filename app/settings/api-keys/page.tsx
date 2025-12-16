@@ -24,7 +24,7 @@ interface OllamaStatus {
 }
 
 export default function ApiKeysPage() {
-  const { settings, updateSettings } = useSettingsContext();
+  const { settings, isLoaded, updateSettings } = useSettingsContext();
   const { refetch } = useAccounts();
 
   const [beeperToken, setBeeperToken] = useState('');
@@ -34,7 +34,7 @@ export default function ApiKeysPage() {
 
   // AI Provider state
   const [aiProvider, setAiProvider] = useState<AiProvider>('anthropic');
-  const [ollamaModel, setOllamaModel] = useState('llama3.1:8b');
+  const [ollamaModel, setOllamaModel] = useState('gemma3:4b');
   const [ollamaBaseUrl, setOllamaBaseUrl] = useState('http://localhost:11434');
   const [ollamaStatus, setOllamaStatus] = useState<OllamaStatus | null>(null);
   const [isCheckingOllama, setIsCheckingOllama] = useState(false);
@@ -43,7 +43,7 @@ export default function ApiKeysPage() {
     setBeeperToken(settings.beeperAccessToken || '');
     setAnthropicKey(settings.anthropicApiKey || '');
     setAiProvider(settings.aiProvider || 'anthropic');
-    setOllamaModel(settings.ollamaModel || 'llama3.1:8b');
+    setOllamaModel(settings.ollamaModel || 'gemma3:4b');
     setOllamaBaseUrl(settings.ollamaBaseUrl || 'http://localhost:11434');
   }, [settings]);
 
@@ -60,6 +60,18 @@ export default function ApiKeysPage() {
       const response = await fetch(`/api/ollama/models?baseUrl=${encodeURIComponent(ollamaBaseUrl)}`);
       const result = await response.json();
       setOllamaStatus(result.data);
+
+      // Auto-select first available model if current model is not available
+      if (result.data.available && result.data.models.length > 0) {
+        const availableModelNames = result.data.models.map((m: { name: string }) => m.name);
+
+        // If current model is not in the list, use the first available one
+        if (!availableModelNames.includes(ollamaModel)) {
+          const firstModel = result.data.models[0].name;
+          setOllamaModel(firstModel);
+          console.log(`[Settings] Auto-selected first available model: ${firstModel}`);
+        }
+      }
     } catch {
       setOllamaStatus({ available: false, models: [], error: 'Failed to check Ollama status' });
     } finally {
@@ -139,7 +151,7 @@ export default function ApiKeysPage() {
               <Check className="h-4 w-4" strokeWidth={1.5} />
             </Button>
           </div>
-          {settings.beeperAccessToken && (
+          {isLoaded && settings.beeperAccessToken && (
             <p className="text-xs text-green-600">Token configured</p>
           )}
         </CardContent>
@@ -216,7 +228,7 @@ export default function ApiKeysPage() {
                     <Check className="h-4 w-4" strokeWidth={1.5} />
                   </Button>
                 </div>
-                {settings.anthropicApiKey && (
+                {isLoaded && settings.anthropicApiKey && (
                   <p className="text-xs text-green-600 mt-2">API key configured</p>
                 )}
               </div>
@@ -283,10 +295,10 @@ export default function ApiKeysPage() {
                     <Input
                       value={ollamaModel}
                       onChange={(e) => setOllamaModel(e.target.value)}
-                      placeholder="llama3.1:8b"
+                      placeholder="Enter model name"
                     />
                     <p className="text-xs text-muted-foreground mt-2">
-                      Recommended models: {RECOMMENDED_MODELS.map(m => m.name).join(', ')}
+                      Install a model first: ollama pull llama3.1:8b
                     </p>
                   </div>
                 )}
@@ -297,9 +309,16 @@ export default function ApiKeysPage() {
                   <p className="font-medium mb-1">To use Ollama:</p>
                   <ol className="list-decimal list-inside space-y-1">
                     <li>Install Ollama from <a href="https://ollama.com" target="_blank" rel="noopener noreferrer" className="underline">ollama.com</a></li>
-                    <li>Run: <code className="bg-background px-1 rounded">ollama pull llama3.1:8b</code></li>
-                    <li>Start Ollama (it runs automatically on install)</li>
+                    <li>Pull a model, e.g.: <code className="bg-background px-1 rounded">ollama pull llama3.1:8b</code></li>
+                    <li>Ollama runs automatically after install</li>
                   </ol>
+                </div>
+              )}
+
+              {ollamaStatus?.available && ollamaStatus.models.length === 0 && (
+                <div className="text-xs text-muted-foreground bg-muted p-3 rounded-md">
+                  <p className="font-medium mb-1">No models found!</p>
+                  <p>Install a model first: <code className="bg-background px-1 rounded">ollama pull llama3.1:8b</code></p>
                 </div>
               )}
             </div>
@@ -309,7 +328,7 @@ export default function ApiKeysPage() {
             Save AI Provider Settings
           </Button>
 
-          {settings.aiProvider && (
+          {isLoaded && settings.aiProvider && (
             <p className="text-xs text-green-600">
               Using: {settings.aiProvider === 'ollama' ? `Ollama (${settings.ollamaModel})` : 'Anthropic Claude'}
             </p>

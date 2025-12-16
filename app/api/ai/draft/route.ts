@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { ToneSettings, AiProvider, WritingStylePatterns } from '@/lib/types';
-import { ollamaChat, OllamaMessage } from '@/lib/ollama';
+import { ollamaChat, OllamaMessage, getFirstAvailableModel } from '@/lib/ollama';
 
 interface GenerateDraftBody {
   originalMessage: string;
@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
       threadContext,
       aiChatSummary,
       provider = 'anthropic',
-      ollamaModel = 'llama3.1:8b',
+      ollamaModel = 'gemma3:4b',
       ollamaBaseUrl,
     } = body;
 
@@ -166,17 +166,32 @@ Guidelines:
     let suggestedReply: string;
 
     if (provider === 'ollama') {
-      // Use Ollama
+      // Use Ollama - validate model or use first available
       try {
+        let modelToUse = ollamaModel;
+
+        // Try to get first available model if the requested one doesn't work
         const messages: OllamaMessage[] = [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt },
         ];
-        suggestedReply = await ollamaChat(ollamaBaseUrl, ollamaModel, messages, 300);
+
+        try {
+          suggestedReply = await ollamaChat(ollamaBaseUrl, modelToUse, messages, 300);
+        } catch (modelError) {
+          console.log(`[Draft] Model ${modelToUse} failed, trying first available model`);
+          const firstAvailable = await getFirstAvailableModel(ollamaBaseUrl);
+          if (firstAvailable) {
+            modelToUse = firstAvailable;
+            suggestedReply = await ollamaChat(ollamaBaseUrl, modelToUse, messages, 300);
+          } else {
+            throw modelError;
+          }
+        }
       } catch (error) {
         console.error('Ollama error:', error);
         return NextResponse.json(
-          { error: 'Failed to connect to Ollama. Make sure Ollama is running.' },
+          { error: 'Failed to connect to Ollama. Make sure Ollama is running and has models installed.' },
           { status: 503 }
         );
       }
