@@ -69,12 +69,13 @@ export interface Draft {
   updatedAt: string;
 }
 
-export type AiProvider = 'anthropic' | 'ollama';
+export type AiProvider = 'anthropic' | 'ollama' | 'openai';
 
 export interface AppSettings {
   selectedAccountIds: string[];
   beeperAccessToken?: string;
   anthropicApiKey?: string;
+  openaiApiKey?: string;
   // AI provider settings
   aiProvider?: AiProvider;
   ollamaModel?: string;
@@ -193,6 +194,22 @@ export interface AgentBehaviorSettings {
   multiMessageEnabled: boolean;
   multiMessageDelayMin: number;    // seconds between messages
   multiMessageDelayMax: number;
+
+  // Response rate - simulate being busy (0-100, 100 = always respond)
+  responseRate: number;
+
+  // Emoji-only responses - sometimes just react with emoji
+  emojiOnlyResponseEnabled: boolean;
+  emojiOnlyResponseChance: number; // 0-100, chance to respond with just emoji
+
+  // Conversation fatigue - reduce engagement over long convos
+  conversationFatigueEnabled: boolean;
+  fatigueTriggerMessages: number;  // After X messages, start reducing engagement
+  fatigueResponseReduction: number; // Reduce response rate by this % per additional message
+
+  // Natural conversation closing
+  conversationClosingEnabled: boolean;
+  closingTriggerIdleMinutes: number; // Suggest closing after X minutes idle
 }
 
 // Default behavior settings
@@ -212,6 +229,18 @@ export const DEFAULT_AGENT_BEHAVIOR: AgentBehaviorSettings = {
   multiMessageEnabled: true,
   multiMessageDelayMin: 3,
   multiMessageDelayMax: 10,
+  // Response rate - 85% means occasionally "busy"
+  responseRate: 85,
+  // Emoji-only responses - 10% chance for casual acknowledgments
+  emojiOnlyResponseEnabled: true,
+  emojiOnlyResponseChance: 10,
+  // Conversation fatigue
+  conversationFatigueEnabled: true,
+  fatigueTriggerMessages: 15,
+  fatigueResponseReduction: 5,
+  // Natural closing
+  conversationClosingEnabled: true,
+  closingTriggerIdleMinutes: 30,
 };
 
 // Agent definition (user-configurable)
@@ -283,7 +312,11 @@ export type AutopilotActivityType =
   | 'paused'
   | 'resumed'
   | 'handoff-triggered'
-  | 'time-expired';
+  | 'time-expired'
+  | 'skipped-busy'           // Skipped due to response rate
+  | 'emoji-only-sent'        // Sent emoji-only response
+  | 'conversation-closing'   // Suggested closing
+  | 'fatigue-reduced';       // Response rate reduced due to fatigue
 
 export interface AutopilotActivityEntry {
   id: string;
@@ -306,12 +339,4 @@ export interface ConversationHandoffSummary {
   keyPoints: string[];
   suggestedNextSteps: string[];
   goalStatus: 'achieved' | 'in-progress' | 'unclear';
-}
-
-// Draft metadata extension for autopilot
-export interface AutopilotDraftMetadata {
-  autopilotGenerated: boolean;
-  agentId: string;
-  pendingApproval: boolean;
-  scheduledActionId?: string;
 }

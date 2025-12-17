@@ -26,7 +26,7 @@ export default function NewAgentPage() {
       <div className="flex items-center gap-3">
         <Link href="/settings/autopilot/agents">
           <Button variant="ghost" size="icon" className="h-8 w-8">
-            <ArrowLeft className="h-4 w-4" strokeWidth={1.5} />
+            <ArrowLeft className="h-4 w-4" strokeWidth={2} />
           </Button>
         </Link>
         <div>

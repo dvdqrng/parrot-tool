@@ -40,7 +40,8 @@ export async function ollamaChat(
   baseUrl: string | undefined,
   model: string,
   messages: OllamaMessage[],
-  maxTokens: number = 1024
+  maxTokens: number = 1024,
+  temperature: number = 0.7
 ): Promise<string> {
   const url = baseUrl || DEFAULT_OLLAMA_URL;
 
@@ -55,6 +56,7 @@ export async function ollamaChat(
       stream: false,
       options: {
         num_predict: maxTokens,
+        temperature,
       },
     } as OllamaChatRequest),
   });
@@ -106,10 +108,17 @@ export async function getFirstAvailableModel(baseUrl?: string): Promise<string |
 }
 
 // Default recommended models for different tasks
+// DeepSeek-V3 is the best for human writing style matching as of Dec 2025
+// Note: DeepSeek-R1 models output reasoning - we filter it out automatically
 export const RECOMMENDED_MODELS = [
-  { name: 'llama3.1:8b', description: 'Best balance of quality and speed' },
-  { name: 'llama3.2:3b', description: 'Faster, good for simple tasks' },
-  { name: 'mistral:7b', description: 'Fast and reliable' },
-  { name: 'qwen2.5:7b', description: 'Strong instruction following' },
-  { name: 'phi4:14b', description: 'Higher quality, needs more RAM' },
+  { name: 'deepseek-v3', description: 'DeepSeek-V3 - BEST for style matching (recommended)' },
+  { name: 'qwen2.5:32b', description: 'Qwen 2.5 32B - Excellent, no reasoning overhead' },
+  { name: 'qwen2.5:14b', description: 'Qwen 2.5 14B - Great balance' },
+  { name: 'llama3.3:70b', description: 'Llama 3.3 70B - Highest quality (large)' },
+  { name: 'deepseek-r1:70b', description: 'DeepSeek R1 70B - Shows reasoning (filtered)' },
+  { name: 'deepseek-r1:32b', description: 'DeepSeek R1 32B - Shows reasoning (filtered)' },
+  { name: 'deepseek-r1:14b', description: 'DeepSeek R1 14B - Shows reasoning (filtered)' },
+  { name: 'deepseek-r1:8b', description: 'DeepSeek R1 8B - Shows reasoning (filtered)' },
+  { name: 'llama3.1:8b', description: 'Llama 3.1 8B - Fast and reliable' },
+  { name: 'mistral:7b', description: 'Mistral 7B - Fast option' },
 ];

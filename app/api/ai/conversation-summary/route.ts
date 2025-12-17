@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import Anthropic from '@anthropic-ai/sdk';
 import { AiProvider } from '@/lib/types';
-import { ollamaChat, OllamaMessage, getFirstAvailableModel } from '@/lib/ollama';
+import { callAiProvider, handleAiProviderError } from '@/lib/ai-provider';
+import { AI_TOKENS, AI_TEMPERATURE } from '@/lib/ai-constants';
 
 interface ConversationSummaryBody {
   threadContext: string;
@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
       agentGoal,
       senderName,
       provider = 'anthropic',
-      ollamaModel = 'gemma3:4b',
+      ollamaModel = 'deepseek-v3',
       ollamaBaseUrl,
     } = body;
 
@@ -59,63 +59,26 @@ Respond in JSON format:
 
 Be concise and actionable. Focus on information the human needs to seamlessly continue the conversation.`;
 
+    const anthropicKey = request.headers.get('x-anthropic-key') || process.env.ANTHROPIC_API_KEY;
+    const openaiKey = request.headers.get('x-openai-key') || process.env.OPENAI_API_KEY;
+
     const userPrompt = `Conversation with ${senderName}:
 
 ${threadContext}
 
 Provide a handoff summary:`;
 
-    let responseText: string;
-
-    if (provider === 'ollama') {
-      try {
-        let modelToUse = ollamaModel;
-        const messages: OllamaMessage[] = [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt },
-        ];
-
-        try {
-          responseText = await ollamaChat(ollamaBaseUrl, modelToUse, messages, 500);
-        } catch (modelError) {
-          console.log(`[ConversationSummary] Model ${modelToUse} failed, trying first available model`);
-          const firstAvailable = await getFirstAvailableModel(ollamaBaseUrl);
-          if (firstAvailable) {
-            modelToUse = firstAvailable;
-            responseText = await ollamaChat(ollamaBaseUrl, modelToUse, messages, 500);
-          } else {
-            throw modelError;
-          }
-        }
-      } catch (error) {
-        console.error('Ollama error:', error);
-        return NextResponse.json(
-          { error: 'Failed to connect to Ollama. Make sure Ollama is running and has models installed.' },
-          { status: 503 }
-        );
-      }
-    } else {
-      const anthropicKey = request.headers.get('x-anthropic-key') || process.env.ANTHROPIC_API_KEY;
-
-      if (!anthropicKey) {
-        return NextResponse.json(
-          { error: 'Anthropic API key not configured' },
-          { status: 401 }
-        );
-      }
-
-      const anthropic = new Anthropic({ apiKey: anthropicKey });
-
-      const response = await anthropic.messages.create({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 500,
-        system: systemPrompt,
-        messages: [{ role: 'user', content: userPrompt }],
-      });
-
-      const textContent = response.content.find(block => block.type === 'text');
-      responseText = textContent?.type === 'text' ? textContent.text : '';
-    }
+    const responseText = await callAiProvider({
+      provider,
+      systemPrompt,
+      userPrompt,
+      maxTokens: AI_TOKENS.SUMMARY,
+      temperature: AI_TEMPERATURE.SUMMARY,
+      ollamaModel,
+      ollamaBaseUrl,
+      anthropicKey,
+      openaiKey,
+    });
 
     // Parse JSON response
     try {
@@ -152,17 +115,7 @@ Provide a handoff summary:`;
     }
   } catch (error) {
     console.error('Error generating conversation summary:', error);
-
-    if (error instanceof Error && error.message.includes('API key')) {
-      return NextResponse.json(
-        { error: 'Invalid or missing API key' },
-        { status: 401 }
-      );
-    }
-
-    return NextResponse.json(
-      { error: 'Failed to generate conversation summary' },
-      { status: 500 }
-    );
+    const { error: errorMessage, status } = handleAiProviderError(error);
+    return NextResponse.json({ error: errorMessage }, { status });
   }
 }

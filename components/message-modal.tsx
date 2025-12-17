@@ -29,8 +29,9 @@ import {
   formatAiChatSummaryForPrompt,
   ThreadContextMessage,
 } from '@/lib/storage';
-import { Loader2, Sparkles, Send, Save, ChevronUp, Users } from 'lucide-react';
+import { Loader2, ChevronUp, Users } from 'lucide-react';
 import { toast } from 'sonner';
+import { MessageBottomSection } from '@/components/message-bottom-section';
 
 interface MessageModalProps {
   open: boolean;
@@ -75,7 +76,7 @@ export function MessageModal({
   const [historyLimit, setHistoryLimit] = useState(2);
 
   const message = card?.message;
-  const chatId = message?.chatId;
+  const chatId = message?.chatId || null;
   const platform = message?.platform || 'unknown';
   const platformData = getPlatformInfo(platform);
 
@@ -247,7 +248,7 @@ export function MessageModal({
             <Avatar className="h-10 w-10">
               <AvatarImage src={getAvatarSrc(card.avatarUrl)} alt={title} className="object-cover" />
               <AvatarFallback className="text-xs">
-                {card.isGroup ? <Users className="h-4 w-4" strokeWidth={1.5} /> : initials}
+                {card.isGroup ? <Users className="h-4 w-4" strokeWidth={2} /> : initials}
               </AvatarFallback>
             </Avatar>
             <div className="flex flex-col">
@@ -283,9 +284,9 @@ export function MessageModal({
                   disabled={isLoadingMore}
                 >
                   {isLoadingMore ? (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" strokeWidth={1.5} />
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" strokeWidth={2} />
                   ) : (
-                    <ChevronUp className="h-4 w-4 mr-2" strokeWidth={1.5} />
+                    <ChevronUp className="h-4 w-4 mr-2" strokeWidth={2} />
                   )}
                   Load older messages
                 </Button>
@@ -293,7 +294,7 @@ export function MessageModal({
 
               {isLoadingHistory ? (
                 <div className="flex justify-center py-8">
-                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" strokeWidth={1.5} />
+                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" strokeWidth={2} />
                 </div>
               ) : chatHistory.length === 0 ? (
                 <div className="text-center py-8 text-sm text-muted-foreground">
@@ -331,53 +332,19 @@ export function MessageModal({
 
         <Separator />
 
-        {/* Draft area */}
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <label className="text-sm font-medium">Your reply:</label>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={generateAISuggestion}
-              disabled={isGenerating}
-            >
-              {isGenerating ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" strokeWidth={1.5} />
-              ) : (
-                <Sparkles className="h-4 w-4 mr-2" strokeWidth={1.5} />
-              )}
-              {isGenerating ? 'Generating...' : 'AI Draft'}
-            </Button>
-          </div>
-          <Textarea
-            placeholder="Type your reply..."
-            value={draftText}
-            onChange={(e) => setDraftText(e.target.value)}
-            className="min-h-[80px] resize-none"
-          />
-        </div>
-
-        <DialogFooter className="gap-2 sm:gap-0">
-          <Button
-            variant="outline"
-            onClick={handleSaveDraft}
-            disabled={!draftText.trim()}
-          >
-            <Save className="h-4 w-4 mr-2" strokeWidth={1.5} />
-            Save Draft
-          </Button>
-          <Button
-            onClick={handleSend}
-            disabled={!draftText.trim() || isSending}
-          >
-            {isSending ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" strokeWidth={1.5} />
-            ) : (
-              <Send className="h-4 w-4 mr-2" strokeWidth={1.5} />
-            )}
-            {isSending ? 'Sending...' : 'Send'}
-          </Button>
-        </DialogFooter>
+        <MessageBottomSection
+          chatId={chatId}
+          chatName={title}
+          latestMessage={message}
+          draftText={draftText}
+          onDraftTextChange={setDraftText}
+          isGenerating={isGenerating}
+          onGenerateAI={generateAISuggestion}
+          isSending={isSending}
+          sendSuccess={false}
+          onSend={handleSend}
+          onSaveDraft={handleSaveDraft}
+        />
       </DialogContent>
     </Dialog>
   );

@@ -16,6 +16,8 @@ import {
   generateId,
   loadSettings,
 } from '@/lib/storage';
+import { emitActionExecuting, emitActionCompleted, emitActionFailed } from '@/lib/autopilot-events';
+import { AUTOPILOT } from '@/lib/ai-constants';
 
 interface UseAutopilotSchedulerOptions {
   pollInterval?: number; // ms between checks for pending actions
@@ -151,6 +153,9 @@ export function useAutopilotScheduler(options: UseAutopilotSchedulerOptions = {}
     console.log('[Autopilot Scheduler] Processing action', { actionId: action.id, type: action.type, chatId: action.chatId });
     processingRef.current = true;
 
+    // Emit executing event for real-time UI updates
+    emitActionExecuting(action.chatId, action.id);
+
     try {
       // Mark as executing
       updateScheduledAction(action.id, { status: 'executing' });
@@ -164,6 +169,13 @@ export function useAutopilotScheduler(options: UseAutopilotSchedulerOptions = {}
 
         if (action.type === 'send-message' && action.messageText) {
           console.log('[Autopilot Scheduler] Sending message via API', { chatId: action.chatId, text: action.messageText?.slice(0, 50) });
+
+          // Simulate typing delay before sending (makes it feel more human)
+          // The Beeper API doesn't support sending typing indicators yet, but we can still wait
+          const typingDelay = calculateTypingDuration(action.messageText, AUTOPILOT.DEFAULT_TYPING_SPEED_WPM);
+          console.log('[Autopilot Scheduler] Simulating typing delay', { seconds: typingDelay });
+          await new Promise(resolve => setTimeout(resolve, typingDelay * 1000));
+
           const response = await fetch('/api/beeper/send', {
             method: 'POST',
             headers: {
@@ -183,19 +195,23 @@ export function useAutopilotScheduler(options: UseAutopilotSchedulerOptions = {}
             throw new Error(result.error || 'Failed to send message');
           }
         }
-        // Note: typing indicators and read receipts would need Beeper API support
+        // Note: Beeper Desktop API doesn't currently support typing indicators or read receipts
+        // When supported, we can implement 'typing-indicator' and 'send-read-receipt' action types
       }
 
       // Mark as completed
       updateScheduledAction(action.id, { status: 'completed' });
+      emitActionCompleted(action.chatId, action.id);
       onActionComplete?.(action);
     } catch (error) {
       console.error('Error executing scheduled action:', error);
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
       updateScheduledAction(action.id, {
         status: 'failed',
         attempts: action.attempts + 1,
-        lastError: error instanceof Error ? error.message : 'Unknown error',
+        lastError: errorMsg,
       });
+      emitActionFailed(action.chatId, action.id, errorMsg);
       onActionError?.(action, error instanceof Error ? error : new Error('Unknown error'));
     } finally {
       processingRef.current = false;
@@ -258,7 +274,8 @@ export function useAutopilotScheduler(options: UseAutopilotSchedulerOptions = {}
     chatId: string,
     agentId: string,
     messageText: string,
-    delaySeconds: number
+    delaySeconds: number,
+    messageId?: string
   ): string => {
     const scheduledFor = new Date(Date.now() + delaySeconds * 1000).toISOString();
     console.log('[Autopilot Scheduler] Scheduling message', { chatId, agentId, delaySeconds, scheduledFor, text: messageText?.slice(0, 50) });
@@ -268,6 +285,7 @@ export function useAutopilotScheduler(options: UseAutopilotSchedulerOptions = {}
       type: 'send-message',
       scheduledFor,
       messageText,
+      messageId,
     });
   }, [schedule]);
 
@@ -277,13 +295,14 @@ export function useAutopilotScheduler(options: UseAutopilotSchedulerOptions = {}
     agentId: string,
     messages: string[],
     initialDelaySeconds: number,
-    delayBetweenSeconds: number
+    delayBetweenSeconds: number,
+    messageId?: string
   ): string[] => {
     const ids: string[] = [];
     let currentDelay = initialDelaySeconds;
 
     for (const messageText of messages) {
-      ids.push(scheduleMessage(chatId, agentId, messageText, currentDelay));
+      ids.push(scheduleMessage(chatId, agentId, messageText, currentDelay, messageId));
       currentDelay += delayBetweenSeconds;
     }
 

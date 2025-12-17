@@ -331,12 +331,12 @@ export function MessageBoard({
                         >
                           {isLoadingMore ? (
                             <>
-                              <Loader2 className="h-4 w-4 mr-2 animate-spin" strokeWidth={1.5} />
+                              <Loader2 className="h-4 w-4 mr-2 animate-spin" strokeWidth={2} />
                               Loading...
                             </>
                           ) : (
                             <>
-                              <ChevronDown className="h-4 w-4 mr-2" strokeWidth={1.5} />
+                              <ChevronDown className="h-4 w-4 mr-2" strokeWidth={2} />
                               Load More Messages
                             </>
                           )}

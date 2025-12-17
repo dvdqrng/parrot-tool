@@ -17,11 +17,19 @@ import {
 
 interface UseChatAutopilotOptions {
   onStatusChange?: (status: AutopilotStatus) => void;
+  configVersion?: number; // Global config version to trigger re-sync
 }
 
 export function useChatAutopilot(chatId: string | null, options?: UseChatAutopilotOptions) {
   const [config, setConfig] = useState<ChatAutopilotConfig | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
+
+  // Sync from storage
+  const sync = useCallback(() => {
+    if (!chatId) return;
+    const loaded = getChatAutopilotConfig(chatId);
+    setConfig(loaded);
+  }, [chatId]);
 
   // Load config when chatId changes
   useEffect(() => {
@@ -31,10 +39,16 @@ export function useChatAutopilot(chatId: string | null, options?: UseChatAutopil
       return;
     }
 
-    const loaded = getChatAutopilotConfig(chatId);
-    setConfig(loaded);
+    sync();
     setIsLoaded(true);
-  }, [chatId]);
+  }, [chatId, sync]);
+
+  // Auto-sync when configVersion changes (from context)
+  useEffect(() => {
+    if (options?.configVersion && options.configVersion > 0) {
+      sync();
+    }
+  }, [options?.configVersion, sync]);
 
   // Check if self-driving has expired
   const isExpired = useMemo(() => {
@@ -246,13 +260,6 @@ export function useChatAutopilot(chatId: string | null, options?: UseChatAutopil
     if (!chatId) return;
     deleteChatAutopilotConfig(chatId);
     setConfig(null);
-  }, [chatId]);
-
-  // Sync from storage
-  const sync = useCallback(() => {
-    if (!chatId) return;
-    const loaded = getChatAutopilotConfig(chatId);
-    setConfig(loaded);
   }, [chatId]);
 
   return {

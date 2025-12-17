@@ -45,7 +45,7 @@ export default function DataSettingsPage() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <RefreshCw className="h-4 w-4" strokeWidth={1.5} />
+            <RefreshCw className="h-4 w-4" strokeWidth={2} />
             Clear Cache & Resync
           </CardTitle>
           <CardDescription>
@@ -60,7 +60,7 @@ export default function DataSettingsPage() {
             onClick={() => setShowResyncDialog(true)}
             disabled={isDeleting}
           >
-            <RefreshCw className="h-4 w-4 mr-2" strokeWidth={1.5} />
+            <RefreshCw className="h-4 w-4 mr-2" strokeWidth={2} />
             Clear Cache & Resync
           </Button>
         </CardContent>
@@ -69,7 +69,7 @@ export default function DataSettingsPage() {
       <Card className="border-destructive/50">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-destructive">
-            <Trash2 className="h-4 w-4" strokeWidth={1.5} />
+            <Trash2 className="h-4 w-4" strokeWidth={2} />
             Delete All Data
           </CardTitle>
           <CardDescription>
@@ -83,7 +83,7 @@ export default function DataSettingsPage() {
             onClick={() => setShowDeleteAllDialog(true)}
             disabled={isDeleting}
           >
-            <Trash2 className="h-4 w-4 mr-2" strokeWidth={1.5} />
+            <Trash2 className="h-4 w-4 mr-2" strokeWidth={2} />
             Delete All Data
           </Button>
         </CardContent>
@@ -116,7 +116,7 @@ export default function DataSettingsPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <AlertCircle className="h-4 w-4 text-destructive" strokeWidth={1.5} />
+              <AlertCircle className="h-4 w-4 text-destructive" strokeWidth={2} />
               Delete All Data?
             </DialogTitle>
             <DialogDescription asChild>

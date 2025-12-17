@@ -9,6 +9,7 @@ import {
 } from '@/components/ui/tooltip';
 import { AutopilotStatus, AutopilotMode } from '@/lib/types';
 import { cn } from '@/lib/utils';
+import { formatTimeRemaining } from '@/lib/time-utils';
 
 interface AutopilotStatusBadgeProps {
   status: AutopilotStatus;
@@ -70,18 +71,7 @@ export function AutopilotStatusBadge({
   };
 
   const config = getStatusConfig();
-
-  const formatTime = (seconds: number | null | undefined) => {
-    if (seconds === null || seconds === undefined || seconds <= 0) return null;
-    const mins = Math.floor(seconds / 60);
-    if (mins >= 60) {
-      const hrs = Math.floor(mins / 60);
-      return `${hrs}h`;
-    }
-    return `${mins}m`;
-  };
-
-  const timeStr = formatTime(timeRemaining);
+  const timeStr = formatTimeRemaining(timeRemaining, 'short') || null;
 
   return (
     <TooltipProvider>
@@ -95,7 +85,7 @@ export function AutopilotStatusBadge({
               className
             )}
           >
-            <config.icon className="h-4 w-4" strokeWidth={1.5} />
+            <config.icon className="h-4 w-4" strokeWidth={2} />
             {showLabel && <span>{config.label}</span>}
             {timeStr && mode === 'self-driving' && status === 'active' && (
               <span className="font-mono">{timeStr}</span>

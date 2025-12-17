@@ -90,7 +90,7 @@ export function MessageDetail({ card, open, onOpenChange, onReply }: MessageDeta
 
           {isMessage && card.message && !card.message.isFromMe && (
             <Button className="w-full" onClick={() => onReply(card)}>
-              <MessageSquare className="h-4 w-4 mr-2" strokeWidth={1.5} />
+              <MessageSquare className="h-4 w-4 mr-2" strokeWidth={2} />
               Reply
             </Button>
           )}

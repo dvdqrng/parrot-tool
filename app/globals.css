@@ -125,3 +125,132 @@ body {
   @apply bg-background text-foreground;
 }
 }
+
+/* Autopilot pulsating glow effect - iOS Siri-like (inner glow) */
+
+/* Active/Processing - Blue/Cyan (working normally) */
+@keyframes autopilot-pulse-active {
+  0%, 100% {
+    box-shadow:
+      inset 0 0 12px 1px rgba(59, 130, 246, 0.03),
+      inset 0 0 20px 2px rgba(14, 165, 233, 0.02),
+      inset 0 0 28px 3px rgba(34, 211, 238, 0.01);
+  }
+  50% {
+    box-shadow:
+      inset 0 0 15px 2px rgba(14, 165, 233, 0.25),
+      inset 0 0 24px 3px rgba(34, 211, 238, 0.18),
+      inset 0 0 32px 4px rgba(59, 130, 246, 0.15);
+  }
+}
+
+/* Waiting - Orange/Amber (waiting for input) */
+@keyframes autopilot-pulse-waiting {
+  0%, 100% {
+    box-shadow:
+      inset 0 0 12px 1px rgba(251, 146, 60, 0.03),
+      inset 0 0 20px 2px rgba(245, 158, 11, 0.02),
+      inset 0 0 28px 3px rgba(251, 191, 36, 0.01);
+  }
+  50% {
+    box-shadow:
+      inset 0 0 15px 2px rgba(245, 158, 11, 0.25),
+      inset 0 0 24px 3px rgba(251, 191, 36, 0.18),
+      inset 0 0 32px 4px rgba(251, 146, 60, 0.15);
+  }
+}
+
+/* Paused - Purple/Gray (temporarily stopped) */
+@keyframes autopilot-pulse-paused {
+  0%, 100% {
+    box-shadow:
+      inset 0 0 12px 1px rgba(139, 92, 246, 0.02),
+      inset 0 0 20px 2px rgba(168, 85, 247, 0.015),
+      inset 0 0 28px 3px rgba(192, 132, 252, 0.01);
+  }
+  50% {
+    box-shadow:
+      inset 0 0 15px 2px rgba(168, 85, 247, 0.22),
+      inset 0 0 24px 3px rgba(192, 132, 252, 0.16),
+      inset 0 0 32px 4px rgba(139, 92, 246, 0.12);
+  }
+}
+
+/* Error - Red (something went wrong) */
+@keyframes autopilot-pulse-error {
+  0%, 100% {
+    box-shadow:
+      inset 0 0 12px 1px rgba(239, 68, 68, 0.03),
+      inset 0 0 20px 2px rgba(248, 113, 113, 0.02),
+      inset 0 0 28px 3px rgba(252, 165, 165, 0.01);
+  }
+  50% {
+    box-shadow:
+      inset 0 0 15px 2px rgba(248, 113, 113, 0.25),
+      inset 0 0 24px 3px rgba(252, 165, 165, 0.18),
+      inset 0 0 32px 4px rgba(239, 68, 68, 0.15);
+  }
+}
+
+/* Goal Completed - Green (success) */
+@keyframes autopilot-pulse-completed {
+  0%, 100% {
+    box-shadow:
+      inset 0 0 12px 1px rgba(34, 197, 94, 0.03),
+      inset 0 0 20px 2px rgba(74, 222, 128, 0.02),
+      inset 0 0 28px 3px rgba(134, 239, 172, 0.01);
+  }
+  50% {
+    box-shadow:
+      inset 0 0 15px 2px rgba(74, 222, 128, 0.25),
+      inset 0 0 24px 3px rgba(134, 239, 172, 0.18),
+      inset 0 0 32px 4px rgba(34, 197, 94, 0.15);
+  }
+}
+
+/* Base autopilot glow class */
+.autopilot-glow {
+  position: relative;
+}
+
+/* State-specific animations with organic easing */
+.autopilot-glow-active {
+  animation: autopilot-pulse-active 4.5s cubic-bezier(0.4, 0.0, 0.6, 1.0) infinite;
+}
+
+.autopilot-glow-waiting {
+  animation: autopilot-pulse-waiting 4s cubic-bezier(0.4, 0.0, 0.6, 1.0) infinite;
+}
+
+.autopilot-glow-paused {
+  animation: autopilot-pulse-paused 5.5s cubic-bezier(0.4, 0.0, 0.6, 1.0) infinite;
+}
+
+.autopilot-glow-error {
+  animation: autopilot-pulse-error 3.5s cubic-bezier(0.4, 0.0, 0.6, 1.0) infinite;
+}
+
+.autopilot-glow-completed {
+  animation: autopilot-pulse-completed 4.2s cubic-bezier(0.4, 0.0, 0.6, 1.0) infinite;
+}
+
+/* Dark mode versions */
+.dark .autopilot-glow-active {
+  animation: autopilot-pulse-active 4.5s cubic-bezier(0.4, 0.0, 0.6, 1.0) infinite;
+}
+
+.dark .autopilot-glow-waiting {
+  animation: autopilot-pulse-waiting 4s cubic-bezier(0.4, 0.0, 0.6, 1.0) infinite;
+}
+
+.dark .autopilot-glow-paused {
+  animation: autopilot-pulse-paused 5.5s cubic-bezier(0.4, 0.0, 0.6, 1.0) infinite;
+}
+
+.dark .autopilot-glow-error {
+  animation: autopilot-pulse-error 3.5s cubic-bezier(0.4, 0.0, 0.6, 1.0) infinite;
+}
+
+.dark .autopilot-glow-completed {
+  animation: autopilot-pulse-completed 4.2s cubic-bezier(0.4, 0.0, 0.6, 1.0) infinite;
+}

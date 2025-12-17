@@ -62,7 +62,7 @@ export default function SettingsLayout({
             <div className="flex items-center gap-3 mb-6">
               <Link href="/">
                 <Button variant="ghost" size="icon" className="h-8 w-8">
-                  <ArrowLeft className="h-4 w-4" strokeWidth={1.5} />
+                  <ArrowLeft className="h-4 w-4" strokeWidth={2} />
                 </Button>
               </Link>
               <div>
@@ -86,7 +86,7 @@ export default function SettingsLayout({
                         : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                     )}
                   >
-                    <item.icon className="h-4 w-4" strokeWidth={1.5} />
+                    <item.icon className="h-4 w-4" strokeWidth={2} />
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-medium truncate">{item.title}</p>
                     </div>

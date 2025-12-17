@@ -81,6 +81,7 @@ export function AgentForm({ agent, onSave, onCancel }: AgentFormProps) {
     activity: false,
     typing: false,
     multiMessage: false,
+    humanBehavior: false,
   });
 
   const toggleSection = (section: string) => {
@@ -464,17 +465,146 @@ export function AgentForm({ agent, onSave, onCancel }: AgentFormProps) {
               )}
             </CollapsibleContent>
           </Collapsible>
+
+          {/* Human-like Behaviors */}
+          <Collapsible open={openSections.humanBehavior} onOpenChange={() => toggleSection('humanBehavior')}>
+            <CollapsibleTrigger className="flex items-center justify-between w-full py-2 text-sm font-medium border-t pt-4">
+              Advanced Human Behaviors
+              <ChevronDown className={`h-4 w-4 transition-transform ${openSections.humanBehavior ? 'rotate-180' : ''}`} />
+            </CollapsibleTrigger>
+            <CollapsibleContent className="space-y-4 pt-2">
+              {/* Response Rate */}
+              <div className="space-y-3">
+                <div className="flex justify-between text-xs">
+                  <span>Response rate</span>
+                  <span className="font-mono">{behavior.responseRate ?? 100}%</span>
+                </div>
+                <Slider
+                  value={[behavior.responseRate ?? 100]}
+                  onValueChange={([v]) => updateBehavior('responseRate', v)}
+                  min={30}
+                  max={100}
+                  step={5}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Simulate being busy - lower values mean some messages won&apos;t get a response
+                </p>
+              </div>
+
+              {/* Emoji-only responses */}
+              <div className="flex items-center justify-between border-t pt-4">
+                <div className="space-y-0.5">
+                  <Label className="text-xs">Emoji-only responses</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Sometimes respond with just an emoji
+                  </p>
+                </div>
+                <Switch
+                  checked={behavior.emojiOnlyResponseEnabled ?? false}
+                  onCheckedChange={(v) => updateBehavior('emojiOnlyResponseEnabled', v)}
+                />
+              </div>
+              {behavior.emojiOnlyResponseEnabled && (
+                <div className="space-y-3">
+                  <div className="flex justify-between text-xs">
+                    <span>Emoji-only chance</span>
+                    <span className="font-mono">{behavior.emojiOnlyResponseChance ?? 10}%</span>
+                  </div>
+                  <Slider
+                    value={[behavior.emojiOnlyResponseChance ?? 10]}
+                    onValueChange={([v]) => updateBehavior('emojiOnlyResponseChance', v)}
+                    min={5}
+                    max={30}
+                    step={5}
+                  />
+                </div>
+              )}
+
+              {/* Conversation fatigue */}
+              <div className="flex items-center justify-between border-t pt-4">
+                <div className="space-y-0.5">
+                  <Label className="text-xs">Conversation fatigue</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Reduce engagement in longer conversations
+                  </p>
+                </div>
+                <Switch
+                  checked={behavior.conversationFatigueEnabled ?? false}
+                  onCheckedChange={(v) => updateBehavior('conversationFatigueEnabled', v)}
+                />
+              </div>
+              {behavior.conversationFatigueEnabled && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-3">
+                    <div className="flex justify-between text-xs">
+                      <span>After messages</span>
+                      <span className="font-mono">{behavior.fatigueTriggerMessages ?? 15}</span>
+                    </div>
+                    <Slider
+                      value={[behavior.fatigueTriggerMessages ?? 15]}
+                      onValueChange={([v]) => updateBehavior('fatigueTriggerMessages', v)}
+                      min={5}
+                      max={50}
+                      step={5}
+                    />
+                  </div>
+                  <div className="space-y-3">
+                    <div className="flex justify-between text-xs">
+                      <span>Reduction per msg</span>
+                      <span className="font-mono">{behavior.fatigueResponseReduction ?? 5}%</span>
+                    </div>
+                    <Slider
+                      value={[behavior.fatigueResponseReduction ?? 5]}
+                      onValueChange={([v]) => updateBehavior('fatigueResponseReduction', v)}
+                      min={1}
+                      max={15}
+                      step={1}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Natural closing */}
+              <div className="flex items-center justify-between border-t pt-4">
+                <div className="space-y-0.5">
+                  <Label className="text-xs">Natural conversation closing</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Suggest wrapping up after periods of inactivity
+                  </p>
+                </div>
+                <Switch
+                  checked={behavior.conversationClosingEnabled ?? false}
+                  onCheckedChange={(v) => updateBehavior('conversationClosingEnabled', v)}
+                />
+              </div>
+              {behavior.conversationClosingEnabled && (
+                <div className="space-y-3">
+                  <div className="flex justify-between text-xs">
+                    <span>Idle time before suggesting close</span>
+                    <span className="font-mono">{behavior.closingTriggerIdleMinutes ?? 30} min</span>
+                  </div>
+                  <Slider
+                    value={[behavior.closingTriggerIdleMinutes ?? 30]}
+                    onValueChange={([v]) => updateBehavior('closingTriggerIdleMinutes', v)}
+                    min={10}
+                    max={120}
+                    step={5}
+                  />
+                </div>
+              )}
+            </CollapsibleContent>
+          </Collapsible>
         </CardContent>
       </Card>
 
       {/* Actions */}
       <div className="flex items-center justify-end gap-3 pt-4 border-t">
         <Button variant="outline" onClick={onCancel}>
-          <X className="h-4 w-4 mr-2" strokeWidth={1.5} />
+          <X className="h-4 w-4 mr-2" strokeWidth={2} />
           Cancel
         </Button>
         <Button onClick={handleSave} disabled={!isValid}>
-          <Save className="h-4 w-4 mr-2" strokeWidth={1.5} />
+          <Save className="h-4 w-4 mr-2" strokeWidth={2} />
           {isEditing ? 'Save Changes' : 'Create Agent'}
         </Button>
       </div>

@@ -38,7 +38,7 @@ export default function PlatformsPage() {
           <div className="flex items-center justify-between">
             <div>
               <CardTitle className="flex items-center gap-2">
-                <Layers className="h-4 w-4" strokeWidth={1.5} />
+                <Layers className="h-4 w-4" strokeWidth={2} />
                 Messaging Platforms
               </CardTitle>
               <CardDescription>
@@ -46,7 +46,7 @@ export default function PlatformsPage() {
               </CardDescription>
             </div>
             <Button variant="outline" size="sm" onClick={refetch} disabled={isLoading}>
-              <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} strokeWidth={1.5} />
+              <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} strokeWidth={2} />
               Refresh
             </Button>
           </div>
@@ -62,7 +62,7 @@ export default function PlatformsPage() {
             </div>
           ) : isLoading ? (
             <div className="flex items-center justify-center py-8">
-              <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" strokeWidth={1.5} />
+              <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" strokeWidth={2} />
             </div>
           ) : accounts.length === 0 ? (
             <div className="rounded-lg bg-muted p-4 text-center">

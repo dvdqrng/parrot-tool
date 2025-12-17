@@ -158,14 +158,14 @@ export function ContactsDialog({ open, onOpenChange, onSelectContact }: Contacts
           className="h-8 w-8 rounded-full"
           onClick={() => onOpenChange(false)}
         >
-          <X className="h-4 w-4" strokeWidth={1.5} />
+          <X className="h-4 w-4" strokeWidth={2} />
         </Button>
       </div>
 
       {/* Search input */}
       <div className="px-4 pb-3">
         <div className="relative">
-          <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" strokeWidth={1.5} />
+          <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" strokeWidth={2} />
           <Input
             ref={inputRef}
             placeholder="Search contacts..."
@@ -180,7 +180,7 @@ export function ContactsDialog({ open, onOpenChange, onSelectContact }: Contacts
       <div className="flex-1 overflow-y-auto px-2 pb-4 min-h-0">
         {isLoading ? (
           <div className="flex items-center justify-center py-8">
-            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" strokeWidth={1.5} />
+            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" strokeWidth={2} />
           </div>
         ) : error ? (
           <div className="flex items-center justify-center py-8 text-xs text-destructive">
@@ -215,7 +215,7 @@ export function ContactsDialog({ open, onOpenChange, onSelectContact }: Contacts
                         className="object-cover"
                       />
                       <AvatarFallback className="text-xs">
-                        {contact.isGroup ? <Users className="h-4 w-4" strokeWidth={1.5} /> : initials}
+                        {contact.isGroup ? <Users className="h-4 w-4" strokeWidth={2} /> : initials}
                       </AvatarFallback>
                     </Avatar>
                     <div className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-background">

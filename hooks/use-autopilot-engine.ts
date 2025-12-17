@@ -21,6 +21,7 @@ import {
   loadSettings,
   generateId,
   saveHandoffSummary,
+  getCachedMessageById,
 } from '@/lib/storage';
 import {
   useAutopilotScheduler,
@@ -28,9 +29,9 @@ import {
   isWithinActivityHours,
   calculateMultiMessageDelay,
 } from './use-autopilot-scheduler';
+import { AUTOPILOT } from '@/lib/ai-constants';
 
 interface UseAutopilotEngineOptions {
-  onDraftGenerated?: (chatId: string, draftText: string, agentId: string) => void;
   onMessageScheduled?: (chatId: string, scheduledFor: Date) => void;
   onGoalCompleted?: (chatId: string, summary: ConversationHandoffSummary) => void;
   onError?: (chatId: string, error: string) => void;
@@ -38,7 +39,6 @@ interface UseAutopilotEngineOptions {
 
 export function useAutopilotEngine(options: UseAutopilotEngineOptions = {}) {
   const {
-    onDraftGenerated,
     onMessageScheduled,
     onGoalCompleted,
     onError,
@@ -99,23 +99,24 @@ export function useAutopilotEngine(options: UseAutopilotEngineOptions = {}) {
 
   // Handle an incoming message for a chat with autopilot enabled
   const handleIncomingMessage = useCallback(async (
-    message: BeeperMessage
+    message: BeeperMessage,
+    forceProcess = false
   ) => {
     const { chatId, id: messageId, text, senderName } = message;
 
-    console.log('[Autopilot Engine] handleIncomingMessage called', { chatId, messageId, text: text?.slice(0, 50) });
+    console.log('[Autopilot Engine] handleIncomingMessage called', { chatId, messageId, text: text?.slice(0, 50), forceProcess });
 
-    // Skip if we've already processed this message
-    if (processedMessagesRef.current.has(messageId)) {
+    // Skip if we've already processed this message (unless forced to process)
+    if (!forceProcess && processedMessagesRef.current.has(messageId)) {
       console.log('[Autopilot Engine] Message already processed, skipping', { messageId });
       return;
     }
     processedMessagesRef.current.add(messageId);
 
-    // Clean up old processed messages (keep last 100)
-    if (processedMessagesRef.current.size > 100) {
+    // Clean up old processed messages (keep last N)
+    if (processedMessagesRef.current.size > AUTOPILOT.MAX_PROCESSED_MESSAGES) {
       const arr = Array.from(processedMessagesRef.current);
-      processedMessagesRef.current = new Set(arr.slice(-100));
+      processedMessagesRef.current = new Set(arr.slice(-AUTOPILOT.MAX_PROCESSED_MESSAGES));
     }
 
     // Check if autopilot is enabled for this chat
@@ -155,13 +156,17 @@ export function useAutopilotEngine(options: UseAutopilotEngineOptions = {}) {
       return;
     }
 
-    // Check activity hours
-    const withinHours = isWithinActivityHours(agent.behavior);
-    console.log('[Autopilot Engine] Activity hours check', { withinHours, behavior: agent.behavior });
-    if (!withinHours) {
-      console.log('[Autopilot Engine] Outside activity hours, skipping');
-      // Outside activity hours - skip processing
-      return;
+    // Check activity hours (unless forced to process)
+    if (!forceProcess) {
+      const withinHours = isWithinActivityHours(agent.behavior);
+      console.log('[Autopilot Engine] Activity hours check', { withinHours, behavior: agent.behavior });
+      if (!withinHours) {
+        console.log('[Autopilot Engine] Outside activity hours, skipping');
+        // Outside activity hours - skip processing
+        return;
+      }
+    } else {
+      console.log('[Autopilot Engine] Bypassing activity hours check (forceProcess=true)');
     }
 
     // Log the received message
@@ -174,6 +179,48 @@ export function useAutopilotEngine(options: UseAutopilotEngineOptions = {}) {
       messageText: text,
     });
 
+    // Calculate effective response rate (with fatigue)
+    let effectiveResponseRate = agent.behavior.responseRate ?? 100;
+
+    if (agent.behavior.conversationFatigueEnabled && config.messagesHandled > 0) {
+      const fatigueMessages = agent.behavior.fatigueTriggerMessages ?? 15;
+      const fatigueReduction = agent.behavior.fatigueResponseReduction ?? 5;
+
+      if (config.messagesHandled >= fatigueMessages) {
+        const extraMessages = config.messagesHandled - fatigueMessages;
+        const reduction = Math.min(extraMessages * fatigueReduction, 50); // Cap at 50% reduction
+        effectiveResponseRate = Math.max(30, effectiveResponseRate - reduction); // Min 30%
+
+        if (reduction > 0) {
+          console.log('[Autopilot Engine] Fatigue applied', { messagesHandled: config.messagesHandled, reduction, effectiveResponseRate });
+          addAutopilotActivityEntry({
+            id: generateId(),
+            chatId,
+            agentId: agent.id,
+            type: 'fatigue-reduced',
+            timestamp: new Date().toISOString(),
+            metadata: { reduction, effectiveResponseRate, messagesHandled: config.messagesHandled },
+          });
+        }
+      }
+    }
+
+    // Response rate check - simulate being busy
+    const responseRoll = Math.random() * 100;
+    if (responseRoll > effectiveResponseRate) {
+      console.log('[Autopilot Engine] Skipping message (busy simulation)', { responseRoll, effectiveResponseRate });
+      addAutopilotActivityEntry({
+        id: generateId(),
+        chatId,
+        agentId: agent.id,
+        type: 'skipped-busy',
+        timestamp: new Date().toISOString(),
+        messageText: text,
+        metadata: { responseRoll, effectiveResponseRate },
+      });
+      return;
+    }
+
     // Get context and settings
     const settings = loadSettings();
     const toneSettings = loadToneSettings();
@@ -181,14 +228,24 @@ export function useAutopilotEngine(options: UseAutopilotEngineOptions = {}) {
     const threadContext = getThreadContext(chatId);
     const threadContextStr = formatThreadContextForPrompt(threadContext);
 
+    // Check for emoji-only response
+    const shouldSendEmojiOnly = agent.behavior.emojiOnlyResponseEnabled &&
+      Math.random() * 100 < (agent.behavior.emojiOnlyResponseChance ?? 10);
+
+    // Check for conversation closing suggestion
+    const shouldSuggestClosing = agent.behavior.conversationClosingEnabled &&
+      config.lastActivityAt &&
+      (Date.now() - new Date(config.lastActivityAt).getTime()) > (agent.behavior.closingTriggerIdleMinutes ?? 30) * 60 * 1000;
+
     try {
-      console.log('[Autopilot Engine] Generating draft via API...');
+      console.log('[Autopilot Engine] Generating draft via API...', { shouldSendEmojiOnly, shouldSuggestClosing });
       // Generate draft via API
-      const response = await fetch('/api/ai/autopilot-draft', {
+      const response = await fetch('/api/ai/draft', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'x-anthropic-key': settings.anthropicApiKey || '',
+          'x-openai-key': settings.openaiApiKey || '',
         },
         body: JSON.stringify({
           originalMessage: text,
@@ -202,6 +259,10 @@ export function useAutopilotEngine(options: UseAutopilotEngineOptions = {}) {
           provider: settings.aiProvider || 'anthropic',
           ollamaModel: settings.ollamaModel,
           ollamaBaseUrl: settings.ollamaBaseUrl,
+          // Human-like behaviors
+          emojiOnlyResponse: shouldSendEmojiOnly,
+          suggestClosing: shouldSuggestClosing,
+          messagesInConversation: config.messagesHandled,
         }),
       });
 
@@ -263,9 +324,25 @@ export function useAutopilotEngine(options: UseAutopilotEngineOptions = {}) {
       // Handle based on mode
       console.log('[Autopilot Engine] Handling mode', { mode: config.mode, suggestedReply: suggestedReply?.slice(0, 50) });
       if (config.mode === 'manual-approval') {
-        console.log('[Autopilot Engine] Manual approval mode - calling onDraftGenerated');
-        // Notify that a draft is ready for approval
-        onDraftGenerated?.(chatId, suggestedReply, agent.id);
+        console.log('[Autopilot Engine] Manual approval mode - scheduling draft for approval');
+        // Schedule the message far in the future (24 hours) so it appears as pending
+        // User approval will reschedule it to send immediately
+        const PENDING_APPROVAL_DELAY = AUTOPILOT.PENDING_APPROVAL_DELAY;
+
+        if (suggestedMessages && suggestedMessages.length > 1) {
+          // Multi-message - schedule all with far-future dates
+          scheduler.scheduleMessages(
+            chatId,
+            agent.id,
+            suggestedMessages,
+            PENDING_APPROVAL_DELAY,
+            5, // Small delay between multi-messages
+            message.id
+          );
+        } else {
+          // Single message
+          scheduler.scheduleMessage(chatId, agent.id, suggestedReply, PENDING_APPROVAL_DELAY, message.id);
+        }
       } else {
         // Self-driving mode - schedule the message(s)
         const replyDelay = calculateReplyDelay(
@@ -282,11 +359,12 @@ export function useAutopilotEngine(options: UseAutopilotEngineOptions = {}) {
             agent.id,
             suggestedMessages,
             replyDelay,
-            delayBetween
+            delayBetween,
+            message.id
           );
         } else {
           // Single message
-          scheduler.scheduleMessage(chatId, agent.id, suggestedReply, replyDelay);
+          scheduler.scheduleMessage(chatId, agent.id, suggestedReply, replyDelay, message.id);
         }
 
         onMessageScheduled?.(chatId, new Date(Date.now() + replyDelay * 1000));
@@ -314,7 +392,7 @@ export function useAutopilotEngine(options: UseAutopilotEngineOptions = {}) {
 
       onError?.(chatId, errorMessage);
     }
-  }, [scheduler, onDraftGenerated, onMessageScheduled, onError]);
+  }, [scheduler, onMessageScheduled, onError]);
 
   // Generate a handoff summary
   const generateHandoffSummary = async (
@@ -330,6 +408,7 @@ export function useAutopilotEngine(options: UseAutopilotEngineOptions = {}) {
         headers: {
           'Content-Type': 'application/json',
           'x-anthropic-key': settings.anthropicApiKey || '',
+          'x-openai-key': settings.openaiApiKey || '',
         },
         body: JSON.stringify({
           threadContext,
@@ -367,6 +446,145 @@ export function useAutopilotEngine(options: UseAutopilotEngineOptions = {}) {
     }
   };
 
+  // Generate a proactive initial message (not in response to an incoming message)
+  const generateProactiveMessage = useCallback(async (chatId: string) => {
+    console.log('[Autopilot Engine] generateProactiveMessage called', { chatId });
+
+    // Check if autopilot is enabled for this chat
+    const config = getChatAutopilotConfig(chatId);
+    console.log('[Autopilot Engine] Chat config', { chatId, config: config ? { enabled: config.enabled, status: config.status, agentId: config.agentId } : null });
+    if (!config || !config.enabled || config.status !== 'active') {
+      console.log('[Autopilot Engine] Autopilot not active for chat, skipping', { chatId });
+      return;
+    }
+
+    // Get the agent
+    const agent = getAutopilotAgentById(config.agentId);
+    console.log('[Autopilot Engine] Agent lookup', { agentId: config.agentId, found: !!agent });
+    if (!agent) {
+      console.log('[Autopilot Engine] Agent not found', { agentId: config.agentId });
+      onError?.(chatId, 'Agent not found');
+      return;
+    }
+
+    // Get context and settings
+    const settings = loadSettings();
+    const toneSettings = loadToneSettings();
+    const writingStyle = loadWritingStylePatterns();
+    const threadContext = getThreadContext(chatId);
+    const threadContextStr = formatThreadContextForPrompt(threadContext);
+
+    try {
+      console.log('[Autopilot Engine] Generating proactive draft via API...');
+      // Generate draft via API (with empty original message for proactive mode)
+      const response = await fetch('/api/ai/draft', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-anthropic-key': settings.anthropicApiKey || '',
+          'x-openai-key': settings.openaiApiKey || '',
+        },
+        body: JSON.stringify({
+          originalMessage: '', // Empty for proactive message
+          senderName: 'Chat',
+          threadContext: threadContextStr,
+          agentSystemPrompt: agent.systemPrompt + '\n\nGenerate a proactive message to start or continue the conversation. Be natural and contextual based on the conversation history.',
+          agentGoal: agent.goal,
+          toneSettings,
+          writingStyle,
+          detectGoalCompletion: false, // Don't check goal on initial message
+          provider: settings.aiProvider || 'anthropic',
+          ollamaModel: settings.ollamaModel,
+          ollamaBaseUrl: settings.ollamaBaseUrl,
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        console.log('[Autopilot Engine] API error', error);
+        throw new Error(error.error || 'Failed to generate draft');
+      }
+
+      const result = await response.json();
+      console.log('[Autopilot Engine] API response', result);
+      const { data } = result;
+      const { suggestedReply, suggestedMessages } = data;
+
+      // Log draft generation
+      addAutopilotActivityEntry({
+        id: generateId(),
+        chatId,
+        agentId: agent.id,
+        type: 'draft-generated',
+        timestamp: new Date().toISOString(),
+        draftText: suggestedReply,
+      });
+
+      // Handle based on mode
+      console.log('[Autopilot Engine] Handling mode', { mode: config.mode, suggestedReply: suggestedReply?.slice(0, 50) });
+      if (config.mode === 'manual-approval') {
+        console.log('[Autopilot Engine] Manual approval mode - scheduling draft for approval');
+        // Schedule the message far in the future (24 hours) so it appears as pending
+        const PENDING_APPROVAL_DELAY = AUTOPILOT.PENDING_APPROVAL_DELAY;
+
+        if (suggestedMessages && suggestedMessages.length > 1) {
+          scheduler.scheduleMessages(
+            chatId,
+            agent.id,
+            suggestedMessages,
+            PENDING_APPROVAL_DELAY,
+            5
+          );
+        } else {
+          scheduler.scheduleMessage(chatId, agent.id, suggestedReply, PENDING_APPROVAL_DELAY);
+        }
+      } else {
+        // Self-driving mode - schedule the message(s)
+        // Use a short delay for proactive messages (3-8 seconds)
+        const replyDelay = Math.floor(Math.random() * 5) + 3; // 3-8 seconds
+
+        if (suggestedMessages && suggestedMessages.length > 1) {
+          // Multi-message - schedule with delays between
+          const delayBetween = calculateMultiMessageDelay(agent.behavior);
+          scheduler.scheduleMessages(
+            chatId,
+            agent.id,
+            suggestedMessages,
+            replyDelay,
+            delayBetween
+          );
+        } else {
+          // Single message
+          scheduler.scheduleMessage(chatId, agent.id, suggestedReply, replyDelay);
+        }
+
+        onMessageScheduled?.(chatId, new Date(Date.now() + replyDelay * 1000));
+      }
+    } catch (error) {
+      console.error('Error in proactive message generation:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+
+      // Update config with error
+      saveChatAutopilotConfig({
+        ...config,
+        status: 'error',
+        lastError: errorMessage,
+        errorCount: config.errorCount + 1,
+      });
+
+      addAutopilotActivityEntry({
+        id: generateId(),
+        chatId,
+        agentId: agent.id,
+        type: 'error',
+        timestamp: new Date().toISOString(),
+        errorMessage,
+      });
+
+      onError?.(chatId, errorMessage);
+    }
+  }, [scheduler, onMessageScheduled, onError]);
+
   // Manually approve and send a draft
   const approveAndSend = useCallback(async (
     chatId: string,
@@ -389,20 +607,23 @@ export function useAutopilotEngine(options: UseAutopilotEngineOptions = {}) {
     });
   }, [scheduler]);
 
-  // Get all active autopilot chats
-  const getActiveChats = useCallback((): ChatAutopilotConfig[] => {
-    const agents = loadAutopilotAgents();
-    // This is a simple implementation - in production you'd want to track this differently
-    const allConfigs: ChatAutopilotConfig[] = [];
-    // Note: We'd need to iterate through all configs, but we don't have a list of all chatIds
-    // This would need to be enhanced to track active chats separately
-    return allConfigs;
-  }, []);
+  const regenerateDraft = useCallback(async (messageId: string) => {
+    const message = getCachedMessageById(messageId);
+    if (message) {
+      // Temporarily remove from processed messages to allow reprocessing
+      processedMessagesRef.current.delete(messageId);
+      await handleIncomingMessage(message);
+    } else {
+      console.error(`[Autopilot Engine] Could not find message ${messageId} to regenerate draft`);
+      onError?.('', `Could not find message ${messageId} to regenerate draft`);
+    }
+  }, [handleIncomingMessage, onError]);
 
   return {
     handleIncomingMessage,
+    generateProactiveMessage,
+    regenerateDraft,
     approveAndSend,
-    getActiveChats,
     scheduler,
     // Pass through scheduler methods
     cancelChat: scheduler.cancelChat,

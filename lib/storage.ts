@@ -11,6 +11,7 @@ import {
   ScheduledAutopilotAction,
   ConversationHandoffSummary,
 } from './types';
+import { emitActivityAdded, emitActionScheduled, emitConfigChanged } from './autopilot-events';
 
 const DRAFTS_KEY = 'beeper-kanban-drafts';
 const SETTINGS_KEY = 'beeper-kanban-settings';
@@ -68,11 +69,6 @@ export function deleteDraft(id: string): Draft[] {
   const updated = drafts.filter(d => d.id !== id);
   saveDrafts(updated);
   return updated;
-}
-
-export function getDraftById(id: string): Draft | undefined {
-  const drafts = loadDrafts();
-  return drafts.find(d => d.id === id);
 }
 
 // Update draft recipient names from a name map
@@ -168,15 +164,9 @@ export function saveCachedMessages(messages: BeeperMessage[]): void {
   }
 }
 
-export function getMessagesCacheTimestamp(): number | null {
-  if (typeof window === 'undefined') return null;
-
-  try {
-    const timestamp = localStorage.getItem(`${CACHE_TIMESTAMP_KEY}-messages`);
-    return timestamp ? parseInt(timestamp, 10) : null;
-  } catch {
-    return null;
-  }
+export function getCachedMessageById(messageId: string): BeeperMessage | undefined {
+  const messages = loadCachedMessages();
+  return messages.find(m => m.id === messageId);
 }
 
 // Update cached messages with correct participant names from a name map
@@ -237,17 +227,6 @@ export function saveCachedAccounts(accounts: BeeperAccount[]): void {
     localStorage.setItem(`${CACHE_TIMESTAMP_KEY}-accounts`, Date.now().toString());
   } catch {
     console.error('Failed to save accounts to localStorage');
-  }
-}
-
-export function getAccountsCacheTimestamp(): number | null {
-  if (typeof window === 'undefined') return null;
-
-  try {
-    const timestamp = localStorage.getItem(`${CACHE_TIMESTAMP_KEY}-accounts`);
-    return timestamp ? parseInt(timestamp, 10) : null;
-  } catch {
-    return null;
   }
 }
 
@@ -521,11 +500,6 @@ export function saveWritingStylePatterns(patterns: WritingStylePatterns): void {
   }
 }
 
-export function getUserMessages(): BeeperMessage[] {
-  const messages = loadCachedMessages();
-  return messages.filter(m => m.isFromMe && m.text && m.text.trim().length > 0);
-}
-
 // User messages cache for tone analysis (stores actual sent messages from chat history)
 const USER_MESSAGES_CACHE_KEY = 'beeper-kanban-user-messages-cache';
 
@@ -603,12 +577,6 @@ export function getAiChatForThread(chatId: string): AiChatMessage[] {
 export function saveAiChatForThread(chatId: string, messages: AiChatMessage[]): void {
   const history = loadAiChatHistory();
   history[chatId] = messages;
-  saveAiChatHistory(history);
-}
-
-export function clearAiChatForThread(chatId: string): void {
-  const history = loadAiChatHistory();
-  delete history[chatId];
   saveAiChatHistory(history);
 }
 
@@ -727,6 +695,7 @@ export function clearAllData(): void {
     selectedAccountIds: [],
     beeperAccessToken: currentSettings.beeperAccessToken,
     anthropicApiKey: currentSettings.anthropicApiKey,
+    openaiApiKey: currentSettings.openaiApiKey,
   };
 
   const keysToRemove = [
@@ -884,6 +853,9 @@ export function saveChatAutopilotConfig(config: ChatAutopilotConfig): void {
   const configs = loadChatAutopilotConfigs();
   configs[config.chatId] = { ...config, updatedAt: new Date().toISOString() };
   saveChatAutopilotConfigs(configs);
+
+  // Emit event for real-time updates
+  emitConfigChanged(config.chatId);
 }
 
 export function deleteChatAutopilotConfig(chatId: string): void {
@@ -932,6 +904,9 @@ export function addAutopilotActivityEntry(entry: AutopilotActivityEntry): void {
     : entries;
 
   saveAutopilotActivity(pruned);
+
+  // Emit event for real-time updates
+  emitActivityAdded(entry.chatId, entry.type);
 }
 
 export function getActivityForChat(chatId: string): AutopilotActivityEntry[] {
@@ -973,6 +948,9 @@ export function addScheduledAction(action: ScheduledAutopilotAction): void {
   const actions = loadScheduledActions();
   actions.push(action);
   saveScheduledActions(actions);
+
+  // Emit event for real-time updates
+  emitActionScheduled(action.chatId, action.id, action.scheduledFor);
 }
 
 export function updateScheduledAction(id: string, updates: Partial<ScheduledAutopilotAction>): void {

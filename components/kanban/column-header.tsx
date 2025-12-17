@@ -57,7 +57,7 @@ export function ColumnHeader({
   return (
     <div className="flex items-center justify-between px-4 py-2">
       <div className="flex items-center gap-2">
-        <config.icon className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
+        <config.icon className="h-4 w-4 text-muted-foreground" strokeWidth={2} />
         <h3 className="text-xs font-medium">{config.title}</h3>
       </div>
       {columnId === 'unread' && count > 0 && onGenerateAllDrafts && (
@@ -68,7 +68,7 @@ export function ColumnHeader({
             className="h-6 px-2 text-xs"
             onClick={onCancelGeneration}
           >
-            <Square className="h-4 w-4 mr-1" strokeWidth={1.5} />
+            <Square className="h-4 w-4 mr-1" strokeWidth={2} />
             {generatingProgress ? `${generatingProgress.current}/${generatingProgress.total}` : 'Stop'}
           </Button>
         ) : (
@@ -79,7 +79,6 @@ export function ColumnHeader({
             onClick={onGenerateAllDrafts}
             title="Generate drafts for all unread messages"
           >
-            <Sparkles className="h-4 w-4 mr-1" strokeWidth={1.5} />
             Draft All
           </Button>
         )
@@ -92,7 +91,7 @@ export function ColumnHeader({
             className="h-6 px-2 text-xs"
             onClick={onCancelSending}
           >
-            <Square className="h-4 w-4 mr-1" strokeWidth={1.5} />
+            <Square className="h-4 w-4 mr-1" strokeWidth={2} />
             {sendingProgress ? `${sendingProgress.current}/${sendingProgress.total}` : 'Stop'}
           </Button>
         ) : (
@@ -103,7 +102,6 @@ export function ColumnHeader({
             onClick={onSendAllDrafts}
             title="Send all drafts"
           >
-            <Send className="h-4 w-4 mr-1" strokeWidth={1.5} />
             Send All
           </Button>
         )

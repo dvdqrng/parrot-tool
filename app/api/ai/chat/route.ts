@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import Anthropic from '@anthropic-ai/sdk';
 import { AiProvider } from '@/lib/types';
-import { ollamaChat, OllamaMessage, getFirstAvailableModel } from '@/lib/ollama';
+import { callAiProvider, handleAiProviderError } from '@/lib/ai-provider';
+import { AI_TOKENS, AI_TEMPERATURE } from '@/lib/ai-constants';
 
 interface ChatMessage {
   role: 'user' | 'assistant';
@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
       chatHistory,
       userMessage,
       provider = 'anthropic',
-      ollamaModel = 'gemma3:4b',
+      ollamaModel = 'deepseek-v3',
       ollamaBaseUrl,
     } = body;
 
@@ -38,6 +38,9 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    const anthropicKey = request.headers.get('x-anthropic-key') || process.env.ANTHROPIC_API_KEY;
+    const openaiKey = request.headers.get('x-openai-key') || process.env.OPENAI_API_KEY;
 
     const systemPrompt = `You are a helpful assistant helping the user manage their messages and draft replies.
 
@@ -65,73 +68,17 @@ When drafting replies:
 
 Be helpful, concise, and friendly in your responses.`;
 
-    let responseText: string;
-
-    if (provider === 'ollama') {
-      // Use Ollama - validate model or use first available
-      try {
-        let modelToUse = ollamaModel;
-
-        // Convert chat history to Ollama format with system prompt
-        const messages: OllamaMessage[] = [
-          { role: 'system', content: systemPrompt },
-          ...chatHistory.map(msg => ({
-            role: msg.role as 'user' | 'assistant',
-            content: msg.content,
-          })),
-        ];
-
-        try {
-          responseText = await ollamaChat(ollamaBaseUrl, modelToUse, messages, 1024);
-        } catch (modelError) {
-          console.log(`[Chat] Model ${modelToUse} failed, trying first available model`);
-          const firstAvailable = await getFirstAvailableModel(ollamaBaseUrl);
-          if (firstAvailable) {
-            modelToUse = firstAvailable;
-            responseText = await ollamaChat(ollamaBaseUrl, modelToUse, messages, 1024);
-          } else {
-            throw modelError;
-          }
-        }
-      } catch (error) {
-        console.error('Ollama error:', error);
-        return NextResponse.json(
-          { error: 'Failed to connect to Ollama. Make sure Ollama is running and has models installed.' },
-          { status: 503 }
-        );
-      }
-    } else {
-      // Use Anthropic
-      const anthropicKey = request.headers.get('x-anthropic-key') || process.env.ANTHROPIC_API_KEY;
-
-      if (!anthropicKey) {
-        return NextResponse.json(
-          { error: 'Anthropic API key not configured. Add it in Settings.' },
-          { status: 401 }
-        );
-      }
-
-      const anthropic = new Anthropic({
-        apiKey: anthropicKey,
-      });
-
-      // Build messages array for the API
-      const messages: Anthropic.MessageParam[] = chatHistory.map(msg => ({
-        role: msg.role,
-        content: msg.content,
-      }));
-
-      const response = await anthropic.messages.create({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 1024,
-        system: systemPrompt,
-        messages,
-      });
-
-      // Extract text from the response
-      const textContent = response.content.find(block => block.type === 'text');
-      responseText = textContent?.type === 'text' ? textContent.text : '';
-    }
+    const responseText = await callAiProvider({
+      provider,
+      systemPrompt,
+      messages: chatHistory,
+      maxTokens: AI_TOKENS.CHAT,
+      temperature: AI_TEMPERATURE.CHAT,
+      ollamaModel,
+      ollamaBaseUrl,
+      anthropicKey,
+      openaiKey,
+    });
 
     return NextResponse.json({
       data: {
@@ -140,18 +87,7 @@ Be helpful, concise, and friendly in your responses.`;
     });
   } catch (error) {
     console.error('Error in AI chat:', error);
-
-    // Check if it's an API key issue
-    if (error instanceof Error && error.message.includes('API key')) {
-      return NextResponse.json(
-        { error: 'Invalid or missing Anthropic API key' },
-        { status: 401 }
-      );
-    }
-
-    return NextResponse.json(
-      { error: 'Failed to get AI response' },
-      { status: 500 }
-    );
+    const { error: errorMessage, status } = handleAiProviderError(error);
+    return NextResponse.json({ error: errorMessage }, { status });
   }
 }

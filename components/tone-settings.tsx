@@ -497,7 +497,7 @@ export function ToneSettingsSection() {
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <MessageSquare className="h-4 w-4" strokeWidth={1.5} />
+          <MessageSquare className="h-4 w-4" strokeWidth={2} />
           Personal Tone of Voice
         </CardTitle>
         <CardDescription>
@@ -529,9 +529,9 @@ export function ToneSettingsSection() {
               disabled={isAnalyzing || !hasBeeperToken}
             >
               {isAnalyzing ? (
-                <RefreshCw className="h-4 w-4 mr-2 animate-spin" strokeWidth={1.5} />
+                <RefreshCw className="h-4 w-4 mr-2 animate-spin" strokeWidth={2} />
               ) : (
-                <Sparkles className="h-4 w-4 mr-2" strokeWidth={1.5} />
+                <Sparkles className="h-4 w-4 mr-2" strokeWidth={2} />
               )}
               {isAnalyzing ? 'Fetching...' : 'Fetch & Analyze'}
             </Button>

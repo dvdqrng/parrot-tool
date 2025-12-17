@@ -21,7 +21,7 @@ export default function AutopilotSettingsPage() {
     <div className="space-y-6">
       <div>
         <h2 className="text-lg font-semibold flex items-center gap-2">
-          <Brain className="h-4 w-4" strokeWidth={1.5} />
+          <Brain className="h-4 w-4" strokeWidth={2} />
           Autopilot
         </h2>
         <p className="text-sm text-muted-foreground mt-1">
@@ -61,7 +61,7 @@ export default function AutopilotSettingsPage() {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="p-2 rounded-lg bg-primary/10">
-                    <Settings className="h-4 w-4 text-primary" strokeWidth={1.5} />
+                    <Settings className="h-4 w-4 text-primary" strokeWidth={2} />
                   </div>
                   <div>
                     <CardTitle className="text-sm">Manage Agents</CardTitle>
@@ -83,7 +83,7 @@ export default function AutopilotSettingsPage() {
             <CardHeader className="pb-2">
               <div className="flex items-center gap-3">
                 <div className="p-2 rounded-lg bg-blue-500/10">
-                  <Activity className="h-4 w-4 text-blue-500" strokeWidth={1.5} />
+                  <Activity className="h-4 w-4 text-blue-500" strokeWidth={2} />
                 </div>
                 <div>
                   <CardTitle className="text-sm">Activity Log</CardTitle>
@@ -101,14 +101,14 @@ export default function AutopilotSettingsPage() {
       {agents.length === 0 && isLoaded && (
         <Card className="border-dashed">
           <CardContent className="py-8 text-center">
-            <Brain className="h-4 w-4 mx-auto text-muted-foreground mb-3" strokeWidth={1.5} />
+            <Brain className="h-4 w-4 mx-auto text-muted-foreground mb-3" strokeWidth={2} />
             <h3 className="font-medium mb-1">No agents yet</h3>
             <p className="text-sm text-muted-foreground mb-4">
               Create your first autopilot agent to start automating conversations.
             </p>
             <Link href="/settings/autopilot/agents/new">
               <Button>
-                <Plus className="h-4 w-4 mr-2" strokeWidth={1.5} />
+                <Plus className="h-4 w-4 mr-2" strokeWidth={2} />
                 Create Agent
               </Button>
             </Link>

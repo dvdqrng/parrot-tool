@@ -20,6 +20,7 @@ import { useChatAutopilot } from '@/hooks/use-chat-autopilot';
 import { useAutopilotAgents } from '@/hooks/use-autopilot-agents';
 import { useAutopilot } from '@/contexts/autopilot-context';
 import { AutopilotMode, BeeperMessage } from '@/lib/types';
+import { formatTimeRemaining } from '@/lib/time-utils';
 import Link from 'next/link';
 
 interface ChatAutopilotConfigProps {
@@ -38,7 +39,7 @@ const DURATION_OPTIONS = [
 
 export function ChatAutopilotConfig({ chatId, chatName, latestMessage }: ChatAutopilotConfigProps) {
   const { agents, isLoaded: agentsLoaded } = useAutopilotAgents();
-  const { triggerChatProcessing, notifyConfigChange } = useAutopilot();
+  const { triggerChatProcessing, generateProactiveMessage, notifyConfigChange } = useAutopilot();
   const {
     config,
     isLoaded: configLoaded,
@@ -86,16 +87,19 @@ export function ChatAutopilotConfig({ chatId, chatName, latestMessage }: ChatAut
     // Notify that config changed so UI updates (e.g., autopilot column appears)
     notifyConfigChange();
 
-    // If there's an unread message, trigger autopilot processing immediately
-    if (latestMessage && !latestMessage.isFromMe && !latestMessage.isRead) {
-      console.log('[ChatAutopilotConfig] Triggering chat processing for existing unread message');
-      // Small delay to ensure the config is saved first
-      setTimeout(() => {
+    // Always generate a proactive message when enabling autopilot
+    // Small delay to ensure the config is saved first
+    setTimeout(() => {
+      if (latestMessage && !latestMessage.isFromMe && !latestMessage.isRead) {
+        // If there's an unread message, respond to it
+        console.log('[ChatAutopilotConfig] Triggering chat processing for existing unread message');
         triggerChatProcessing(chatId, latestMessage);
-      }, 100);
-    } else {
-      console.log('[ChatAutopilotConfig] No unread message to process', { hasLatestMessage: !!latestMessage, isFromMe: latestMessage?.isFromMe, isRead: latestMessage?.isRead });
-    }
+      } else {
+        // Otherwise, generate a proactive message to start/continue the conversation
+        console.log('[ChatAutopilotConfig] Generating proactive message');
+        generateProactiveMessage(chatId);
+      }
+    }, 100);
   };
 
   const handleDisable = () => {
@@ -105,25 +109,16 @@ export function ChatAutopilotConfig({ chatId, chatName, latestMessage }: ChatAut
 
   const handlePause = () => {
     pause();
+    notifyConfigChange();
   };
 
   const handleResume = () => {
     resume();
-  };
-
-  const formatTimeRemaining = (seconds: number | null) => {
-    if (seconds === null || seconds <= 0) return 'Expired';
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    if (mins >= 60) {
-      const hrs = Math.floor(mins / 60);
-      const remainingMins = mins % 60;
-      return `${hrs}h ${remainingMins}m`;
-    }
-    return mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+    notifyConfigChange();
   };
 
   const selectedAgent = agents.find(a => a.id === selectedAgentId);
+  const timeRemainingStr = formatTimeRemaining(timeRemaining) || 'Expired';
 
   if (!agentsLoaded || !configLoaded) {
     return null;
@@ -135,12 +130,12 @@ export function ChatAutopilotConfig({ chatId, chatName, latestMessage }: ChatAut
       <Popover>
         <PopoverTrigger asChild>
           <Button variant="ghost" size="icon">
-            <Bot className="h-4 w-4" strokeWidth={1.5} />
+            <Bot className="h-4 w-4" strokeWidth={2} />
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-72" align="end">
           <div className="space-y-3 text-center py-2">
-            <Bot className="h-4 w-4 mx-auto text-muted-foreground" strokeWidth={1.5} />
+            <Bot className="h-4 w-4 mx-auto text-muted-foreground" strokeWidth={2} />
             <div>
               <p className="text-sm font-medium">No Agents Created</p>
               <p className="text-xs text-muted-foreground mt-1">
@@ -171,30 +166,30 @@ export function ChatAutopilotConfig({ chatId, chatName, latestMessage }: ChatAut
             variant={hasError ? 'destructive' : isPaused ? 'secondary' : 'default'}
             size="icon"
           >
-            <Bot className="h-4 w-4" strokeWidth={1.5} />
+            <Bot className="h-4 w-4" strokeWidth={2} />
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-80" align="end">
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Bot className="h-4 w-4 text-primary" strokeWidth={1.5} />
+                <Bot className="h-4 w-4 text-primary" strokeWidth={2} />
                 <span className="font-medium text-sm">Autopilot Active</span>
               </div>
               <div className="flex gap-1">
                 {!isGoalCompleted && (
                   isPaused ? (
                     <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleResume}>
-                      <Play className="h-4 w-4" strokeWidth={1.5} />
+                      <Play className="h-4 w-4" strokeWidth={2} />
                     </Button>
                   ) : (
                     <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handlePause}>
-                      <Pause className="h-4 w-4" strokeWidth={1.5} />
+                      <Pause className="h-4 w-4" strokeWidth={2} />
                     </Button>
                   )
                 )}
                 <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={handleDisable}>
-                  <Square className="h-4 w-4" strokeWidth={1.5} />
+                  <Square className="h-4 w-4" strokeWidth={2} />
                 </Button>
               </div>
             </div>
@@ -212,7 +207,7 @@ export function ChatAutopilotConfig({ chatId, chatName, latestMessage }: ChatAut
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Time remaining:</span>
                   <span className={isExpired ? 'text-destructive' : ''}>
-                    {formatTimeRemaining(timeRemaining)}
+                    {timeRemainingStr}
                   </span>
                 </div>
               )}
@@ -281,13 +276,13 @@ export function ChatAutopilotConfig({ chatId, chatName, latestMessage }: ChatAut
     <Popover open={isOpen} onOpenChange={setIsOpen}>
       <PopoverTrigger asChild>
         <Button variant="ghost" size="icon">
-          <Bot className="h-4 w-4" strokeWidth={1.5} />
+          <Bot className="h-4 w-4" strokeWidth={2} />
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-80" align="end">
         <div className="space-y-4">
           <div className="flex items-center gap-2">
-            <Bot className="h-4 w-4" strokeWidth={1.5} />
+            <Bot className="h-4 w-4" strokeWidth={2} />
             <span className="font-medium text-sm">Enable Autopilot</span>
           </div>
 
@@ -333,7 +328,7 @@ export function ChatAutopilotConfig({ chatId, chatName, latestMessage }: ChatAut
             {selectedMode === 'self-driving' && (
               <div className="space-y-1.5">
                 <Label className="text-xs flex items-center gap-1">
-                  <Clock className="h-4 w-4" strokeWidth={1.5} />
+                  <Clock className="h-4 w-4" strokeWidth={2} />
                   Duration
                 </Label>
                 <Select
@@ -363,13 +358,13 @@ export function ChatAutopilotConfig({ chatId, chatName, latestMessage }: ChatAut
             disabled={!selectedAgentId}
             className="w-full"
           >
-            <Play className="h-4 w-4 mr-2" strokeWidth={1.5} />
+            <Play className="h-4 w-4 mr-2" strokeWidth={2} />
             Start Autopilot
           </Button>
 
           <Link href="/settings/autopilot/agents" className="block">
             <Button variant="ghost" size="sm" className="w-full text-xs">
-              <Settings className="h-4 w-4 mr-1" strokeWidth={1.5} />
+              <Settings className="h-4 w-4 mr-1" strokeWidth={2} />
               Manage Agents
             </Button>
           </Link>

@@ -22,7 +22,8 @@
       "Bash(xargs cat:*)",
       "Bash(npx shadcn@latest add:*)",
       "Bash(npm view:*)",
-      "Bash(npx shadcn@latest init:*)"
+      "Bash(npx shadcn@latest init:*)",
+      "Bash(wc:*)"
     ]
   }
 }

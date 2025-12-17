@@ -20,11 +20,14 @@ import {
   getAiChatForThread,
   formatAiChatSummaryForPrompt,
   ThreadContextMessage,
+  getPendingActionsForChat,
 } from '@/lib/storage';
-import { Loader2, Sparkles, Send, Save, ChevronUp, Users, X, MessagesSquare, RefreshCw, Check, Image, Video, Music, Mic, FileText } from 'lucide-react';
-import { ChatAutopilotConfig } from '@/components/autopilot/chat-autopilot-config';
+import { Loader2, ChevronUp, Users, X, MessagesSquare, RefreshCw, Image, Video, Music, Mic, FileText } from 'lucide-react';
+import { MessageBottomSection } from '@/components/message-bottom-section';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { useChatAutopilot } from '@/hooks/use-chat-autopilot';
+import { useAutopilot } from '@/contexts/autopilot-context';
 
 // Helper to render text with clickable links
 function renderTextWithLinks(text: string): React.ReactNode {
@@ -98,7 +101,7 @@ function MediaAttachments({ attachments, isFromMe }: { attachments: BeeperAttach
                   "flex items-center gap-2 text-xs",
                   isFromMe ? "opacity-80" : "text-muted-foreground"
                 )}>
-                  <Image className="h-4 w-4" strokeWidth={1.5} />
+                  <Image className="h-4 w-4" strokeWidth={2} />
                   <span>{att.isGif ? 'GIF' : att.isSticker ? 'Sticker' : 'Photo'}</span>
                 </div>
               )}
@@ -125,7 +128,7 @@ function MediaAttachments({ attachments, isFromMe }: { attachments: BeeperAttach
                   "flex items-center gap-2 text-xs",
                   isFromMe ? "opacity-80" : "text-muted-foreground"
                 )}>
-                  <Video className="h-4 w-4" strokeWidth={1.5} />
+                  <Video className="h-4 w-4" strokeWidth={2} />
                   <span>Video{att.duration ? ` (${Math.floor(att.duration / 60)}:${(att.duration % 60).toString().padStart(2, '0')})` : ''}</span>
                 </div>
               )}
@@ -148,7 +151,7 @@ function MediaAttachments({ attachments, isFromMe }: { attachments: BeeperAttach
                   "flex items-center gap-2 text-xs",
                   isFromMe ? "opacity-80" : "text-muted-foreground"
                 )}>
-                  {att.isVoiceNote ? <Mic className="h-4 w-4" strokeWidth={1.5} /> : <Music className="h-4 w-4" strokeWidth={1.5} />}
+                  {att.isVoiceNote ? <Mic className="h-4 w-4" strokeWidth={2} /> : <Music className="h-4 w-4" strokeWidth={2} />}
                   <span>{att.isVoiceNote ? 'Voice message' : 'Audio'}{att.duration ? ` (${Math.floor(att.duration / 60)}:${(att.duration % 60).toString().padStart(2, '0')})` : ''}</span>
                 </div>
               )}
@@ -167,7 +170,7 @@ function MediaAttachments({ attachments, isFromMe }: { attachments: BeeperAttach
               )}
               onClick={() => mediaSrc && window.open(mediaSrc, '_blank')}
             >
-              <FileText className="h-4 w-4 shrink-0" strokeWidth={1.5} />
+              <FileText className="h-4 w-4 shrink-0" strokeWidth={2} />
               <span className="truncate">{att.fileName}</span>
               {att.fileSize && (
                 <span className="text-xs opacity-60 shrink-0">
@@ -244,6 +247,78 @@ export function MessagePanel({
   const chatId = message?.chatId || draft?.chatId;
   const platform = message?.platform || draft?.platform || 'unknown';
   const platformData = getPlatformInfo(platform);
+
+  // Get autopilot context to listen for config changes
+  const { configVersion } = useAutopilot();
+
+  // Check if autopilot is active for this chat
+  const { config: autopilotConfig } = useChatAutopilot(chatId || null, { configVersion });
+  const isAutopilotActive = autopilotConfig?.enabled;
+  const autopilotStatus = autopilotConfig?.status;
+
+  // Check if there are pending scheduled actions (indicates waiting state)
+  const [hasPendingActions, setHasPendingActions] = useState(false);
+
+  useEffect(() => {
+    if (!chatId) {
+      setHasPendingActions(false);
+      return;
+    }
+
+    const checkPendingActions = () => {
+      const pendingActions = getPendingActionsForChat(chatId);
+      console.log('[MessagePanel] Checking pending actions:', {
+        chatId,
+        pendingActionsCount: pendingActions.length,
+        actions: pendingActions,
+      });
+      setHasPendingActions(pendingActions.length > 0);
+    };
+
+    checkPendingActions();
+
+    // Check periodically for updates
+    const interval = setInterval(checkPendingActions, 1000);
+    return () => clearInterval(interval);
+  }, [chatId]);
+
+  // Map status to glow class
+  const getAutopilotGlowClass = () => {
+    if (!isAutopilotActive || !autopilotStatus) return null;
+
+    // If status is active but has pending scheduled actions, show waiting state
+    if (autopilotStatus === 'active' && hasPendingActions) {
+      return 'autopilot-glow-waiting';
+    }
+
+    switch (autopilotStatus) {
+      case 'active':
+        return 'autopilot-glow-active';
+      case 'paused':
+        return 'autopilot-glow-paused';
+      case 'error':
+        return 'autopilot-glow-error';
+      case 'goal-completed':
+        return 'autopilot-glow-completed';
+      case 'inactive':
+        return null;
+      default:
+        return 'autopilot-glow-active';
+    }
+  };
+
+  // Debug logging
+  useEffect(() => {
+    if (chatId) {
+      console.log('[MessagePanel] Autopilot glow state:', {
+        chatId,
+        isAutopilotActive,
+        status: autopilotStatus,
+        hasPendingActions,
+        glowClass: getAutopilotGlowClass(),
+      });
+    }
+  }, [chatId, autopilotConfig, isAutopilotActive, autopilotStatus, hasPendingActions]);
 
   // Fetch chat history using limit-based fetching, merging with existing messages
   const fetchHistory = useCallback(async (limit: number, isLoadMore = false) => {
@@ -348,7 +423,7 @@ export function MessagePanel({
       // Start with 20 messages
       fetchHistory(20).then(() => setInitialLoadDone(true));
     }
-  }, [isOpen, chatId, draft?.draftText, fetchHistory]);
+  }, [isOpen, chatId, draft?.draftText, draft?.updatedAt, message?.id, fetchHistory]);
 
   // Auto-scroll to bottom when chat history changes
   useEffect(() => {
@@ -359,6 +434,20 @@ export function MessagePanel({
       }
     }
   }, [chatHistory]);
+
+  // Poll for new messages when panel is open
+  useEffect(() => {
+    if (!isOpen || !chatId || !initialLoadDone) return;
+
+    const pollInterval = setInterval(() => {
+      // Fetch with the current limit we've loaded
+      const currentLimit = loadedLimitRef.current[chatId] || 20;
+      console.log(`[MessagePanel] Polling for new messages (limit: ${currentLimit})`);
+      fetchHistory(currentLimit, false);
+    }, 5000); // Poll every 5 seconds
+
+    return () => clearInterval(pollInterval);
+  }, [isOpen, chatId, initialLoadDone, fetchHistory]);
 
   // Track how many messages we've loaded for this chat
   const loadedLimitRef = useRef<Record<string, number>>({});
@@ -425,8 +514,10 @@ export function MessagePanel({
       const toneSettings = loadToneSettings();
       const writingStyle = loadWritingStylePatterns();
       const headers: HeadersInit = { 'Content-Type': 'application/json' };
-      if (settings.anthropicApiKey && settings.aiProvider !== 'ollama') {
+      if (settings.anthropicApiKey && settings.aiProvider === 'anthropic') {
         headers['x-anthropic-key'] = settings.anthropicApiKey;
+      } else if (settings.openaiApiKey && settings.aiProvider === 'openai') {
+        headers['x-openai-key'] = settings.openaiApiKey;
       }
 
       const senderName = message?.senderName || draft?.recipientName || 'Unknown';
@@ -533,10 +624,14 @@ export function MessagePanel({
   return (
     <div
       className={cn(
-        'h-full bg-card rounded-2xl flex flex-col transition-all duration-300 ease-in-out overflow-hidden shadow-lg',
-        isOpen ? 'w-96 dark:border' : 'w-0'
+        'h-full transition-all duration-300 ease-in-out',
+        isOpen ? 'w-96' : 'w-0'
       )}
     >
+      <div className={cn(
+        'h-full bg-card rounded-2xl flex flex-col overflow-hidden shadow-lg dark:border',
+        getAutopilotGlowClass()
+      )}>
       {isOpen && card && (message || draft) && (
         <>
           {/* Header */}
@@ -545,7 +640,7 @@ export function MessagePanel({
               <Avatar className="h-10 w-10 shrink-0">
                 <AvatarImage src={getAvatarSrc(card.avatarUrl)} alt={title} className="object-cover" />
                 <AvatarFallback className="text-xs">
-                  {card.isGroup ? <Users className="h-4 w-4" strokeWidth={1.5} /> : initials}
+                  {card.isGroup ? <Users className="h-4 w-4" strokeWidth={2} /> : initials}
                 </AvatarFallback>
               </Avatar>
               <div className="flex flex-col min-w-0">
@@ -563,9 +658,6 @@ export function MessagePanel({
               </div>
             </div>
             <div className="flex items-center gap-1 shrink-0">
-              {chatId && (
-                <ChatAutopilotConfig chatId={chatId} chatName={title} latestMessage={message} />
-              )}
               <Button
                 variant="ghost"
                 size="icon"
@@ -574,9 +666,9 @@ export function MessagePanel({
                 title="Refresh AI context"
               >
                 {isRefreshingContext ? (
-                  <Loader2 className="h-4 w-4 animate-spin" strokeWidth={1.5} />
+                  <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2} />
                 ) : (
-                  <RefreshCw className="h-4 w-4" strokeWidth={1.5} />
+                  <RefreshCw className="h-4 w-4" strokeWidth={2} />
                 )}
               </Button>
               {onToggleAiChat && (
@@ -586,11 +678,11 @@ export function MessagePanel({
                   onClick={onToggleAiChat}
                   title="AI Chat"
                 >
-                  <MessagesSquare className="h-4 w-4" strokeWidth={1.5} />
+                  <MessagesSquare className="h-4 w-4" strokeWidth={2} />
                 </Button>
               )}
               <Button variant="ghost" size="icon" onClick={onClose}>
-                <X className="h-4 w-4" strokeWidth={1.5} />
+                <X className="h-4 w-4" strokeWidth={2} />
               </Button>
             </div>
           </div>
@@ -608,9 +700,9 @@ export function MessagePanel({
                   disabled={isLoadingMore}
                 >
                   {isLoadingMore ? (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" strokeWidth={1.5} />
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" strokeWidth={2} />
                   ) : (
-                    <ChevronUp className="h-4 w-4 mr-2" strokeWidth={1.5} />
+                    <ChevronUp className="h-4 w-4 mr-2" strokeWidth={2} />
                   )}
                   Load older messages
                 </Button>
@@ -618,7 +710,7 @@ export function MessagePanel({
 
               {isLoadingHistory ? (
                 <div className="flex justify-center py-8">
-                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" strokeWidth={1.5} />
+                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" strokeWidth={2} />
                 </div>
               ) : chatHistory.length === 0 ? (
                 <div className="text-center py-8 text-xs text-muted-foreground">
@@ -669,58 +761,25 @@ export function MessagePanel({
 
           <Separator className="shrink-0" />
 
-          {/* Draft area */}
-          <div className="shrink-0 p-4 space-y-3">
-            <Textarea
-              placeholder="Type your reply..."
-              value={draftText}
-              onChange={(e) => setDraftText(e.target.value)}
-              className="min-h-[80px] resize-none shadow-none"
+          {/* Bottom section */}
+          <div className="shrink-0 p-4">
+            <MessageBottomSection
+              chatId={chatId || null}
+              chatName={title}
+              latestMessage={message}
+              draftText={draftText}
+              onDraftTextChange={setDraftText}
+              isGenerating={isGenerating}
+              onGenerateAI={generateAISuggestion}
+              isSending={isSending}
+              sendSuccess={sendSuccess}
+              onSend={handleSend}
+              onSaveDraft={handleSaveDraft}
             />
-            <div className="flex gap-2">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={generateAISuggestion}
-                disabled={isGenerating}
-                title="AI Draft"
-              >
-                {isGenerating ? (
-                  <Loader2 className="h-4 w-4 animate-spin" strokeWidth={1.5} />
-                ) : (
-                  <Sparkles className="h-4 w-4" strokeWidth={1.5} />
-                )}
-              </Button>
-              <Button
-                variant="ghost"
-                className="flex-1"
-                onClick={handleSaveDraft}
-                disabled={!draftText.trim()}
-              >
-                <Save className="h-4 w-4 mr-2" strokeWidth={1.5} />
-                Save Draft
-              </Button>
-              <Button
-                className={cn(
-                  "flex-1 transition-colors",
-                  sendSuccess && "bg-green-600 hover:bg-green-600"
-                )}
-                onClick={handleSend}
-                disabled={!draftText.trim() || isSending || sendSuccess}
-              >
-                {isSending ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" strokeWidth={1.5} />
-                ) : sendSuccess ? (
-                  <Check className="h-4 w-4 mr-2" strokeWidth={1.5} />
-                ) : (
-                  <Send className="h-4 w-4 mr-2" strokeWidth={1.5} />
-                )}
-                {isSending ? 'Sending...' : sendSuccess ? 'Sent!' : 'Send'}
-              </Button>
-            </div>
           </div>
         </>
       )}
+      </div>
     </div>
   );
 }

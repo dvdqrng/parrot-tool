@@ -5,30 +5,22 @@ import { BeeperMessage, ConversationHandoffSummary } from '@/lib/types';
 import { useAutopilotEngine } from '@/hooks/use-autopilot-engine';
 import { toast } from 'sonner';
 
-interface PendingApproval {
-  chatId: string;
-  draftText: string;
-  agentId: string;
-  agentName: string;
-  recipientName: string;
-  timestamp: string;
-}
-
 interface AutopilotContextValue {
   // Engine state
   isRunning: boolean;
   pendingCount: number;
-
-  // Pending approvals (for manual mode)
-  pendingApprovals: PendingApproval[];
-  approveDraft: (chatId: string) => void;
-  rejectDraft: (chatId: string) => void;
 
   // Process incoming messages
   processNewMessages: (messages: BeeperMessage[]) => void;
 
   // Trigger processing for a specific chat (when autopilot is just enabled)
   triggerChatProcessing: (chatId: string, message: BeeperMessage) => void;
+
+  // Generate a proactive message (when enabling autopilot without an unread message)
+  generateProactiveMessage: (chatId: string) => void;
+
+  // Regenerate a draft for a message
+  regenerateDraft: (messageId: string) => void;
 
   // Cancel autopilot for a chat
   cancelChat: (chatId: string) => void;
@@ -46,7 +38,6 @@ interface AutopilotContextValue {
 const AutopilotContext = createContext<AutopilotContextValue | null>(null);
 
 export function AutopilotProvider({ children }: { children: React.ReactNode }) {
-  const [pendingApprovals, setPendingApprovals] = useState<PendingApproval[]>([]);
   const [handoffSummaries, setHandoffSummaries] = useState<Map<string, ConversationHandoffSummary>>(new Map());
   const [configVersion, setConfigVersion] = useState(0);
   const processedMessageIds = useRef<Set<string>>(new Set());
@@ -57,27 +48,8 @@ export function AutopilotProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const engine = useAutopilotEngine({
-    onDraftGenerated: (chatId, draftText, agentId) => {
-      // Add to pending approvals
-      setPendingApprovals(prev => {
-        // Remove any existing approval for this chat
-        const filtered = prev.filter(p => p.chatId !== chatId);
-        return [...filtered, {
-          chatId,
-          draftText,
-          agentId,
-          agentName: 'Agent', // Would need to fetch agent name
-          recipientName: 'Unknown',
-          timestamp: new Date().toISOString(),
-        }];
-      });
-
-      toast.info('Draft Ready', {
-        description: 'Autopilot has generated a reply for your approval.',
-      });
-    },
     onMessageScheduled: () => {
-      // Could show a notification here
+      // Could show a notification here if needed
     },
     onGoalCompleted: (chatId, summary) => {
       setHandoffSummaries(prev => {
@@ -127,35 +99,24 @@ export function AutopilotProvider({ children }: { children: React.ReactNode }) {
     }
   }, [engine]);
 
-  const approveDraft = useCallback((chatId: string) => {
-    const approval = pendingApprovals.find(p => p.chatId === chatId);
-    if (approval) {
-      engine.approveAndSend(chatId, approval.draftText, approval.agentId);
-      setPendingApprovals(prev => prev.filter(p => p.chatId !== chatId));
-
-      toast.success('Message Sent', {
-        description: 'Your approved message has been scheduled.',
-      });
-    }
-  }, [pendingApprovals, engine]);
-
-  const rejectDraft = useCallback((chatId: string) => {
-    setPendingApprovals(prev => prev.filter(p => p.chatId !== chatId));
-  }, []);
 
   // Trigger processing for a specific chat - used when autopilot is just enabled
-  // This bypasses the "already processed" check to ensure existing unread messages get handled
+  // This bypasses deduplication and activity hours checks to ensure immediate action
   const triggerChatProcessing = useCallback((chatId: string, message: BeeperMessage) => {
     console.log('[Autopilot Context] triggerChatProcessing called', { chatId, messageId: message.id, text: message.text?.slice(0, 30) });
     // Remove the message ID from processed set so it can be reprocessed
     processedMessageIds.current.delete(message.id);
-    // Now process it
-    engine.handleIncomingMessage(message);
+    // Now process it with forceProcess=true to bypass engine's deduplication AND activity hours
+    engine.handleIncomingMessage(message, true);
   }, [engine]);
 
   const cancelChat = useCallback((chatId: string) => {
     engine.cancelChat(chatId);
-    setPendingApprovals(prev => prev.filter(p => p.chatId !== chatId));
+  }, [engine]);
+
+  const generateProactiveMessage = useCallback((chatId: string) => {
+    console.log('[Autopilot Context] generateProactiveMessage called', { chatId });
+    engine.generateProactiveMessage(chatId);
   }, [engine]);
 
   const dismissHandoff = useCallback((chatId: string) => {
@@ -169,11 +130,10 @@ export function AutopilotProvider({ children }: { children: React.ReactNode }) {
   const value: AutopilotContextValue = {
     isRunning: engine.isRunning,
     pendingCount: engine.pendingCount,
-    pendingApprovals,
-    approveDraft,
-    rejectDraft,
     processNewMessages,
     triggerChatProcessing,
+    generateProactiveMessage,
+    regenerateDraft: engine.regenerateDraft,
     cancelChat,
     handoffSummaries,
     dismissHandoff,

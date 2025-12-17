@@ -9,7 +9,8 @@ import { KanbanItem } from '@/components/ui/kanban';
 import { KanbanCard, MediaType } from '@/lib/types';
 import { PlatformIcon } from '@/components/platform-icon';
 import { AutopilotStatusBadge } from '@/components/autopilot/autopilot-status-badge';
-import { getChatAutopilotConfig, getAutopilotAgentById } from '@/lib/storage';
+import { getChatAutopilotConfig, getAutopilotAgentById, getPendingActionsForChat } from '@/lib/storage';
+import { cn } from '@/lib/utils';
 
 // Get icon for media type
 function MediaIcon({ type, className }: { type: MediaType; className?: string }) {
@@ -17,17 +18,17 @@ function MediaIcon({ type, className }: { type: MediaType; className?: string })
     case 'photo':
     case 'gif':
     case 'sticker':
-      return <Image className={className} strokeWidth={1.5} />;
+      return <Image className={className} strokeWidth={2} />;
     case 'video':
-      return <Video className={className} strokeWidth={1.5} />;
+      return <Video className={className} strokeWidth={2} />;
     case 'audio':
-      return <Music className={className} strokeWidth={1.5} />;
+      return <Music className={className} strokeWidth={2} />;
     case 'voice':
-      return <Mic className={className} strokeWidth={1.5} />;
+      return <Mic className={className} strokeWidth={2} />;
     case 'file':
-      return <FileText className={className} strokeWidth={1.5} />;
+      return <FileText className={className} strokeWidth={2} />;
     case 'link':
-      return <Link2 className={className} strokeWidth={1.5} />;
+      return <Link2 className={className} strokeWidth={2} />;
     default:
       return null;
   }
@@ -66,6 +67,9 @@ function MessageCardComponent({ card, onClick, onArchive, onUnarchive, onHide, o
   const autopilotConfig = chatId ? getChatAutopilotConfig(chatId) : null;
   const autopilotAgent = autopilotConfig?.agentId ? getAutopilotAgentById(autopilotConfig.agentId) : null;
 
+  // Check if there are pending scheduled actions (indicates waiting state)
+  const hasPendingActions = chatId ? getPendingActionsForChat(chatId).length > 0 : false;
+
   // Calculate time remaining for self-driving mode
   const getTimeRemaining = () => {
     if (!autopilotConfig?.selfDrivingExpiresAt) return null;
@@ -73,6 +77,31 @@ function MessageCardComponent({ card, onClick, onArchive, onUnarchive, onHide, o
     const now = Date.now();
     const remaining = Math.max(0, Math.floor((expiresAt - now) / 1000));
     return remaining > 0 ? remaining : null;
+  };
+
+  // Map status to glow class
+  const getAutopilotGlowClass = () => {
+    if (!autopilotConfig?.enabled || !autopilotConfig.status) return null;
+
+    // If status is active but has pending scheduled actions, show waiting state
+    if (autopilotConfig.status === 'active' && hasPendingActions) {
+      return 'autopilot-glow-waiting';
+    }
+
+    switch (autopilotConfig.status) {
+      case 'active':
+        return 'autopilot-glow-active';
+      case 'paused':
+        return 'autopilot-glow-paused';
+      case 'error':
+        return 'autopilot-glow-error';
+      case 'goal-completed':
+        return 'autopilot-glow-completed';
+      case 'inactive':
+        return null;
+      default:
+        return 'autopilot-glow-active';
+    }
   };
 
   const initials = card.title
@@ -135,14 +164,17 @@ function MessageCardComponent({ card, onClick, onArchive, onUnarchive, onHide, o
     return (
       <KanbanItem value={card.id} asHandle className="w-80">
         <div
-          className="group flex gap-3 p-3 cursor-pointer rounded-2xl bg-card hover:shadow-md transition-all overflow-hidden"
+          className={cn(
+            "group flex gap-3 p-3 cursor-pointer rounded-2xl bg-card hover:shadow-md transition-all overflow-hidden",
+            getAutopilotGlowClass()
+          )}
           onClick={onClick}
         >
           <div className="relative shrink-0 self-start">
             <Avatar className="h-10 w-10">
               <AvatarImage src={avatarSrc} alt={card.title} className="object-cover" />
               <AvatarFallback className="text-xs">
-                {card.isGroup ? <Users className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} /> : initials}
+                {card.isGroup ? <Users className="h-4 w-4 text-muted-foreground" strokeWidth={2} /> : initials}
               </AvatarFallback>
             </Avatar>
             <div className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-background">
@@ -165,7 +197,7 @@ function MessageCardComponent({ card, onClick, onArchive, onUnarchive, onHide, o
                   onClick={handleDeleteDraft}
                   title="Delete draft"
                 >
-                  <Trash2 className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
+                  <Trash2 className="h-4 w-4 text-muted-foreground" strokeWidth={2} />
                 </Button>
                 <Button
                   variant="ghost"
@@ -174,7 +206,7 @@ function MessageCardComponent({ card, onClick, onArchive, onUnarchive, onHide, o
                   onClick={handleSend}
                   title="Send"
                 >
-                  <Send className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
+                  <Send className="h-4 w-4 text-muted-foreground" strokeWidth={2} />
                 </Button>
               </div>
             </div>
@@ -194,14 +226,17 @@ function MessageCardComponent({ card, onClick, onArchive, onUnarchive, onHide, o
   return (
     <KanbanItem value={card.id} asHandle className="w-80">
       <div
-        className="group flex gap-3 p-3 cursor-pointer rounded-2xl bg-card hover:shadow-md transition-all overflow-hidden"
+        className={cn(
+          "group flex gap-3 p-3 cursor-pointer rounded-2xl bg-card hover:shadow-md transition-all overflow-hidden",
+          getAutopilotGlowClass()
+        )}
         onClick={onClick}
       >
         <div className="relative shrink-0 self-start">
           <Avatar className="h-10 w-10">
             <AvatarImage src={avatarSrc} alt={card.title} className="object-cover" />
             <AvatarFallback className="text-xs">
-              {card.isGroup ? <Users className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} /> : initials}
+              {card.isGroup ? <Users className="h-4 w-4 text-muted-foreground" strokeWidth={2} /> : initials}
             </AvatarFallback>
           </Avatar>
           <div className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-background">
@@ -228,7 +263,7 @@ function MessageCardComponent({ card, onClick, onArchive, onUnarchive, onHide, o
                       onClick={handleArchive}
                       title="Archive"
                     >
-                      <Archive className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
+                      <Archive className="h-4 w-4 text-muted-foreground" strokeWidth={2} />
                     </Button>
                   )}
                   {onUnarchive && (
@@ -239,7 +274,7 @@ function MessageCardComponent({ card, onClick, onArchive, onUnarchive, onHide, o
                       onClick={handleUnarchive}
                       title="Unarchive"
                     >
-                      <ArchiveRestore className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
+                      <ArchiveRestore className="h-4 w-4 text-muted-foreground" strokeWidth={2} />
                     </Button>
                   )}
                   {onHide && (
@@ -250,7 +285,7 @@ function MessageCardComponent({ card, onClick, onArchive, onUnarchive, onHide, o
                       onClick={handleHide}
                       title="Hide sender"
                     >
-                      <EyeOff className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
+                      <EyeOff className="h-4 w-4 text-muted-foreground" strokeWidth={2} />
                     </Button>
                   )}
                 </div>

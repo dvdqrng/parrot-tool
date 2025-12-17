@@ -11,7 +11,6 @@ import { DraftComposer } from '@/components/draft-composer';
 import { MessagePanel } from '@/components/message-panel';
 import { AiChatPanel } from '@/components/ai-chat-panel';
 import { ContactsDialog } from '@/components/contacts-dialog';
-import { PendingApprovalCard } from '@/components/autopilot/pending-approval-card';
 import { HandoffSummaryCard } from '@/components/autopilot/handoff-summary-card';
 import type { Contact } from '@/app/api/beeper/contacts/route';
 import { useSettingsContext } from '@/contexts/settings-context';
@@ -60,7 +59,7 @@ export default function Home() {
   const { drafts, createDraft, updateDraft, deleteDraft } = useDrafts();
 
   // Autopilot integration
-  const { processNewMessages, pendingApprovals, handoffSummaries, approveDraft, rejectDraft, dismissHandoff, configVersion } = useAutopilot();
+  const { processNewMessages, handoffSummaries, dismissHandoff, configVersion } = useAutopilot();
 
   // Process new messages through autopilot when they arrive
   useEffect(() => {
@@ -569,7 +568,7 @@ export default function Home() {
   if (!settingsLoaded) {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" strokeWidth={1.5} />
+        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" strokeWidth={2} />
       </div>
     );
   }
@@ -586,7 +585,7 @@ export default function Home() {
         </div>
         <Link href="/settings">
           <Button size="lg">
-            <Settings className="h-4 w-4 mr-2" strokeWidth={1.5} />
+            <Settings className="h-4 w-4 mr-2" strokeWidth={2} />
             Configure Platforms
           </Button>
         </Link>
@@ -613,7 +612,7 @@ export default function Home() {
             </div>
           ) : isLoading && unreadMessages.length === 0 && sentMessages.length === 0 ? (
             <div className="flex h-full items-center justify-center">
-              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" strokeWidth={1.5} />
+              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" strokeWidth={2} />
             </div>
           ) : (
             <div className="h-full overflow-x-auto">
@@ -665,7 +664,7 @@ export default function Home() {
               className="rounded-full"
               onClick={() => setContactsDialogOpen(true)}
             >
-              <Plus className="h-4 w-4" strokeWidth={1.5} />
+              <Plus className="h-4 w-4" strokeWidth={2} />
             </Button>
             <Button
               variant="ghost"
@@ -674,7 +673,7 @@ export default function Home() {
               onClick={refetch}
               disabled={isLoading}
             >
-              <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} strokeWidth={1.5} />
+              <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} strokeWidth={2} />
             </Button>
             <Button
               variant={settings.showArchivedColumn ? "default" : "ghost"}
@@ -683,12 +682,12 @@ export default function Home() {
               onClick={() => updateSettings({ showArchivedColumn: !settings.showArchivedColumn })}
               title={settings.showArchivedColumn ? "Hide archived column" : "Show archived column"}
             >
-              <Archive className="h-4 w-4" strokeWidth={1.5} />
+              <Archive className="h-4 w-4" strokeWidth={2} />
             </Button>
             <ThemeToggle />
             <Link href="/settings">
               <Button variant="ghost" size="icon" className="rounded-full">
-                <Settings className="h-4 w-4" strokeWidth={1.5} />
+                <Settings className="h-4 w-4" strokeWidth={2} />
               </Button>
             </Link>
           </div>
@@ -720,21 +719,8 @@ export default function Home() {
       </div>
 
       {/* Autopilot notifications - floating in bottom left */}
-      {(pendingApprovals.length > 0 || handoffSummaries.size > 0) && (
+      {handoffSummaries.size > 0 && (
         <div className="fixed bottom-20 left-6 z-30 w-80 space-y-3 max-h-[calc(100vh-160px)] overflow-y-auto">
-          {/* Pending approvals */}
-          {pendingApprovals.map((approval) => (
-            <PendingApprovalCard
-              key={approval.chatId}
-              chatId={approval.chatId}
-              draftText={approval.draftText}
-              agentName={approval.agentName}
-              recipientName={approval.recipientName}
-              timestamp={approval.timestamp}
-              onApprove={approveDraft}
-              onReject={rejectDraft}
-            />
-          ))}
           {/* Handoff summaries */}
           {Array.from(handoffSummaries.values()).map((summary) => (
             <HandoffSummaryCard
