@@ -23,7 +23,11 @@
       "Bash(npx shadcn@latest add:*)",
       "Bash(npm view:*)",
       "Bash(npx shadcn@latest init:*)",
-      "Bash(wc:*)"
+      "Bash(wc:*)",
+      "Bash(git log:*)",
+      "Bash(convert:*)",
+      "Bash(gradient:'#6366f1-#8b5cf6' )",
+      "Bash(icon.png)"
     ]
   }
 }

@@ -12,14 +12,17 @@ import {
   ConversationHandoffSummary,
 } from './types';
 import { emitActivityAdded, emitActionScheduled, emitConfigChanged } from './autopilot-events';
+import { logger } from './logger';
+import { STORAGE_KEYS } from './constants';
 
-const DRAFTS_KEY = 'beeper-kanban-drafts';
-const SETTINGS_KEY = 'beeper-kanban-settings';
-const MESSAGES_KEY = 'beeper-kanban-messages';
-const ACCOUNTS_KEY = 'beeper-kanban-accounts';
-const AVATARS_KEY = 'beeper-kanban-avatars';
-const CHAT_INFO_KEY = 'beeper-kanban-chat-info';
-const CACHE_TIMESTAMP_KEY = 'beeper-kanban-cache-timestamp';
+// Use centralized storage keys
+const DRAFTS_KEY = STORAGE_KEYS.DRAFTS;
+const SETTINGS_KEY = STORAGE_KEYS.SETTINGS;
+const MESSAGES_KEY = STORAGE_KEYS.MESSAGES;
+const ACCOUNTS_KEY = STORAGE_KEYS.ACCOUNTS;
+const AVATARS_KEY = STORAGE_KEYS.AVATARS;
+const CHAT_INFO_KEY = STORAGE_KEYS.CHAT_INFO;
+const CACHE_TIMESTAMP_KEY = STORAGE_KEYS.CACHE_TIMESTAMP;
 
 // Draft storage
 
@@ -30,8 +33,8 @@ export function loadDrafts(): Draft[] {
     const stored = localStorage.getItem(DRAFTS_KEY);
     if (!stored) return [];
     return JSON.parse(stored) as Draft[];
-  } catch {
-    console.error('Failed to load drafts from localStorage');
+  } catch (error) {
+    logger.error('Failed to load drafts from localStorage', error);
     return [];
   }
 }
@@ -41,8 +44,8 @@ export function saveDrafts(drafts: Draft[]): void {
 
   try {
     localStorage.setItem(DRAFTS_KEY, JSON.stringify(drafts));
-  } catch {
-    console.error('Failed to save drafts to localStorage');
+  } catch (error) {
+    logger.error('Failed to save drafts to localStorage', error);
   }
 }
 
@@ -96,12 +99,12 @@ export function updateDraftRecipientNames(nameMap: Record<string, { name: string
 
     if (updatedCount > 0) {
       saveDrafts(updatedDrafts);
-      console.log(`[Storage] Updated ${updatedCount} drafts with correct recipient names`);
+      logger.storage(`Updated ${updatedCount} drafts with correct recipient names`);
     }
 
     return updatedCount;
   } catch (error) {
-    console.error('Failed to update draft recipient names:', error);
+    logger.error('Failed to update draft recipient names', error);
     return 0;
   }
 }
@@ -117,8 +120,8 @@ export function loadSettings(): AppSettings {
     const stored = localStorage.getItem(SETTINGS_KEY);
     if (!stored) return { selectedAccountIds: [] };
     return JSON.parse(stored) as AppSettings;
-  } catch {
-    console.error('Failed to load settings from localStorage');
+  } catch (error) {
+    logger.error('Failed to load settings from localStorage', error);
     return { selectedAccountIds: [] };
   }
 }
@@ -129,7 +132,7 @@ export function saveSettings(settings: AppSettings): void {
   try {
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
   } catch {
-    console.error('Failed to save settings to localStorage');
+    logger.error('Failed to save settings to localStorage');
   }
 }
 
@@ -148,7 +151,7 @@ export function loadCachedMessages(): BeeperMessage[] {
     if (!stored) return [];
     return JSON.parse(stored) as BeeperMessage[];
   } catch {
-    console.error('Failed to load messages from localStorage');
+    logger.error('Failed to load messages from localStorage');
     return [];
   }
 }
@@ -160,7 +163,7 @@ export function saveCachedMessages(messages: BeeperMessage[]): void {
     localStorage.setItem(MESSAGES_KEY, JSON.stringify(messages));
     localStorage.setItem(`${CACHE_TIMESTAMP_KEY}-messages`, Date.now().toString());
   } catch {
-    console.error('Failed to save messages to localStorage');
+    logger.error('Failed to save messages to localStorage');
   }
 }
 
@@ -194,12 +197,12 @@ export function updateCachedMessageNames(nameMap: Record<string, { name: string;
 
     if (updatedCount > 0) {
       saveCachedMessages(updatedMessages);
-      console.log(`[Storage] Updated ${updatedCount} cached messages with correct names`);
+      logger.storage(` Updated ${updatedCount} cached messages with correct names`);
     }
 
     return updatedCount;
   } catch (error) {
-    console.error('Failed to update cached message names:', error);
+    logger.error('Failed to update cached message names:', error);
     return 0;
   }
 }
@@ -214,7 +217,7 @@ export function loadCachedAccounts(): BeeperAccount[] {
     if (!stored) return [];
     return JSON.parse(stored) as BeeperAccount[];
   } catch {
-    console.error('Failed to load accounts from localStorage');
+    logger.error('Failed to load accounts from localStorage');
     return [];
   }
 }
@@ -226,7 +229,7 @@ export function saveCachedAccounts(accounts: BeeperAccount[]): void {
     localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accounts));
     localStorage.setItem(`${CACHE_TIMESTAMP_KEY}-accounts`, Date.now().toString());
   } catch {
-    console.error('Failed to save accounts to localStorage');
+    logger.error('Failed to save accounts to localStorage');
   }
 }
 
@@ -240,7 +243,7 @@ export function loadCachedAvatars(): Record<string, string> {
     if (!stored) return {};
     return JSON.parse(stored) as Record<string, string>;
   } catch {
-    console.error('Failed to load avatars from localStorage');
+    logger.error('Failed to load avatars from localStorage');
     return {};
   }
 }
@@ -251,7 +254,7 @@ export function saveCachedAvatars(avatars: Record<string, string>): void {
   try {
     localStorage.setItem(AVATARS_KEY, JSON.stringify(avatars));
   } catch {
-    console.error('Failed to save avatars to localStorage');
+    logger.error('Failed to save avatars to localStorage');
   }
 }
 
@@ -276,7 +279,7 @@ export function loadCachedChatInfo(): Record<string, CachedChatInfo> {
     if (!stored) return {};
     return JSON.parse(stored) as Record<string, CachedChatInfo>;
   } catch {
-    console.error('Failed to load chat info from localStorage');
+    logger.error('Failed to load chat info from localStorage');
     return {};
   }
 }
@@ -287,7 +290,7 @@ export function saveCachedChatInfo(chatInfo: Record<string, CachedChatInfo>): vo
   try {
     localStorage.setItem(CHAT_INFO_KEY, JSON.stringify(chatInfo));
   } catch {
-    console.error('Failed to save chat info to localStorage');
+    logger.error('Failed to save chat info to localStorage');
   }
 }
 
@@ -319,12 +322,12 @@ export function updateCachedChatInfoTitles(nameMap: Record<string, string>): num
 
     if (updatedCount > 0) {
       saveCachedChatInfo(updatedChatInfo);
-      console.log(`[Storage] Updated ${updatedCount} cached chat info entries with correct names`);
+      logger.storage(` Updated ${updatedCount} cached chat info entries with correct names`);
     }
 
     return updatedCount;
   } catch (error) {
-    console.error('Failed to update cached chat info titles:', error);
+    logger.error('Failed to update cached chat info titles:', error);
     return 0;
   }
 }
@@ -348,7 +351,7 @@ export function loadHiddenChats(): Set<string> {
     if (!stored) return new Set();
     return new Set(JSON.parse(stored) as string[]);
   } catch {
-    console.error('Failed to load hidden chats from localStorage');
+    logger.error('Failed to load hidden chats from localStorage');
     return new Set();
   }
 }
@@ -365,7 +368,7 @@ export function loadHiddenChatsWithMeta(): HiddenChatInfo[] {
     }
     return JSON.parse(stored) as HiddenChatInfo[];
   } catch {
-    console.error('Failed to load hidden chats meta from localStorage');
+    logger.error('Failed to load hidden chats meta from localStorage');
     return [];
   }
 }
@@ -376,7 +379,7 @@ export function saveHiddenChats(hiddenChats: Set<string>): void {
   try {
     localStorage.setItem(HIDDEN_CHATS_KEY, JSON.stringify(Array.from(hiddenChats)));
   } catch {
-    console.error('Failed to save hidden chats to localStorage');
+    logger.error('Failed to save hidden chats to localStorage');
   }
 }
 
@@ -389,7 +392,7 @@ export function saveHiddenChatsWithMeta(hiddenChats: HiddenChatInfo[]): void {
     const ids = new Set(hiddenChats.map(h => h.chatId));
     saveHiddenChats(ids);
   } catch {
-    console.error('Failed to save hidden chats meta to localStorage');
+    logger.error('Failed to save hidden chats meta to localStorage');
   }
 }
 
@@ -462,7 +465,7 @@ export function loadToneSettings(): ToneSettings {
     if (!stored) return DEFAULT_TONE_SETTINGS;
     return JSON.parse(stored) as ToneSettings;
   } catch {
-    console.error('Failed to load tone settings from localStorage');
+    logger.error('Failed to load tone settings from localStorage');
     return DEFAULT_TONE_SETTINGS;
   }
 }
@@ -473,7 +476,7 @@ export function saveToneSettings(settings: ToneSettings): void {
   try {
     localStorage.setItem(TONE_SETTINGS_KEY, JSON.stringify(settings));
   } catch {
-    console.error('Failed to save tone settings to localStorage');
+    logger.error('Failed to save tone settings to localStorage');
   }
 }
 
@@ -485,7 +488,7 @@ export function loadWritingStylePatterns(): WritingStylePatterns {
     if (!stored) return DEFAULT_WRITING_STYLE;
     return JSON.parse(stored) as WritingStylePatterns;
   } catch {
-    console.error('Failed to load writing style from localStorage');
+    logger.error('Failed to load writing style from localStorage');
     return DEFAULT_WRITING_STYLE;
   }
 }
@@ -496,7 +499,7 @@ export function saveWritingStylePatterns(patterns: WritingStylePatterns): void {
   try {
     localStorage.setItem(WRITING_STYLE_KEY, JSON.stringify(patterns));
   } catch {
-    console.error('Failed to save writing style to localStorage');
+    logger.error('Failed to save writing style to localStorage');
   }
 }
 
@@ -518,7 +521,7 @@ export function loadCachedUserMessages(): CachedUserMessage[] {
     if (!stored) return [];
     return JSON.parse(stored) as CachedUserMessage[];
   } catch {
-    console.error('Failed to load user messages cache from localStorage');
+    logger.error('Failed to load user messages cache from localStorage');
     return [];
   }
 }
@@ -529,7 +532,7 @@ export function saveCachedUserMessages(messages: CachedUserMessage[]): void {
   try {
     localStorage.setItem(USER_MESSAGES_CACHE_KEY, JSON.stringify(messages));
   } catch {
-    console.error('Failed to save user messages cache to localStorage');
+    logger.error('Failed to save user messages cache to localStorage');
   }
 }
 
@@ -554,7 +557,7 @@ export function loadAiChatHistory(): AiChatHistory {
     if (!stored) return {};
     return JSON.parse(stored) as AiChatHistory;
   } catch {
-    console.error('Failed to load AI chat history from localStorage');
+    logger.error('Failed to load AI chat history from localStorage');
     return {};
   }
 }
@@ -565,7 +568,7 @@ export function saveAiChatHistory(history: AiChatHistory): void {
   try {
     localStorage.setItem(AI_CHAT_HISTORY_KEY, JSON.stringify(history));
   } catch {
-    console.error('Failed to save AI chat history to localStorage');
+    logger.error('Failed to save AI chat history to localStorage');
   }
 }
 
@@ -610,7 +613,7 @@ export function loadThreadContextStore(): ThreadContextStore {
     if (!stored) return {};
     return JSON.parse(stored) as ThreadContextStore;
   } catch {
-    console.error('Failed to load thread context from localStorage');
+    logger.error('Failed to load thread context from localStorage');
     return {};
   }
 }
@@ -621,7 +624,7 @@ export function saveThreadContextStore(store: ThreadContextStore): void {
   try {
     localStorage.setItem(THREAD_CONTEXT_KEY, JSON.stringify(store));
   } catch {
-    console.error('Failed to save thread context to localStorage');
+    logger.error('Failed to save thread context to localStorage');
   }
 }
 
@@ -774,7 +777,7 @@ export function loadAutopilotAgents(): AutopilotAgent[] {
     if (!stored) return [];
     return JSON.parse(stored) as AutopilotAgent[];
   } catch {
-    console.error('Failed to load autopilot agents from localStorage');
+    logger.error('Failed to load autopilot agents from localStorage');
     return [];
   }
 }
@@ -785,7 +788,7 @@ export function saveAutopilotAgents(agents: AutopilotAgent[]): void {
   try {
     localStorage.setItem(AUTOPILOT_AGENTS_KEY, JSON.stringify(agents));
   } catch {
-    console.error('Failed to save autopilot agents to localStorage');
+    logger.error('Failed to save autopilot agents to localStorage');
   }
 }
 
@@ -829,7 +832,7 @@ export function loadChatAutopilotConfigs(): Record<string, ChatAutopilotConfig> 
     if (!stored) return {};
     return JSON.parse(stored) as Record<string, ChatAutopilotConfig>;
   } catch {
-    console.error('Failed to load chat autopilot configs from localStorage');
+    logger.error('Failed to load chat autopilot configs from localStorage');
     return {};
   }
 }
@@ -840,7 +843,7 @@ export function saveChatAutopilotConfigs(configs: Record<string, ChatAutopilotCo
   try {
     localStorage.setItem(AUTOPILOT_CHAT_CONFIGS_KEY, JSON.stringify(configs));
   } catch {
-    console.error('Failed to save chat autopilot configs to localStorage');
+    logger.error('Failed to save chat autopilot configs to localStorage');
   }
 }
 
@@ -879,7 +882,7 @@ export function loadAutopilotActivity(): AutopilotActivityEntry[] {
     if (!stored) return [];
     return JSON.parse(stored) as AutopilotActivityEntry[];
   } catch {
-    console.error('Failed to load autopilot activity from localStorage');
+    logger.error('Failed to load autopilot activity from localStorage');
     return [];
   }
 }
@@ -890,7 +893,7 @@ export function saveAutopilotActivity(entries: AutopilotActivityEntry[]): void {
   try {
     localStorage.setItem(AUTOPILOT_ACTIVITY_KEY, JSON.stringify(entries));
   } catch {
-    console.error('Failed to save autopilot activity to localStorage');
+    logger.error('Failed to save autopilot activity to localStorage');
   }
 }
 
@@ -929,7 +932,7 @@ export function loadScheduledActions(): ScheduledAutopilotAction[] {
     if (!stored) return [];
     return JSON.parse(stored) as ScheduledAutopilotAction[];
   } catch {
-    console.error('Failed to load scheduled actions from localStorage');
+    logger.error('Failed to load scheduled actions from localStorage');
     return [];
   }
 }
@@ -940,7 +943,7 @@ export function saveScheduledActions(actions: ScheduledAutopilotAction[]): void 
   try {
     localStorage.setItem(AUTOPILOT_SCHEDULED_KEY, JSON.stringify(actions));
   } catch {
-    console.error('Failed to save scheduled actions to localStorage');
+    logger.error('Failed to save scheduled actions to localStorage');
   }
 }
 
@@ -1016,7 +1019,7 @@ export function loadHandoffSummaries(): Record<string, ConversationHandoffSummar
     if (!stored) return {};
     return JSON.parse(stored) as Record<string, ConversationHandoffSummary>;
   } catch {
-    console.error('Failed to load handoff summaries from localStorage');
+    logger.error('Failed to load handoff summaries from localStorage');
     return {};
   }
 }
@@ -1027,7 +1030,7 @@ export function saveHandoffSummaries(summaries: Record<string, ConversationHando
   try {
     localStorage.setItem(AUTOPILOT_HANDOFFS_KEY, JSON.stringify(summaries));
   } catch {
-    console.error('Failed to save handoff summaries to localStorage');
+    logger.error('Failed to save handoff summaries to localStorage');
   }
 }
 

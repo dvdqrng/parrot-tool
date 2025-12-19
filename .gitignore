@@ -18,7 +18,11 @@
 /out/
 
 # production
-/build
+# /build  # Commented out - we need build/ for Electron assets
+
+# electron-builder output
+/dist
+dist-electron
 
 # misc
 .DS_Store

@@ -4,6 +4,7 @@ import React, { createContext, useContext, useCallback, useState, useRef } from 
 import { BeeperMessage, ConversationHandoffSummary } from '@/lib/types';
 import { useAutopilotEngine } from '@/hooks/use-autopilot-engine';
 import { toast } from 'sonner';
+import { logger } from '@/lib/logger';
 
 interface AutopilotContextValue {
   // Engine state
@@ -70,7 +71,7 @@ export function AutopilotProvider({ children }: { children: React.ReactNode }) {
   });
 
   const processNewMessages = useCallback((messages: BeeperMessage[]) => {
-    console.log('[Autopilot Context] processNewMessages called', { totalMessages: messages.length });
+    logger.autopilot('processNewMessages called', { totalMessages: messages.length });
 
     // Filter to only new, unread messages not from us
     const newMessages = messages.filter(m => {
@@ -80,14 +81,14 @@ export function AutopilotProvider({ children }: { children: React.ReactNode }) {
       return true;
     });
 
-    console.log('[Autopilot Context] Filtered to new messages', {
+    logger.autopilot('Filtered to new messages', {
       newCount: newMessages.length,
       messages: newMessages.map(m => ({ id: m.id, chatId: m.chatId, text: m.text?.slice(0, 30) }))
     });
 
     // Process each new message
     for (const message of newMessages) {
-      console.log('[Autopilot Context] Processing message', { id: message.id, chatId: message.chatId });
+      logger.autopilot('Processing message', { id: message.id, chatId: message.chatId });
       processedMessageIds.current.add(message.id);
       engine.handleIncomingMessage(message);
     }
@@ -103,7 +104,7 @@ export function AutopilotProvider({ children }: { children: React.ReactNode }) {
   // Trigger processing for a specific chat - used when autopilot is just enabled
   // This bypasses deduplication and activity hours checks to ensure immediate action
   const triggerChatProcessing = useCallback((chatId: string, message: BeeperMessage) => {
-    console.log('[Autopilot Context] triggerChatProcessing called', { chatId, messageId: message.id, text: message.text?.slice(0, 30) });
+    logger.autopilot('triggerChatProcessing called', { chatId, messageId: message.id, text: message.text?.slice(0, 30) });
     // Remove the message ID from processed set so it can be reprocessed
     processedMessageIds.current.delete(message.id);
     // Now process it with forceProcess=true to bypass engine's deduplication AND activity hours
@@ -115,7 +116,7 @@ export function AutopilotProvider({ children }: { children: React.ReactNode }) {
   }, [engine]);
 
   const generateProactiveMessage = useCallback((chatId: string) => {
-    console.log('[Autopilot Context] generateProactiveMessage called', { chatId });
+    logger.autopilot('generateProactiveMessage called', { chatId });
     engine.generateProactiveMessage(chatId);
   }, [engine]);
 

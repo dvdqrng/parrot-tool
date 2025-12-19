@@ -1,13 +1,21 @@
 {
   "name": "beeper-kanban",
   "version": "0.1.0",
+  "description": "A Kanban board for managing Beeper messages with AI assistance",
+  "main": "electron.js",
+  "author": "Your Name",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "electron": "electron electron.js"
+    "electron:dev": "NODE_ENV=development electron electron.js",
+    "electron:build": "npm run build && electron-builder",
+    "electron:build:mac": "npm run build && electron-builder --mac",
+    "electron:build:win": "npm run build && electron-builder --win",
+    "electron:build:linux": "npm run build && electron-builder --linux",
+    "pack": "npm run build && electron-builder --dir"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.71.2",
