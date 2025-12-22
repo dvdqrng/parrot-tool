@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { logger } from '@/lib/logger';
 import { getBeeperClient, getPlatformFromAccountId } from '@/lib/beeper-client';
 
 interface UserMessage {
@@ -48,7 +49,7 @@ export async function GET(request: NextRequest) {
         }
       } catch (chatError) {
         // Skip chats that fail to load
-        console.error(`Error fetching messages for chat ${chat.id}:`, chatError);
+        logger.error(`Error fetching messages for chat ${chat.id}:`, chatError instanceof Error ? chatError : String(chatError));
         continue;
       }
     }
@@ -61,7 +62,7 @@ export async function GET(request: NextRequest) {
       },
     });
   } catch (error) {
-    console.error('Error fetching user messages:', error);
+    logger.error('Error fetching user messages:', error instanceof Error ? error : String(error));
     return NextResponse.json(
       { error: 'Failed to fetch user messages. Make sure Beeper Desktop is running.' },
       { status: 500 }

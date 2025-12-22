@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { logger } from '@/lib/logger';
 import { listOllamaModels, checkOllamaHealth, RECOMMENDED_MODELS } from '@/lib/ollama';
 
 export async function GET(request: NextRequest) {
@@ -35,7 +36,7 @@ export async function GET(request: NextRequest) {
       }
     });
   } catch (error) {
-    console.error('Error checking Ollama:', error);
+    logger.error('Error checking Ollama:', error instanceof Error ? error : String(error));
     return NextResponse.json({
       data: {
         available: false,

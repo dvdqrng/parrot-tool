@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { logger } from '@/lib/logger';
 import { getBeeperClient, getPlatformFromAccountId } from '@/lib/beeper-client';
 import { BeeperChat, BeeperMessage, BeeperAttachment } from '@/lib/types';
 
@@ -123,7 +124,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ data: chats });
   } catch (error) {
-    console.error('Error fetching chats:', error);
+    logger.error('Error fetching chats:', error instanceof Error ? error : String(error));
     return NextResponse.json(
       { error: 'Failed to fetch chats. Make sure Beeper Desktop is running.' },
       { status: 500 }

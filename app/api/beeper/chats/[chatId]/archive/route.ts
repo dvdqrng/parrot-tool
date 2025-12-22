@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { logger } from '@/lib/logger';
 import { getBeeperClient } from '@/lib/beeper-client';
 
 export async function POST(
@@ -23,7 +24,7 @@ export async function POST(
       return NextResponse.json({ success: true });
     }
 
-    console.error('Error archiving chat:', error);
+    logger.error('Error archiving chat:', error instanceof Error ? error : String(error));
     // Extract detailed error info
     let errorMessage = 'Unknown error';
     if (error instanceof Error) {

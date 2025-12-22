@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import { logger } from '@/lib/logger';
 import { MessageSquare, Sparkles, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -395,7 +396,7 @@ export function ToneSettingsSection() {
         toast.info('No messages found to analyze');
       }
     } catch (error) {
-      console.error('Error analyzing tone:', error);
+      logger.error('Error analyzing tone:', error instanceof Error ? error : String(error));
       toast.error('Failed to analyze messages. Make sure Beeper Desktop is running.');
     } finally {
       setIsAnalyzing(false);

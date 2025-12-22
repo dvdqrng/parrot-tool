@@ -14,39 +14,24 @@ import {
 import { emitActivityAdded, emitActionScheduled, emitConfigChanged } from './autopilot-events';
 import { logger } from './logger';
 import { STORAGE_KEYS } from './constants';
+import { StorageManager, MapStorageManager, SetStorageManager, TimestampedStorageManager } from './storage-manager';
 
-// Use centralized storage keys
-const DRAFTS_KEY = STORAGE_KEYS.DRAFTS;
-const SETTINGS_KEY = STORAGE_KEYS.SETTINGS;
-const MESSAGES_KEY = STORAGE_KEYS.MESSAGES;
-const ACCOUNTS_KEY = STORAGE_KEYS.ACCOUNTS;
-const AVATARS_KEY = STORAGE_KEYS.AVATARS;
-const CHAT_INFO_KEY = STORAGE_KEYS.CHAT_INFO;
-const CACHE_TIMESTAMP_KEY = STORAGE_KEYS.CACHE_TIMESTAMP;
+// Create storage manager instances
+const draftsManager = new StorageManager<Draft[]>(STORAGE_KEYS.DRAFTS, [], 'drafts');
+const settingsManager = new StorageManager<AppSettings>(STORAGE_KEYS.SETTINGS, { selectedAccountIds: [] }, 'settings');
+const messagesManager = new TimestampedStorageManager<BeeperMessage[]>(STORAGE_KEYS.MESSAGES, [], 'messages');
+const accountsManager = new TimestampedStorageManager<BeeperAccount[]>(STORAGE_KEYS.ACCOUNTS, [], 'accounts');
+const avatarsManager = new MapStorageManager<string, string>(STORAGE_KEYS.AVATARS, 'avatars');
+const chatInfoManager = new MapStorageManager<string, { isGroup: boolean; title?: string }>(STORAGE_KEYS.CHAT_INFO, 'chatInfo');
 
 // Draft storage
 
 export function loadDrafts(): Draft[] {
-  if (typeof window === 'undefined') return [];
-
-  try {
-    const stored = localStorage.getItem(DRAFTS_KEY);
-    if (!stored) return [];
-    return JSON.parse(stored) as Draft[];
-  } catch (error) {
-    logger.error('Failed to load drafts from localStorage', error);
-    return [];
-  }
+  return draftsManager.load();
 }
 
 export function saveDrafts(drafts: Draft[]): void {
-  if (typeof window === 'undefined') return;
-
-  try {
-    localStorage.setItem(DRAFTS_KEY, JSON.stringify(drafts));
-  } catch (error) {
-    logger.error('Failed to save drafts to localStorage', error);
-  }
+  draftsManager.save(drafts);
 }
 
 export function addDraft(draft: Draft): Draft[] {
@@ -104,7 +89,7 @@ export function updateDraftRecipientNames(nameMap: Record<string, { name: string
 
     return updatedCount;
   } catch (error) {
-    logger.error('Failed to update draft recipient names', error);
+    logger.error('Failed to update draft recipient names', error instanceof Error ? error : String(error));
     return 0;
   }
 }
@@ -112,28 +97,11 @@ export function updateDraftRecipientNames(nameMap: Record<string, { name: string
 // Settings storage
 
 export function loadSettings(): AppSettings {
-  if (typeof window === 'undefined') {
-    return { selectedAccountIds: [] };
-  }
-
-  try {
-    const stored = localStorage.getItem(SETTINGS_KEY);
-    if (!stored) return { selectedAccountIds: [] };
-    return JSON.parse(stored) as AppSettings;
-  } catch (error) {
-    logger.error('Failed to load settings from localStorage', error);
-    return { selectedAccountIds: [] };
-  }
+  return settingsManager.load();
 }
 
 export function saveSettings(settings: AppSettings): void {
-  if (typeof window === 'undefined') return;
-
-  try {
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
-  } catch {
-    logger.error('Failed to save settings to localStorage');
-  }
+  settingsManager.save(settings);
 }
 
 // Generate unique ID for drafts
@@ -144,27 +112,11 @@ export function generateId(): string {
 // Message cache storage
 
 export function loadCachedMessages(): BeeperMessage[] {
-  if (typeof window === 'undefined') return [];
-
-  try {
-    const stored = localStorage.getItem(MESSAGES_KEY);
-    if (!stored) return [];
-    return JSON.parse(stored) as BeeperMessage[];
-  } catch {
-    logger.error('Failed to load messages from localStorage');
-    return [];
-  }
+  return messagesManager.load();
 }
 
 export function saveCachedMessages(messages: BeeperMessage[]): void {
-  if (typeof window === 'undefined') return;
-
-  try {
-    localStorage.setItem(MESSAGES_KEY, JSON.stringify(messages));
-    localStorage.setItem(`${CACHE_TIMESTAMP_KEY}-messages`, Date.now().toString());
-  } catch {
-    logger.error('Failed to save messages to localStorage');
-  }
+  messagesManager.save(messages);
 }
 
 export function getCachedMessageById(messageId: string): BeeperMessage | undefined {
@@ -202,7 +154,7 @@ export function updateCachedMessageNames(nameMap: Record<string, { name: string;
 
     return updatedCount;
   } catch (error) {
-    logger.error('Failed to update cached message names:', error);
+    logger.error('Failed to update cached message names:', error instanceof Error ? error : String(error));
     return 0;
   }
 }
@@ -210,59 +162,25 @@ export function updateCachedMessageNames(nameMap: Record<string, { name: string;
 // Account cache storage
 
 export function loadCachedAccounts(): BeeperAccount[] {
-  if (typeof window === 'undefined') return [];
-
-  try {
-    const stored = localStorage.getItem(ACCOUNTS_KEY);
-    if (!stored) return [];
-    return JSON.parse(stored) as BeeperAccount[];
-  } catch {
-    logger.error('Failed to load accounts from localStorage');
-    return [];
-  }
+  return accountsManager.load();
 }
 
 export function saveCachedAccounts(accounts: BeeperAccount[]): void {
-  if (typeof window === 'undefined') return;
-
-  try {
-    localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accounts));
-    localStorage.setItem(`${CACHE_TIMESTAMP_KEY}-accounts`, Date.now().toString());
-  } catch {
-    logger.error('Failed to save accounts to localStorage');
-  }
+  accountsManager.save(accounts);
 }
 
 // Avatar cache storage (chatId -> avatarUrl)
 
 export function loadCachedAvatars(): Record<string, string> {
-  if (typeof window === 'undefined') return {};
-
-  try {
-    const stored = localStorage.getItem(AVATARS_KEY);
-    if (!stored) return {};
-    return JSON.parse(stored) as Record<string, string>;
-  } catch {
-    logger.error('Failed to load avatars from localStorage');
-    return {};
-  }
+  return avatarsManager.load();
 }
 
 export function saveCachedAvatars(avatars: Record<string, string>): void {
-  if (typeof window === 'undefined') return;
-
-  try {
-    localStorage.setItem(AVATARS_KEY, JSON.stringify(avatars));
-  } catch {
-    logger.error('Failed to save avatars to localStorage');
-  }
+  avatarsManager.save(avatars);
 }
 
 export function mergeCachedAvatars(newAvatars: Record<string, string>): Record<string, string> {
-  const existing = loadCachedAvatars();
-  const merged = { ...existing, ...newAvatars };
-  saveCachedAvatars(merged);
-  return merged;
+  return avatarsManager.merge(newAvatars);
 }
 
 // Chat info cache storage (chatId -> { isGroup, title })
@@ -272,34 +190,125 @@ export interface CachedChatInfo {
 }
 
 export function loadCachedChatInfo(): Record<string, CachedChatInfo> {
-  if (typeof window === 'undefined') return {};
-
-  try {
-    const stored = localStorage.getItem(CHAT_INFO_KEY);
-    if (!stored) return {};
-    return JSON.parse(stored) as Record<string, CachedChatInfo>;
-  } catch {
-    logger.error('Failed to load chat info from localStorage');
-    return {};
-  }
+  return chatInfoManager.load();
 }
 
 export function saveCachedChatInfo(chatInfo: Record<string, CachedChatInfo>): void {
-  if (typeof window === 'undefined') return;
-
-  try {
-    localStorage.setItem(CHAT_INFO_KEY, JSON.stringify(chatInfo));
-  } catch {
-    logger.error('Failed to save chat info to localStorage');
-  }
+  chatInfoManager.save(chatInfo);
 }
 
 export function mergeCachedChatInfo(newChatInfo: Record<string, CachedChatInfo>): Record<string, CachedChatInfo> {
-  const existing = loadCachedChatInfo();
-  const merged = { ...existing, ...newChatInfo };
-  saveCachedChatInfo(merged);
-  return merged;
+  return chatInfoManager.merge(newChatInfo);
 }
+
+// Create manager instances for hidden chats
+const hiddenChatsManager = new SetStorageManager<string>(STORAGE_KEYS.HIDDEN_CHATS, 'hiddenChats');
+
+// Hidden chats metadata storage
+export interface HiddenChatInfo {
+  chatId: string;
+  name: string;
+  avatarUrl?: string;
+  platform?: string;
+}
+
+const hiddenChatsMetaManager = new StorageManager<HiddenChatInfo[]>(
+  STORAGE_KEYS.HIDDEN_CHATS_META,
+  [],
+  'hiddenChatsMeta'
+);
+
+// Define default values for tone and writing style
+const DEFAULT_TONE_SETTINGS: ToneSettings = {
+  briefDetailed: 50,
+  formalCasual: 50,
+};
+
+const DEFAULT_WRITING_STYLE: WritingStylePatterns = {
+  sampleMessages: [],
+  commonPhrases: [],
+  frequentEmojis: [],
+  greetingPatterns: [],
+  signOffPatterns: [],
+  punctuationStyle: {
+    usesMultipleExclamation: false,
+    usesEllipsis: false,
+    usesAllCaps: false,
+    endsWithPunctuation: true,
+  },
+  capitalizationStyle: 'proper',
+  avgWordsPerMessage: 10,
+  abbreviations: [],
+  languageQuirks: [],
+};
+
+// Create manager instances for tone and writing style
+const toneSettingsManager = new StorageManager<ToneSettings>(
+  STORAGE_KEYS.TONE_SETTINGS,
+  DEFAULT_TONE_SETTINGS,
+  'toneSettings'
+);
+
+const writingStyleManager = new StorageManager<WritingStylePatterns>(
+  STORAGE_KEYS.WRITING_STYLE,
+  DEFAULT_WRITING_STYLE,
+  'writingStyle'
+);
+
+// User messages cache interface and manager
+export interface CachedUserMessage {
+  id: string;
+  chatId: string;
+  text: string;
+  timestamp: string;
+}
+
+const userMessagesCacheManager = new StorageManager<CachedUserMessage[]>(
+  STORAGE_KEYS.USER_MESSAGES,
+  [],
+  'userMessagesCache'
+);
+
+// AI Chat history interface and manager
+export interface AiChatMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+export interface AiChatHistory {
+  [chatId: string]: AiChatMessage[];
+}
+
+const aiChatHistoryManager = new MapStorageManager<string, AiChatMessage[]>(
+  STORAGE_KEYS.AI_CHAT_HISTORY,
+  'aiChatHistory'
+);
+
+// Thread context interfaces and manager
+export interface ThreadContextMessage {
+  id: string;
+  text: string;
+  isFromMe: boolean;
+  senderName: string;
+  timestamp: string;
+}
+
+export interface ThreadContext {
+  chatId: string;
+  senderName: string;
+  messages: ThreadContextMessage[];
+  lastUpdated: string;
+}
+
+export interface ThreadContextStore {
+  [chatId: string]: ThreadContext;
+}
+
+const threadContextManager = new MapStorageManager<string, ThreadContext>(
+  STORAGE_KEYS.THREAD_CONTEXT,
+  'threadContext'
+);
 
 // Update cached chat info with correct names (e.g., when API fixes participant name resolution)
 export function updateCachedChatInfoTitles(nameMap: Record<string, string>): number {
@@ -327,249 +336,102 @@ export function updateCachedChatInfoTitles(nameMap: Record<string, string>): num
 
     return updatedCount;
   } catch (error) {
-    logger.error('Failed to update cached chat info titles:', error);
+    logger.error('Failed to update cached chat info titles:', error instanceof Error ? error : String(error));
     return 0;
   }
 }
 
-// Hidden chats storage with metadata
-const HIDDEN_CHATS_KEY = 'beeper-kanban-hidden-chats';
-const HIDDEN_CHATS_META_KEY = 'beeper-kanban-hidden-chats-meta';
-
-export interface HiddenChatInfo {
-  chatId: string;
-  name: string;
-  avatarUrl?: string;
-  platform?: string;
-}
-
+// Hidden chats storage functions using SetStorageManager
 export function loadHiddenChats(): Set<string> {
-  if (typeof window === 'undefined') return new Set();
-
-  try {
-    const stored = localStorage.getItem(HIDDEN_CHATS_KEY);
-    if (!stored) return new Set();
-    return new Set(JSON.parse(stored) as string[]);
-  } catch {
-    logger.error('Failed to load hidden chats from localStorage');
-    return new Set();
-  }
+  return hiddenChatsManager.load();
 }
 
 export function loadHiddenChatsWithMeta(): HiddenChatInfo[] {
-  if (typeof window === 'undefined') return [];
-
-  try {
-    const stored = localStorage.getItem(HIDDEN_CHATS_META_KEY);
-    if (!stored) {
-      // Fallback to old format - just IDs
-      const ids = loadHiddenChats();
-      return Array.from(ids).map(chatId => ({ chatId, name: chatId }));
-    }
-    return JSON.parse(stored) as HiddenChatInfo[];
-  } catch {
-    logger.error('Failed to load hidden chats meta from localStorage');
-    return [];
+  const meta = hiddenChatsMetaManager.load();
+  if (meta.length === 0) {
+    // Fallback to old format - just IDs
+    const ids = loadHiddenChats();
+    return Array.from(ids).map(chatId => ({ chatId, name: chatId }));
   }
+  return meta;
 }
 
 export function saveHiddenChats(hiddenChats: Set<string>): void {
-  if (typeof window === 'undefined') return;
-
-  try {
-    localStorage.setItem(HIDDEN_CHATS_KEY, JSON.stringify(Array.from(hiddenChats)));
-  } catch {
-    logger.error('Failed to save hidden chats to localStorage');
-  }
+  hiddenChatsManager.save(hiddenChats);
 }
 
 export function saveHiddenChatsWithMeta(hiddenChats: HiddenChatInfo[]): void {
-  if (typeof window === 'undefined') return;
-
-  try {
-    localStorage.setItem(HIDDEN_CHATS_META_KEY, JSON.stringify(hiddenChats));
-    // Also save the ID set for backwards compatibility
-    const ids = new Set(hiddenChats.map(h => h.chatId));
-    saveHiddenChats(ids);
-  } catch {
-    logger.error('Failed to save hidden chats meta to localStorage');
-  }
+  hiddenChatsMetaManager.save(hiddenChats);
+  // Also save the ID set for backwards compatibility
+  const ids = new Set(hiddenChats.map(h => h.chatId));
+  saveHiddenChats(ids);
 }
 
 export function addHiddenChat(chatId: string, name?: string, avatarUrl?: string, platform?: string): Set<string> {
-  const hiddenChats = loadHiddenChats();
-  hiddenChats.add(chatId);
-  saveHiddenChats(hiddenChats);
+  const updated = hiddenChatsManager.add(chatId);
 
   // Also save metadata
   const meta = loadHiddenChatsWithMeta();
   if (!meta.find(h => h.chatId === chatId)) {
-    meta.push({ chatId, name: name || chatId, avatarUrl, platform });
-    saveHiddenChatsWithMeta(meta);
+    hiddenChatsMetaManager.update(current => [
+      ...current,
+      { chatId, name: name || chatId, avatarUrl, platform }
+    ]);
   }
 
-  return hiddenChats;
+  return updated;
 }
 
 export function removeHiddenChat(chatId: string): Set<string> {
-  const hiddenChats = loadHiddenChats();
-  hiddenChats.delete(chatId);
-  saveHiddenChats(hiddenChats);
+  const updated = hiddenChatsManager.delete(chatId);
 
   // Also remove from metadata
-  const meta = loadHiddenChatsWithMeta();
-  const filtered = meta.filter(h => h.chatId !== chatId);
-  saveHiddenChatsWithMeta(filtered);
+  hiddenChatsMetaManager.update(current =>
+    current.filter(h => h.chatId !== chatId)
+  );
 
-  return hiddenChats;
+  return updated;
 }
 
 export function clearAllHiddenChats(): void {
-  if (typeof window === 'undefined') return;
-  localStorage.removeItem(HIDDEN_CHATS_KEY);
-  localStorage.removeItem(HIDDEN_CHATS_META_KEY);
+  hiddenChatsManager.clear();
+  hiddenChatsMetaManager.clear();
 }
 
-// Tone settings storage
-const TONE_SETTINGS_KEY = 'beeper-kanban-tone-settings';
-const WRITING_STYLE_KEY = 'beeper-kanban-writing-style';
-
-const DEFAULT_TONE_SETTINGS: ToneSettings = {
-  briefDetailed: 50,
-  formalCasual: 50,
-};
-
-const DEFAULT_WRITING_STYLE: WritingStylePatterns = {
-  sampleMessages: [],
-  commonPhrases: [],
-  frequentEmojis: [],
-  greetingPatterns: [],
-  signOffPatterns: [],
-  punctuationStyle: {
-    usesMultipleExclamation: false,
-    usesEllipsis: false,
-    usesAllCaps: false,
-    endsWithPunctuation: true,
-  },
-  capitalizationStyle: 'proper',
-  avgWordsPerMessage: 10,
-  abbreviations: [],
-  languageQuirks: [],
-};
-
+// Tone settings storage using StorageManager
 export function loadToneSettings(): ToneSettings {
-  if (typeof window === 'undefined') return DEFAULT_TONE_SETTINGS;
-
-  try {
-    const stored = localStorage.getItem(TONE_SETTINGS_KEY);
-    if (!stored) return DEFAULT_TONE_SETTINGS;
-    return JSON.parse(stored) as ToneSettings;
-  } catch {
-    logger.error('Failed to load tone settings from localStorage');
-    return DEFAULT_TONE_SETTINGS;
-  }
+  return toneSettingsManager.load();
 }
 
 export function saveToneSettings(settings: ToneSettings): void {
-  if (typeof window === 'undefined') return;
-
-  try {
-    localStorage.setItem(TONE_SETTINGS_KEY, JSON.stringify(settings));
-  } catch {
-    logger.error('Failed to save tone settings to localStorage');
-  }
+  toneSettingsManager.save(settings);
 }
 
+// Writing style storage using StorageManager
 export function loadWritingStylePatterns(): WritingStylePatterns {
-  if (typeof window === 'undefined') return DEFAULT_WRITING_STYLE;
-
-  try {
-    const stored = localStorage.getItem(WRITING_STYLE_KEY);
-    if (!stored) return DEFAULT_WRITING_STYLE;
-    return JSON.parse(stored) as WritingStylePatterns;
-  } catch {
-    logger.error('Failed to load writing style from localStorage');
-    return DEFAULT_WRITING_STYLE;
-  }
+  return writingStyleManager.load();
 }
 
 export function saveWritingStylePatterns(patterns: WritingStylePatterns): void {
-  if (typeof window === 'undefined') return;
-
-  try {
-    localStorage.setItem(WRITING_STYLE_KEY, JSON.stringify(patterns));
-  } catch {
-    logger.error('Failed to save writing style to localStorage');
-  }
+  writingStyleManager.save(patterns);
 }
 
-// User messages cache for tone analysis (stores actual sent messages from chat history)
-const USER_MESSAGES_CACHE_KEY = 'beeper-kanban-user-messages-cache';
-
-export interface CachedUserMessage {
-  id: string;
-  chatId: string;
-  text: string;
-  timestamp: string;
-}
-
+// User messages cache storage using StorageManager
 export function loadCachedUserMessages(): CachedUserMessage[] {
-  if (typeof window === 'undefined') return [];
-
-  try {
-    const stored = localStorage.getItem(USER_MESSAGES_CACHE_KEY);
-    if (!stored) return [];
-    return JSON.parse(stored) as CachedUserMessage[];
-  } catch {
-    logger.error('Failed to load user messages cache from localStorage');
-    return [];
-  }
+  return userMessagesCacheManager.load();
 }
 
 export function saveCachedUserMessages(messages: CachedUserMessage[]): void {
-  if (typeof window === 'undefined') return;
-
-  try {
-    localStorage.setItem(USER_MESSAGES_CACHE_KEY, JSON.stringify(messages));
-  } catch {
-    logger.error('Failed to save user messages cache to localStorage');
-  }
+  userMessagesCacheManager.save(messages);
 }
 
-// AI Chat history storage (per chat thread)
-const AI_CHAT_HISTORY_KEY = 'beeper-kanban-ai-chat-history';
-
-export interface AiChatMessage {
-  id: string;
-  role: 'user' | 'assistant';
-  content: string;
-}
-
-export interface AiChatHistory {
-  [chatId: string]: AiChatMessage[];
-}
-
+// AI Chat history storage using MapStorageManager
 export function loadAiChatHistory(): AiChatHistory {
-  if (typeof window === 'undefined') return {};
-
-  try {
-    const stored = localStorage.getItem(AI_CHAT_HISTORY_KEY);
-    if (!stored) return {};
-    return JSON.parse(stored) as AiChatHistory;
-  } catch {
-    logger.error('Failed to load AI chat history from localStorage');
-    return {};
-  }
+  return aiChatHistoryManager.load();
 }
 
 export function saveAiChatHistory(history: AiChatHistory): void {
-  if (typeof window === 'undefined') return;
-
-  try {
-    localStorage.setItem(AI_CHAT_HISTORY_KEY, JSON.stringify(history));
-  } catch {
-    logger.error('Failed to save AI chat history to localStorage');
-  }
+  aiChatHistoryManager.save(history);
 }
 
 export function getAiChatForThread(chatId: string): AiChatMessage[] {
@@ -578,54 +440,16 @@ export function getAiChatForThread(chatId: string): AiChatMessage[] {
 }
 
 export function saveAiChatForThread(chatId: string, messages: AiChatMessage[]): void {
-  const history = loadAiChatHistory();
-  history[chatId] = messages;
-  saveAiChatHistory(history);
+  aiChatHistoryManager.merge({ [chatId]: messages });
 }
 
-// Thread context storage (persistent conversation context per chat)
-const THREAD_CONTEXT_KEY = 'beeper-kanban-thread-context';
-
-export interface ThreadContextMessage {
-  id: string;
-  text: string;
-  isFromMe: boolean;
-  senderName: string;
-  timestamp: string;
-}
-
-export interface ThreadContext {
-  chatId: string;
-  senderName: string;
-  messages: ThreadContextMessage[];
-  lastUpdated: string;
-}
-
-export interface ThreadContextStore {
-  [chatId: string]: ThreadContext;
-}
-
+// Thread context storage using MapStorageManager
 export function loadThreadContextStore(): ThreadContextStore {
-  if (typeof window === 'undefined') return {};
-
-  try {
-    const stored = localStorage.getItem(THREAD_CONTEXT_KEY);
-    if (!stored) return {};
-    return JSON.parse(stored) as ThreadContextStore;
-  } catch {
-    logger.error('Failed to load thread context from localStorage');
-    return {};
-  }
+  return threadContextManager.load();
 }
 
 export function saveThreadContextStore(store: ThreadContextStore): void {
-  if (typeof window === 'undefined') return;
-
-  try {
-    localStorage.setItem(THREAD_CONTEXT_KEY, JSON.stringify(store));
-  } catch {
-    logger.error('Failed to save thread context to localStorage');
-  }
+  threadContextManager.save(store);
 }
 
 export function getThreadContext(chatId: string): ThreadContext | null {
@@ -634,14 +458,14 @@ export function getThreadContext(chatId: string): ThreadContext | null {
 }
 
 export function saveThreadContext(chatId: string, senderName: string, messages: ThreadContextMessage[]): void {
-  const store = loadThreadContextStore();
-  store[chatId] = {
-    chatId,
-    senderName,
-    messages,
-    lastUpdated: new Date().toISOString(),
-  };
-  saveThreadContextStore(store);
+  threadContextManager.merge({
+    [chatId]: {
+      chatId,
+      senderName,
+      messages,
+      lastUpdated: new Date().toISOString(),
+    }
+  });
 }
 
 export function updateThreadContextWithNewMessages(
@@ -702,27 +526,27 @@ export function clearAllData(): void {
   };
 
   const keysToRemove = [
-    DRAFTS_KEY,
-    SETTINGS_KEY,
-    MESSAGES_KEY,
-    ACCOUNTS_KEY,
-    AVATARS_KEY,
-    CHAT_INFO_KEY,
-    CACHE_TIMESTAMP_KEY,
-    `${CACHE_TIMESTAMP_KEY}-messages`,
-    `${CACHE_TIMESTAMP_KEY}-accounts`,
-    HIDDEN_CHATS_KEY,
-    HIDDEN_CHATS_META_KEY,
-    TONE_SETTINGS_KEY,
-    USER_MESSAGES_CACHE_KEY,
-    AI_CHAT_HISTORY_KEY,
-    THREAD_CONTEXT_KEY,
+    STORAGE_KEYS.DRAFTS,
+    STORAGE_KEYS.SETTINGS,
+    STORAGE_KEYS.MESSAGES,
+    STORAGE_KEYS.ACCOUNTS,
+    STORAGE_KEYS.AVATARS,
+    STORAGE_KEYS.CHAT_INFO,
+    STORAGE_KEYS.CACHE_TIMESTAMP,
+    `${STORAGE_KEYS.CACHE_TIMESTAMP}-messages`,
+    `${STORAGE_KEYS.CACHE_TIMESTAMP}-accounts`,
+    STORAGE_KEYS.HIDDEN_CHATS,
+    STORAGE_KEYS.HIDDEN_CHATS_META,
+    STORAGE_KEYS.TONE_SETTINGS,
+    STORAGE_KEYS.USER_MESSAGES,
+    STORAGE_KEYS.AI_CHAT_HISTORY,
+    STORAGE_KEYS.THREAD_CONTEXT,
     // Autopilot keys
-    'beeper-kanban-autopilot-agents',
-    'beeper-kanban-autopilot-chat-configs',
-    'beeper-kanban-autopilot-activity',
-    'beeper-kanban-autopilot-scheduled',
-    'beeper-kanban-autopilot-handoffs',
+    STORAGE_KEYS.AUTOPILOT_AGENTS,
+    STORAGE_KEYS.AUTOPILOT_CHAT_CONFIGS,
+    STORAGE_KEYS.AUTOPILOT_ACTIVITY,
+    STORAGE_KEYS.AUTOPILOT_SCHEDULED,
+    STORAGE_KEYS.AUTOPILOT_HANDOFFS,
   ];
 
   keysToRemove.forEach(key => {
@@ -738,16 +562,16 @@ export function clearCachedData(): void {
   if (typeof window === 'undefined') return;
 
   const keysToRemove = [
-    MESSAGES_KEY,
-    ACCOUNTS_KEY,
-    AVATARS_KEY,
-    CHAT_INFO_KEY,
-    CACHE_TIMESTAMP_KEY,
-    `${CACHE_TIMESTAMP_KEY}-messages`,
-    `${CACHE_TIMESTAMP_KEY}-accounts`,
-    USER_MESSAGES_CACHE_KEY,
-    THREAD_CONTEXT_KEY,
-    AI_CHAT_HISTORY_KEY, // Also clear AI chat history as it contains participant names
+    STORAGE_KEYS.MESSAGES,
+    STORAGE_KEYS.ACCOUNTS,
+    STORAGE_KEYS.AVATARS,
+    STORAGE_KEYS.CHAT_INFO,
+    STORAGE_KEYS.CACHE_TIMESTAMP,
+    `${STORAGE_KEYS.CACHE_TIMESTAMP}-messages`,
+    `${STORAGE_KEYS.CACHE_TIMESTAMP}-accounts`,
+    STORAGE_KEYS.USER_MESSAGES,
+    STORAGE_KEYS.THREAD_CONTEXT,
+    STORAGE_KEYS.AI_CHAT_HISTORY, // Also clear AI chat history as it contains participant names
   ];
 
   keysToRemove.forEach(key => {
@@ -759,92 +583,75 @@ export function clearCachedData(): void {
 // AUTOPILOT STORAGE
 // ============================================
 
-const AUTOPILOT_AGENTS_KEY = 'beeper-kanban-autopilot-agents';
-const AUTOPILOT_CHAT_CONFIGS_KEY = 'beeper-kanban-autopilot-chat-configs';
-const AUTOPILOT_ACTIVITY_KEY = 'beeper-kanban-autopilot-activity';
-const AUTOPILOT_SCHEDULED_KEY = 'beeper-kanban-autopilot-scheduled';
-const AUTOPILOT_HANDOFFS_KEY = 'beeper-kanban-autopilot-handoffs';
+// Create manager instances for autopilot storage
+const autopilotAgentsManager = new StorageManager<AutopilotAgent[]>(
+  STORAGE_KEYS.AUTOPILOT_AGENTS,
+  [],
+  'autopilotAgents'
+);
+
+const chatAutopilotConfigsManager = new MapStorageManager<string, ChatAutopilotConfig>(
+  STORAGE_KEYS.AUTOPILOT_CHAT_CONFIGS,
+  'chatAutopilotConfigs'
+);
+
+const autopilotActivityManager = new StorageManager<AutopilotActivityEntry[]>(
+  STORAGE_KEYS.AUTOPILOT_ACTIVITY,
+  [],
+  'autopilotActivity'
+);
+
+const scheduledActionsManager = new StorageManager<ScheduledAutopilotAction[]>(
+  STORAGE_KEYS.AUTOPILOT_SCHEDULED,
+  [],
+  'scheduledActions'
+);
+
+const autopilotHandoffsManager = new MapStorageManager<string, ConversationHandoffSummary>(
+  STORAGE_KEYS.AUTOPILOT_HANDOFFS,
+  'autopilotHandoffs'
+);
 
 const MAX_ACTIVITY_ENTRIES = 500;
 
-// Agent CRUD operations
-
+// Agent CRUD operations using StorageManager
 export function loadAutopilotAgents(): AutopilotAgent[] {
-  if (typeof window === 'undefined') return [];
-
-  try {
-    const stored = localStorage.getItem(AUTOPILOT_AGENTS_KEY);
-    if (!stored) return [];
-    return JSON.parse(stored) as AutopilotAgent[];
-  } catch {
-    logger.error('Failed to load autopilot agents from localStorage');
-    return [];
-  }
+  return autopilotAgentsManager.load();
 }
 
 export function saveAutopilotAgents(agents: AutopilotAgent[]): void {
-  if (typeof window === 'undefined') return;
-
-  try {
-    localStorage.setItem(AUTOPILOT_AGENTS_KEY, JSON.stringify(agents));
-  } catch {
-    logger.error('Failed to save autopilot agents to localStorage');
-  }
+  autopilotAgentsManager.save(agents);
 }
 
 export function getAutopilotAgentById(id: string): AutopilotAgent | undefined {
-  const agents = loadAutopilotAgents();
-  return agents.find(a => a.id === id);
+  return loadAutopilotAgents().find(a => a.id === id);
 }
 
 export function addAutopilotAgent(agent: AutopilotAgent): AutopilotAgent[] {
-  const agents = loadAutopilotAgents();
-  const updated = [...agents, agent];
-  saveAutopilotAgents(updated);
-  return updated;
+  return autopilotAgentsManager.update(current => [...current, agent]);
 }
 
 export function updateAutopilotAgent(id: string, updates: Partial<AutopilotAgent>): AutopilotAgent[] {
-  const agents = loadAutopilotAgents();
-  const updated = agents.map(a =>
-    a.id === id
-      ? { ...a, ...updates, updatedAt: new Date().toISOString() }
-      : a
+  return autopilotAgentsManager.update(agents =>
+    agents.map(a =>
+      a.id === id
+        ? { ...a, ...updates, updatedAt: new Date().toISOString() }
+        : a
+    )
   );
-  saveAutopilotAgents(updated);
-  return updated;
 }
 
 export function deleteAutopilotAgent(id: string): AutopilotAgent[] {
-  const agents = loadAutopilotAgents();
-  const updated = agents.filter(a => a.id !== id);
-  saveAutopilotAgents(updated);
-  return updated;
+  return autopilotAgentsManager.update(agents => agents.filter(a => a.id !== id));
 }
 
-// Chat autopilot config operations
-
+// Chat autopilot config operations using MapStorageManager
 export function loadChatAutopilotConfigs(): Record<string, ChatAutopilotConfig> {
-  if (typeof window === 'undefined') return {};
-
-  try {
-    const stored = localStorage.getItem(AUTOPILOT_CHAT_CONFIGS_KEY);
-    if (!stored) return {};
-    return JSON.parse(stored) as Record<string, ChatAutopilotConfig>;
-  } catch {
-    logger.error('Failed to load chat autopilot configs from localStorage');
-    return {};
-  }
+  return chatAutopilotConfigsManager.load();
 }
 
 export function saveChatAutopilotConfigs(configs: Record<string, ChatAutopilotConfig>): void {
-  if (typeof window === 'undefined') return;
-
-  try {
-    localStorage.setItem(AUTOPILOT_CHAT_CONFIGS_KEY, JSON.stringify(configs));
-  } catch {
-    logger.error('Failed to save chat autopilot configs to localStorage');
-  }
+  chatAutopilotConfigsManager.save(configs);
 }
 
 export function getChatAutopilotConfig(chatId: string): ChatAutopilotConfig | null {
@@ -853,18 +660,16 @@ export function getChatAutopilotConfig(chatId: string): ChatAutopilotConfig | nu
 }
 
 export function saveChatAutopilotConfig(config: ChatAutopilotConfig): void {
-  const configs = loadChatAutopilotConfigs();
-  configs[config.chatId] = { ...config, updatedAt: new Date().toISOString() };
-  saveChatAutopilotConfigs(configs);
+  chatAutopilotConfigsManager.merge({
+    [config.chatId]: { ...config, updatedAt: new Date().toISOString() }
+  });
 
   // Emit event for real-time updates
   emitConfigChanged(config.chatId);
 }
 
 export function deleteChatAutopilotConfig(chatId: string): void {
-  const configs = loadChatAutopilotConfigs();
-  delete configs[chatId];
-  saveChatAutopilotConfigs(configs);
+  chatAutopilotConfigsManager.delete(chatId);
 }
 
 export function getActiveAutopilotChats(): ChatAutopilotConfig[] {
@@ -872,102 +677,60 @@ export function getActiveAutopilotChats(): ChatAutopilotConfig[] {
   return Object.values(configs).filter(c => c.enabled && c.status === 'active');
 }
 
-// Activity log operations
-
+// Activity log operations using StorageManager
 export function loadAutopilotActivity(): AutopilotActivityEntry[] {
-  if (typeof window === 'undefined') return [];
-
-  try {
-    const stored = localStorage.getItem(AUTOPILOT_ACTIVITY_KEY);
-    if (!stored) return [];
-    return JSON.parse(stored) as AutopilotActivityEntry[];
-  } catch {
-    logger.error('Failed to load autopilot activity from localStorage');
-    return [];
-  }
+  return autopilotActivityManager.load();
 }
 
 export function saveAutopilotActivity(entries: AutopilotActivityEntry[]): void {
-  if (typeof window === 'undefined') return;
-
-  try {
-    localStorage.setItem(AUTOPILOT_ACTIVITY_KEY, JSON.stringify(entries));
-  } catch {
-    logger.error('Failed to save autopilot activity to localStorage');
-  }
+  autopilotActivityManager.save(entries);
 }
 
 export function addAutopilotActivityEntry(entry: AutopilotActivityEntry): void {
-  const entries = loadAutopilotActivity();
-  entries.push(entry);
-
-  // Prune if over limit
-  const pruned = entries.length > MAX_ACTIVITY_ENTRIES
-    ? entries.slice(-MAX_ACTIVITY_ENTRIES)
-    : entries;
-
-  saveAutopilotActivity(pruned);
+  autopilotActivityManager.update(entries => {
+    const updated = [...entries, entry];
+    // Prune if over limit
+    return updated.length > MAX_ACTIVITY_ENTRIES
+      ? updated.slice(-MAX_ACTIVITY_ENTRIES)
+      : updated;
+  });
 
   // Emit event for real-time updates
   emitActivityAdded(entry.chatId, entry.type);
 }
 
 export function getActivityForChat(chatId: string): AutopilotActivityEntry[] {
-  const entries = loadAutopilotActivity();
-  return entries.filter(e => e.chatId === chatId);
+  return loadAutopilotActivity().filter(e => e.chatId === chatId);
 }
 
 export function clearAutopilotActivity(): void {
-  if (typeof window === 'undefined') return;
-  localStorage.removeItem(AUTOPILOT_ACTIVITY_KEY);
+  autopilotActivityManager.clear();
 }
 
-// Scheduled actions operations
-
+// Scheduled actions operations using StorageManager
 export function loadScheduledActions(): ScheduledAutopilotAction[] {
-  if (typeof window === 'undefined') return [];
-
-  try {
-    const stored = localStorage.getItem(AUTOPILOT_SCHEDULED_KEY);
-    if (!stored) return [];
-    return JSON.parse(stored) as ScheduledAutopilotAction[];
-  } catch {
-    logger.error('Failed to load scheduled actions from localStorage');
-    return [];
-  }
+  return scheduledActionsManager.load();
 }
 
 export function saveScheduledActions(actions: ScheduledAutopilotAction[]): void {
-  if (typeof window === 'undefined') return;
-
-  try {
-    localStorage.setItem(AUTOPILOT_SCHEDULED_KEY, JSON.stringify(actions));
-  } catch {
-    logger.error('Failed to save scheduled actions to localStorage');
-  }
+  scheduledActionsManager.save(actions);
 }
 
 export function addScheduledAction(action: ScheduledAutopilotAction): void {
-  const actions = loadScheduledActions();
-  actions.push(action);
-  saveScheduledActions(actions);
+  scheduledActionsManager.update(actions => [...actions, action]);
 
   // Emit event for real-time updates
   emitActionScheduled(action.chatId, action.id, action.scheduledFor);
 }
 
 export function updateScheduledAction(id: string, updates: Partial<ScheduledAutopilotAction>): void {
-  const actions = loadScheduledActions();
-  const updated = actions.map(a =>
-    a.id === id ? { ...a, ...updates } : a
+  scheduledActionsManager.update(actions =>
+    actions.map(a => a.id === id ? { ...a, ...updates } : a)
   );
-  saveScheduledActions(updated);
 }
 
 export function deleteScheduledAction(id: string): void {
-  const actions = loadScheduledActions();
-  const updated = actions.filter(a => a.id !== id);
-  saveScheduledActions(updated);
+  scheduledActionsManager.update(actions => actions.filter(a => a.id !== id));
 }
 
 export function getNextPendingAction(): ScheduledAutopilotAction | null {
@@ -983,55 +746,37 @@ export function getNextPendingAction(): ScheduledAutopilotAction | null {
 }
 
 export function getPendingActionsForChat(chatId: string): ScheduledAutopilotAction[] {
-  const actions = loadScheduledActions();
-  return actions.filter(a => a.chatId === chatId && a.status === 'pending');
+  return loadScheduledActions().filter(a => a.chatId === chatId && a.status === 'pending');
 }
 
 export function cancelActionsForChat(chatId: string): void {
-  const actions = loadScheduledActions();
-  const updated = actions.map(a =>
-    a.chatId === chatId && a.status === 'pending'
-      ? { ...a, status: 'cancelled' as const }
-      : a
+  scheduledActionsManager.update(actions =>
+    actions.map(a =>
+      a.chatId === chatId && a.status === 'pending'
+        ? { ...a, status: 'cancelled' as const }
+        : a
+    )
   );
-  saveScheduledActions(updated);
 }
 
 export function cleanupCompletedActions(): void {
-  const actions = loadScheduledActions();
-  // Keep only pending and executing actions, plus failed ones from last 24 hours
   const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-  const updated = actions.filter(a =>
-    a.status === 'pending' ||
-    a.status === 'executing' ||
-    (a.status === 'failed' && a.createdAt > oneDayAgo)
+  scheduledActionsManager.update(actions =>
+    actions.filter(a =>
+      a.status === 'pending' ||
+      a.status === 'executing' ||
+      (a.status === 'failed' && a.createdAt > oneDayAgo)
+    )
   );
-  saveScheduledActions(updated);
 }
 
-// Handoff summaries operations
-
+// Handoff summaries operations using MapStorageManager
 export function loadHandoffSummaries(): Record<string, ConversationHandoffSummary> {
-  if (typeof window === 'undefined') return {};
-
-  try {
-    const stored = localStorage.getItem(AUTOPILOT_HANDOFFS_KEY);
-    if (!stored) return {};
-    return JSON.parse(stored) as Record<string, ConversationHandoffSummary>;
-  } catch {
-    logger.error('Failed to load handoff summaries from localStorage');
-    return {};
-  }
+  return autopilotHandoffsManager.load();
 }
 
 export function saveHandoffSummaries(summaries: Record<string, ConversationHandoffSummary>): void {
-  if (typeof window === 'undefined') return;
-
-  try {
-    localStorage.setItem(AUTOPILOT_HANDOFFS_KEY, JSON.stringify(summaries));
-  } catch {
-    logger.error('Failed to save handoff summaries to localStorage');
-  }
+  autopilotHandoffsManager.save(summaries);
 }
 
 export function getHandoffSummary(chatId: string): ConversationHandoffSummary | null {
@@ -1040,13 +785,9 @@ export function getHandoffSummary(chatId: string): ConversationHandoffSummary | 
 }
 
 export function saveHandoffSummary(summary: ConversationHandoffSummary): void {
-  const summaries = loadHandoffSummaries();
-  summaries[summary.chatId] = summary;
-  saveHandoffSummaries(summaries);
+  autopilotHandoffsManager.merge({ [summary.chatId]: summary });
 }
 
 export function deleteHandoffSummary(chatId: string): void {
-  const summaries = loadHandoffSummaries();
-  delete summaries[chatId];
-  saveHandoffSummaries(summaries);
+  autopilotHandoffsManager.delete(chatId);
 }

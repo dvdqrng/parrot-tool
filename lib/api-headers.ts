@@ -1,4 +1,26 @@
-import { AppSettings } from './types';
+import { AppSettings, AiProvider } from './types';
+
+/**
+ * Determine which AI provider to use based on settings
+ * Falls back intelligently based on available API keys
+ */
+export function getEffectiveAiProvider(settings: AppSettings): AiProvider {
+  // If explicitly set, use that
+  if (settings.aiProvider) {
+    return settings.aiProvider;
+  }
+
+  // Otherwise, auto-detect based on available keys
+  if (settings.openaiApiKey) {
+    return 'openai';
+  }
+  if (settings.anthropicApiKey) {
+    return 'anthropic';
+  }
+
+  // Default to ollama (doesn't require API key)
+  return 'ollama';
+}
 
 /**
  * Build headers for Beeper API requests
@@ -40,10 +62,13 @@ export function getAIHeaders(settings: AppSettings): HeadersInit {
   };
 
   // Add provider-specific headers
-  if (settings.aiProvider === 'anthropic' && settings.anthropicApiKey) {
+  // Note: We pass both keys in headers, the API routes will use the appropriate one based on provider
+  if (settings.anthropicApiKey) {
     headers['x-anthropic-key'] = settings.anthropicApiKey;
   }
-  // OpenAI key is passed in body, not header
+  if (settings.openaiApiKey) {
+    headers['x-openai-key'] = settings.openaiApiKey;
+  }
   // Ollama doesn't need auth headers
 
   return headers;

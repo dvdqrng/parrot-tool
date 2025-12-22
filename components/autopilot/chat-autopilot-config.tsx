@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { logger } from '@/lib/logger';
 import { Bot, Play, Pause, Square, Clock, Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -76,7 +77,7 @@ export function ChatAutopilotConfig({ chatId, chatName, latestMessage }: ChatAut
 
   const handleEnable = () => {
     if (!selectedAgentId) return;
-    console.log('[ChatAutopilotConfig] Enabling autopilot', { chatId, selectedAgentId, selectedMode, latestMessage: latestMessage ? { id: latestMessage.id, isFromMe: latestMessage.isFromMe, isRead: latestMessage.isRead, text: latestMessage.text?.slice(0, 30) } : null });
+    logger.debug('[ChatAutopilotConfig] Enabling autopilot', { chatId, selectedAgentId, selectedMode, latestMessage: latestMessage ? { id: latestMessage.id, isFromMe: latestMessage.isFromMe, isRead: latestMessage.isRead, text: latestMessage.text?.slice(0, 30) } : null });
     enable(
       selectedAgentId,
       selectedMode,
@@ -92,11 +93,11 @@ export function ChatAutopilotConfig({ chatId, chatName, latestMessage }: ChatAut
     setTimeout(() => {
       if (latestMessage && !latestMessage.isFromMe && !latestMessage.isRead) {
         // If there's an unread message, respond to it
-        console.log('[ChatAutopilotConfig] Triggering chat processing for existing unread message');
+        logger.debug('[ChatAutopilotConfig] Triggering chat processing for existing unread message');
         triggerChatProcessing(chatId, latestMessage);
       } else {
         // Otherwise, generate a proactive message to start/continue the conversation
-        console.log('[ChatAutopilotConfig] Generating proactive message');
+        logger.debug('[ChatAutopilotConfig] Generating proactive message');
         generateProactiveMessage(chatId);
       }
     }, 100);

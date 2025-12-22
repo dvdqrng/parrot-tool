@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { logger } from '@/lib/logger';
 import { getBeeperClient, getPlatformFromAccountId } from '@/lib/beeper-client';
 
 export interface Contact {
@@ -63,7 +64,7 @@ export async function GET(request: NextRequest) {
 
       // Debug: Log final contact name for DMs
       if (!isGroup) {
-        console.log(`[Contacts] FINAL: Chat ${chat.id} -> name: "${displayName}" (otherParticipant.fullName: "${otherParticipant?.fullName}", isSelf: ${otherParticipant?.isSelf})`);
+        logger.debug(`[Contacts] FINAL: Chat ${chat.id} -> name: "${displayName}" (otherParticipant.fullName: "${otherParticipant?.fullName}", isSelf: ${otherParticipant?.isSelf})`);
       }
 
       // Apply search filter (skip contacts that don't match)
@@ -95,7 +96,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ data: contacts });
   } catch (error) {
-    console.error('Error fetching contacts:', error);
+    logger.error('Error fetching contacts:', error instanceof Error ? error : String(error));
     return NextResponse.json(
       { error: 'Failed to fetch contacts. Make sure Beeper Desktop is running.' },
       { status: 500 }

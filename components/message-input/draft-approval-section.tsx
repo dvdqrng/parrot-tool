@@ -1,6 +1,7 @@
 'use client';
 
 import { Button } from '@/components/ui/button';
+import { logger } from '@/lib/logger';
 import { Loader2 } from 'lucide-react';
 import {
   updateScheduledAction,
@@ -50,7 +51,7 @@ export function DraftApprovalSection({
       toast.success('Draft approved and will be sent');
       onApprove();
     } catch (error) {
-      console.error('Failed to approve draft:', error);
+      logger.error('Failed to approve draft:', error instanceof Error ? error : String(error));
       toast.error('Failed to approve draft');
     }
   };
@@ -75,7 +76,7 @@ export function DraftApprovalSection({
       toast.success('Draft rejected - Autopilot will continue with next message');
       onReject();
     } catch (error) {
-      console.error('Failed to reject draft:', error);
+      logger.error('Failed to reject draft:', error instanceof Error ? error : String(error));
       toast.error('Failed to reject draft');
     }
   };
@@ -98,7 +99,7 @@ export function DraftApprovalSection({
       toast.success('Requesting new draft...');
       onRedo();
     } catch (error) {
-      console.error('Failed to redo draft:', error);
+      logger.error('Failed to redo draft:', error instanceof Error ? error : String(error));
       toast.error('Failed to redo draft');
     }
   };

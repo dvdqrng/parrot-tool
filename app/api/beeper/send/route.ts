@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { logger } from '@/lib/logger';
 import { getBeeperClient } from '@/lib/beeper-client';
 
 interface SendMessageBody {
@@ -34,7 +35,7 @@ export async function POST(request: NextRequest) {
       }
     });
   } catch (error) {
-    console.error('Error sending message:', error);
+    logger.error('Error sending message:', error instanceof Error ? error : String(error));
     return NextResponse.json(
       { error: 'Failed to send message. Make sure Beeper Desktop is running.' },
       { status: 500 }

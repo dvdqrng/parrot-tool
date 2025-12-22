@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback, useRef } from 'react';
+import { logger } from '@/lib/logger';
 import { Draft } from '@/lib/types';
 import { loadSettings } from '@/lib/storage';
 
@@ -41,14 +42,14 @@ export function useBatchSend({ onDraftSent }: BatchSendOptions) {
       });
 
       if (!response.ok) {
-        console.error(`Failed to send draft ${draft.id}`);
+        logger.error(`Failed to send draft ${draft.id}`);
         return false;
       }
 
       const result = await response.json();
 
       if (result.error) {
-        console.error(`Error sending draft: ${result.error}`);
+        logger.error(`Error sending draft: ${result.error}`);
         return false;
       }
 
@@ -57,7 +58,7 @@ export function useBatchSend({ onDraftSent }: BatchSendOptions) {
       if (error instanceof Error && error.name === 'AbortError') {
         return false;
       }
-      console.error('Error sending draft:', error);
+      logger.error('Error sending draft:', error instanceof Error ? error : String(error));
       return false;
     }
   }, []);

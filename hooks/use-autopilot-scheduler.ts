@@ -18,6 +18,7 @@ import {
 } from '@/lib/storage';
 import { emitActionExecuting, emitActionCompleted, emitActionFailed } from '@/lib/autopilot-events';
 import { AUTOPILOT } from '@/lib/ai-constants';
+import { logger } from '@/lib/logger';
 
 interface UseAutopilotSchedulerOptions {
   pollInterval?: number; // ms between checks for pending actions
@@ -138,7 +139,7 @@ export function useAutopilotScheduler(options: UseAutopilotSchedulerOptions = {}
     const dueActions = pendingActions.filter(a => a.scheduledFor <= now);
 
     if (pendingActions.length > 0) {
-      logger.scheduler( Checking actions', {
+      logger.scheduler('Checking actions', {
         totalActions: allActions.length,
         pendingCount: pendingActions.length,
         dueCount: dueActions.length,
@@ -150,7 +151,7 @@ export function useAutopilotScheduler(options: UseAutopilotSchedulerOptions = {}
     const action = getNextPendingAction();
     if (!action) return;
 
-    logger.scheduler( Processing action', { actionId: action.id, type: action.type, chatId: action.chatId });
+    logger.scheduler('Processing action', { actionId: action.id, type: action.type, chatId: action.chatId });
     processingRef.current = true;
 
     // Emit executing event for real-time UI updates
@@ -168,12 +169,12 @@ export function useAutopilotScheduler(options: UseAutopilotSchedulerOptions = {}
         const settings = loadSettings();
 
         if (action.type === 'send-message' && action.messageText) {
-          logger.scheduler( Sending message via API', { chatId: action.chatId, text: action.messageText?.slice(0, 50) });
+          logger.scheduler('Sending message via API', { chatId: action.chatId, text: action.messageText?.slice(0, 50) });
 
           // Simulate typing delay before sending (makes it feel more human)
           // The Beeper API doesn't support sending typing indicators yet, but we can still wait
           const typingDelay = calculateTypingDuration(action.messageText, AUTOPILOT.DEFAULT_TYPING_SPEED_WPM);
-          logger.scheduler( Simulating typing delay', { seconds: typingDelay });
+          logger.scheduler('Simulating typing delay', { seconds: typingDelay });
           await new Promise(resolve => setTimeout(resolve, typingDelay * 1000));
 
           const response = await fetch('/api/beeper/send', {
@@ -189,7 +190,7 @@ export function useAutopilotScheduler(options: UseAutopilotSchedulerOptions = {}
           });
 
           const result = await response.json();
-          logger.scheduler( Send response', { ok: response.ok, result });
+          logger.scheduler('Send response', { ok: response.ok, result });
 
           if (!response.ok) {
             throw new Error(result.error || 'Failed to send message');
@@ -204,7 +205,7 @@ export function useAutopilotScheduler(options: UseAutopilotSchedulerOptions = {}
       emitActionCompleted(action.chatId, action.id);
       onActionComplete?.(action);
     } catch (error) {
-      console.error('Error executing scheduled action:', error);
+      logger.error('Error executing scheduled action', error instanceof Error ? error : String(error));
       const errorMsg = error instanceof Error ? error.message : 'Unknown error';
       updateScheduledAction(action.id, {
         status: 'failed',
@@ -229,7 +230,7 @@ export function useAutopilotScheduler(options: UseAutopilotSchedulerOptions = {}
   const start = useCallback(() => {
     if (isRunning) return;
 
-    logger.scheduler( Starting scheduler');
+    logger.scheduler('Starting scheduler');
     setIsRunning(true);
     updatePendingCount();
 
@@ -278,7 +279,7 @@ export function useAutopilotScheduler(options: UseAutopilotSchedulerOptions = {}
     messageId?: string
   ): string => {
     const scheduledFor = new Date(Date.now() + delaySeconds * 1000).toISOString();
-    logger.scheduler( Scheduling message', { chatId, agentId, delaySeconds, scheduledFor, text: messageText?.slice(0, 50) });
+    logger.scheduler('Scheduling message', { chatId, agentId, delaySeconds, scheduledFor, text: messageText?.slice(0, 50) });
     return schedule({
       chatId,
       agentId,

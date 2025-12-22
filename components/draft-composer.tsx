@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
+import { logger } from '@/lib/logger';
 import {
   Dialog,
   DialogContent,
@@ -24,6 +25,7 @@ import {
   getAiChatForThread,
   formatAiChatSummaryForPrompt,
 } from '@/lib/storage';
+import { getAIHeaders, getEffectiveAiProvider } from '@/lib/api-headers';
 import { Loader2, Sparkles, Send, Save, Trash2, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -75,10 +77,7 @@ export function DraftComposer({
       const settings = loadSettings();
       const toneSettings = loadToneSettings();
       const writingStyle = loadWritingStylePatterns();
-      const headers: HeadersInit = { 'Content-Type': 'application/json' };
-      if (settings.anthropicApiKey && settings.aiProvider !== 'ollama') {
-        headers['x-anthropic-key'] = settings.anthropicApiKey;
-      }
+      const headers = getAIHeaders(settings);
 
       // Get persistent thread context if available
       let threadContextStr = '';
@@ -102,7 +101,7 @@ export function DraftComposer({
           threadContext: threadContextStr,
           aiChatSummary,
           // Provider settings
-          provider: settings.aiProvider || 'anthropic',
+          provider: getEffectiveAiProvider(settings),
           ollamaModel: settings.ollamaModel,
           ollamaBaseUrl: settings.ollamaBaseUrl,
         }),
@@ -115,7 +114,7 @@ export function DraftComposer({
         toast.error(result.error);
       }
     } catch (error) {
-      console.error('Failed to generate suggestion:', error);
+      logger.error('Failed to generate suggestion:', error instanceof Error ? error : String(error));
       toast.error('Failed to generate AI suggestion');
     } finally {
       setIsGenerating(false);

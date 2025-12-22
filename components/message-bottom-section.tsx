@@ -16,6 +16,7 @@ import { AutopilotStatusDisplay } from '@/components/message-input/autopilot-sta
 import { DraftApprovalSection } from '@/components/message-input/draft-approval-section';
 import { AutopilotMode } from '@/lib/types';
 import { BeeperMessage } from '@/lib/types';
+import { logger } from '@/lib/logger';
 
 interface MessageBottomSectionProps {
   chatId: string | null;
@@ -103,7 +104,7 @@ export function MessageBottomSection({
 
   // Trigger action when autopilot becomes active after enabling
   useEffect(() => {
-    console.log('[MessageBottomSection] useEffect check', {
+    logger.autopilot('[MessageBottomSection] useEffect check', {
       shouldTriggerAction: shouldTriggerActionRef.current,
       triggerVersion,
       isAutopilotActive,
@@ -112,7 +113,7 @@ export function MessageBottomSection({
 
     if (!shouldTriggerActionRef.current || !isAutopilotActive || !chatId) return;
 
-    console.log('[MessageBottomSection] ✅ Autopilot now active, triggering action', { chatId, status });
+    logger.autopilot('[MessageBottomSection] ✅ Autopilot now active, triggering action', { chatId, status });
 
     // Clear the trigger flag (using ref, doesn't cause re-render)
     shouldTriggerActionRef.current = false;
@@ -123,7 +124,7 @@ export function MessageBottomSection({
 
     // Small delay to ensure config is fully synced
     const timer = setTimeout(() => {
-      console.log('[MessageBottomSection] 🔥 Timer fired, checking message state', {
+      logger.autopilot('[MessageBottomSection] 🔥 Timer fired, checking message state', {
         hasLatestMessage: !!currentMessage,
         isFromMe: currentMessage?.isFromMe,
         messageText: currentMessage?.text?.slice(0, 50)
@@ -131,17 +132,17 @@ export function MessageBottomSection({
 
       if (currentMessage && !currentMessage.isFromMe) {
         // If there's a message from the other person (read or unread), process it
-        console.log('[MessageBottomSection] 📨 Processing existing message', { messageId: currentMessage.id, isRead: currentMessage.isRead });
+        logger.autopilot('[MessageBottomSection] 📨 Processing existing message', { messageId: currentMessage.id, isRead: currentMessage.isRead });
         triggerChatProcessing(currentChatId, currentMessage);
       } else {
         // No message from them, or only our messages - send proactive message
-        console.log('[MessageBottomSection] 🚀 No message to respond to, generating proactive message');
+        logger.autopilot('[MessageBottomSection] 🚀 No message to respond to, generating proactive message');
         generateProactiveMessage(currentChatId);
       }
     }, 500);
 
     return () => {
-      console.log('[MessageBottomSection] Cleaning up timer');
+      logger.autopilot('[MessageBottomSection] Cleaning up timer');
       clearTimeout(timer);
     };
   }, [triggerVersion, isAutopilotActive, chatId, latestMessage, status, triggerChatProcessing, generateProactiveMessage]);
@@ -151,11 +152,11 @@ export function MessageBottomSection({
 
   const handleEnableAutopilot = () => {
     if (!localConfig.agentId || !chatId) {
-      console.log('[MessageBottomSection] ❌ Cannot enable - missing agentId or chatId', { agentId: localConfig.agentId, chatId });
+      logger.autopilot('[MessageBottomSection] ❌ Cannot enable - missing agentId or chatId', { agentId: localConfig.agentId, chatId });
       return;
     }
 
-    console.log('[MessageBottomSection] 🟢 Enabling autopilot', {
+    logger.autopilot('[MessageBottomSection] 🟢 Enabling autopilot', {
       chatId,
       agentId: localConfig.agentId,
       mode: localConfig.mode,
@@ -163,25 +164,25 @@ export function MessageBottomSection({
     });
 
     // Set flag to trigger action once autopilot is active (using ref to avoid re-render)
-    console.log('[MessageBottomSection] Setting shouldTriggerAction ref = true');
+    logger.autopilot('[MessageBottomSection] Setting shouldTriggerAction ref = true');
     shouldTriggerActionRef.current = true;
 
     // Enable autopilot
-    console.log('[MessageBottomSection] Calling enable()');
+    logger.autopilot('[MessageBottomSection] Calling enable()');
     enable(
       localConfig.agentId,
       localConfig.mode,
       localConfig.mode === 'self-driving' ? localConfig.duration : undefined
     );
 
-    console.log('[MessageBottomSection] Calling notifyConfigChange()');
+    logger.autopilot('[MessageBottomSection] Calling notifyConfigChange()');
     notifyConfigChange();
 
-    console.log('[MessageBottomSection] Hiding config UI');
+    logger.autopilot('[MessageBottomSection] Hiding config UI');
     setShowAutopilotConfig(false);
 
     // Increment trigger version to cause effect to run
-    console.log('[MessageBottomSection] Incrementing trigger version');
+    logger.autopilot('[MessageBottomSection] Incrementing trigger version');
     setTriggerVersion(v => v + 1);
   };
 

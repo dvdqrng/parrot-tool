@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { logger } from '@/lib/logger';
 import { getBeeperClient, getPlatformFromAccountId } from '@/lib/beeper-client';
 import { BeeperMessage } from '@/lib/types';
 
@@ -83,7 +84,7 @@ export async function GET(request: NextRequest) {
       chatInfo: chatInfoToReturn,
     });
   } catch (error) {
-    console.error('Error fetching archived chats:', error);
+    logger.error('Error fetching archived chats:', error instanceof Error ? error : String(error));
     return NextResponse.json(
       { error: 'Failed to fetch archived chats. Make sure Beeper Desktop is running.' },
       { status: 500 }

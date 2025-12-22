@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { logger } from '@/lib/logger';
 import { getBeeperClient, getPlatformFromAccountId } from '@/lib/beeper-client';
 import { BeeperMessage, BeeperAttachment } from '@/lib/types';
 
@@ -98,7 +99,7 @@ export async function GET(request: NextRequest) {
 
       // Debug: Log participant info to understand the data structure
       if (!isGroup && participants.length > 0) {
-        console.log(`[Messages] Chat ${chat.id} (title: "${chat.title}") otherParticipant:`, {
+        logger.debug(`[Messages] Chat ${chat.id} (title: "${chat.title}") otherParticipant:`, {
           selected: otherParticipant ? {
             id: otherParticipant.id,
             fullName: otherParticipant.fullName,
@@ -133,7 +134,7 @@ export async function GET(request: NextRequest) {
 
       // Debug: Log the final display name
       if (!isGroup) {
-        console.log(`[Messages] FINAL: Chat ${chat.id} -> displayName: "${chatDisplayName}" (otherParticipant.fullName: "${otherParticipant?.fullName}", otherParticipant.isSelf: ${otherParticipant?.isSelf})`);
+        logger.debug(`[Messages] FINAL: Chat ${chat.id} -> displayName: "${chatDisplayName}" (otherParticipant.fullName: "${otherParticipant?.fullName}", otherParticipant.isSelf: ${otherParticipant?.isSelf})`);
       }
 
       // Cache and return chat info
@@ -185,7 +186,7 @@ export async function GET(request: NextRequest) {
       chatInfo: chatInfoToReturn,
     });
   } catch (error) {
-    console.error('Error fetching messages:', error);
+    logger.error('Error fetching messages:', error instanceof Error ? error : String(error));
     return NextResponse.json(
       { error: 'Failed to fetch messages. Make sure Beeper Desktop is running.' },
       { status: 500 }

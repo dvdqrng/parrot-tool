@@ -3,6 +3,8 @@
  * Allows components to subscribe to events without polling
  */
 
+import { logger } from './logger';
+
 export type AutopilotEventType =
   | 'activity-added'
   | 'action-scheduled'
@@ -65,7 +67,7 @@ class AutopilotEventBus {
       try {
         callback(event);
       } catch (error) {
-        console.error('[AutopilotEventBus] Error in event handler:', error);
+        logger.error('[AutopilotEventBus] Error in event handler:', error instanceof Error ? error : String(error));
       }
     });
 
@@ -74,7 +76,7 @@ class AutopilotEventBus {
       try {
         callback(event);
       } catch (error) {
-        console.error('[AutopilotEventBus] Error in global handler:', error);
+        logger.error('[AutopilotEventBus] Error in global handler:', error instanceof Error ? error : String(error));
       }
     });
   }

@@ -22,171 +22,17 @@ import {
   ThreadContextMessage,
   getPendingActionsForChat,
 } from '@/lib/storage';
-import { Loader2, ChevronUp, Users, X, MessagesSquare, RefreshCw, Image, Video, Music, Mic, FileText } from 'lucide-react';
+import { getAIHeaders, getEffectiveAiProvider } from '@/lib/api-headers';
+import { logger } from '@/lib/logger';
+import { Loader2, ChevronUp, Users, X, MessagesSquare, RefreshCw } from 'lucide-react';
 import { MessageBottomSection } from '@/components/message-bottom-section';
+import { MediaAttachments } from '@/components/message-panel/media-attachments';
+import { TextWithLinks } from '@/components/message-panel/text-with-links';
+import { getAvatarSrc } from '@/components/message-panel/utils';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useChatAutopilot } from '@/hooks/use-chat-autopilot';
 import { useAutopilot } from '@/contexts/autopilot-context';
-
-// Helper to render text with clickable links
-function renderTextWithLinks(text: string): React.ReactNode {
-  const urlRegex = /(https?:\/\/[^\s]+)/g;
-  const parts = text.split(urlRegex);
-
-  return parts.map((part, index) => {
-    if (urlRegex.test(part)) {
-      // Reset regex lastIndex since we're reusing it
-      urlRegex.lastIndex = 0;
-      return (
-        <a
-          key={index}
-          href={part}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="underline hover:opacity-80"
-          onClick={(e) => e.stopPropagation()}
-        >
-          {part}
-        </a>
-      );
-    }
-    return part;
-  });
-}
-
-
-// Convert file:// URLs to proxied API URLs for media
-function getMediaSrc(url?: string): string | undefined {
-  if (!url) return undefined;
-  if (url.startsWith('file://') || url.startsWith('http://') || url.startsWith('https://')) {
-    return `/api/media?url=${encodeURIComponent(url)}`;
-  }
-  return url;
-}
-
-// Render media attachments
-function MediaAttachments({ attachments, isFromMe }: { attachments: BeeperAttachment[]; isFromMe: boolean }) {
-  if (!attachments || attachments.length === 0) return null;
-
-  return (
-    <div className="flex flex-col gap-2">
-      {attachments.map((att, index) => {
-        const mediaSrc = getMediaSrc(att.srcURL);
-        const posterSrc = getMediaSrc(att.posterImg);
-
-        // Image (including GIF and sticker)
-        if (att.type === 'img' || att.isGif || att.isSticker) {
-          return (
-            <div key={index} className="relative">
-              {mediaSrc ? (
-                <img
-                  src={mediaSrc}
-                  alt={att.fileName || 'Image'}
-                  className={cn(
-                    "max-w-full rounded-lg cursor-pointer hover:opacity-90 transition-opacity",
-                    att.isSticker && "bg-transparent max-h-32",
-                    !att.isSticker && "max-h-64"
-                  )}
-                  style={att.size ? {
-                    maxWidth: Math.min(att.size.width || 256, 256),
-                    aspectRatio: att.size.width && att.size.height
-                      ? `${att.size.width} / ${att.size.height}`
-                      : undefined
-                  } : undefined}
-                  onClick={() => mediaSrc && window.open(mediaSrc, '_blank')}
-                />
-              ) : (
-                <div className={cn(
-                  "flex items-center gap-2 text-xs",
-                  isFromMe ? "opacity-80" : "text-muted-foreground"
-                )}>
-                  <Image className="h-4 w-4" strokeWidth={2} />
-                  <span>{att.isGif ? 'GIF' : att.isSticker ? 'Sticker' : 'Photo'}</span>
-                </div>
-              )}
-            </div>
-          );
-        }
-
-        // Video
-        if (att.type === 'video') {
-          return (
-            <div key={index} className="relative">
-              {mediaSrc ? (
-                <video
-                  src={mediaSrc}
-                  poster={posterSrc}
-                  controls
-                  className="max-w-full max-h-64 rounded-lg"
-                  style={att.size ? {
-                    maxWidth: Math.min(att.size.width || 256, 256),
-                  } : undefined}
-                />
-              ) : (
-                <div className={cn(
-                  "flex items-center gap-2 text-xs",
-                  isFromMe ? "opacity-80" : "text-muted-foreground"
-                )}>
-                  <Video className="h-4 w-4" strokeWidth={2} />
-                  <span>Video{att.duration ? ` (${Math.floor(att.duration / 60)}:${(att.duration % 60).toString().padStart(2, '0')})` : ''}</span>
-                </div>
-              )}
-            </div>
-          );
-        }
-
-        // Audio / Voice note
-        if (att.type === 'audio' || att.isVoiceNote) {
-          return (
-            <div key={index} className="w-full">
-              {mediaSrc ? (
-                <audio
-                  src={mediaSrc}
-                  controls
-                  className="w-full max-w-[200px] h-8"
-                />
-              ) : (
-                <div className={cn(
-                  "flex items-center gap-2 text-xs",
-                  isFromMe ? "opacity-80" : "text-muted-foreground"
-                )}>
-                  {att.isVoiceNote ? <Mic className="h-4 w-4" strokeWidth={2} /> : <Music className="h-4 w-4" strokeWidth={2} />}
-                  <span>{att.isVoiceNote ? 'Voice message' : 'Audio'}{att.duration ? ` (${Math.floor(att.duration / 60)}:${(att.duration % 60).toString().padStart(2, '0')})` : ''}</span>
-                </div>
-              )}
-            </div>
-          );
-        }
-
-        // File / Unknown
-        if (att.type === 'unknown' && att.fileName) {
-          return (
-            <div
-              key={index}
-              className={cn(
-                "flex items-center gap-2 text-xs p-2 rounded-lg cursor-pointer hover:opacity-80",
-                isFromMe ? "bg-primary-foreground/10" : "bg-background/50"
-              )}
-              onClick={() => mediaSrc && window.open(mediaSrc, '_blank')}
-            >
-              <FileText className="h-4 w-4 shrink-0" strokeWidth={2} />
-              <span className="truncate">{att.fileName}</span>
-              {att.fileSize && (
-                <span className="text-xs opacity-60 shrink-0">
-                  ({(att.fileSize / 1024).toFixed(1)} KB)
-                </span>
-              )}
-            </div>
-          );
-        }
-
-        return null;
-      })}
-    </div>
-  );
-}
-
 interface MessagePanelProps {
   card: KanbanCard | null;
   onClose: () => void;
@@ -197,15 +43,6 @@ interface MessagePanelProps {
   draftTextFromAi?: string;
   onDraftTextFromAiConsumed?: () => void;
   onMessageContextChange?: (context: string, senderName: string) => void;
-}
-
-// Convert file:// URLs to proxied API URLs
-function getAvatarSrc(url?: string): string | undefined {
-  if (!url) return undefined;
-  if (url.startsWith('file://')) {
-    return `/api/avatar?url=${encodeURIComponent(url)}`;
-  }
-  return url;
 }
 
 interface ChatMessage {
@@ -267,7 +104,7 @@ export function MessagePanel({
 
     const checkPendingActions = () => {
       const pendingActions = getPendingActionsForChat(chatId);
-      console.log('[MessagePanel] Checking pending actions:', {
+      logger.debug('[MessagePanel] Checking pending actions:', {
         chatId,
         pendingActionsCount: pendingActions.length,
         actions: pendingActions,
@@ -310,7 +147,7 @@ export function MessagePanel({
   // Debug logging
   useEffect(() => {
     if (chatId) {
-      console.log('[MessagePanel] Autopilot glow state:', {
+      logger.debug('[MessagePanel] Autopilot glow state:', {
         chatId,
         isAutopilotActive,
         status: autopilotStatus,
@@ -324,7 +161,7 @@ export function MessagePanel({
   const fetchHistory = useCallback(async (limit: number, isLoadMore = false) => {
     if (!chatId) return;
 
-    console.log(`[FetchHistory] Starting fetch: limit=${limit}, isLoadMore=${isLoadMore}, chatId=${chatId}`);
+    logger.debug(`[FetchHistory] Starting fetch: limit=${limit}, isLoadMore=${isLoadMore}, chatId=${chatId}`);
 
     if (isLoadMore) {
       setIsLoadingMore(true);
@@ -345,7 +182,7 @@ export function MessagePanel({
         { headers }
       );
       const result = await response.json();
-      console.log(`[FetchHistory] Got ${result.data?.length || 0} messages from API`);
+      logger.debug(`[FetchHistory] Got ${result.data?.length || 0} messages from API`);
 
       if (result.data) {
         const newMessages: ChatMessage[] = result.data.map((m: BeeperMessage) => ({
@@ -362,7 +199,7 @@ export function MessagePanel({
         setChatHistory(prev => {
           const existingIds = new Set(prev.map(m => m.id));
           const uniqueNewMessages = newMessages.filter(m => !existingIds.has(m.id));
-          console.log(`[FetchHistory] Adding ${uniqueNewMessages.length} new unique messages (had ${prev.length})`);
+          logger.debug(`[FetchHistory] Adding ${uniqueNewMessages.length} new unique messages (had ${prev.length})`);
           const merged = [...prev, ...uniqueNewMessages];
           // Sort by timestamp (oldest first for chat display)
           return merged.sort((a, b) =>
@@ -385,7 +222,7 @@ export function MessagePanel({
         updateThreadContextWithNewMessages(chatId, senderName, contextMessages);
       }
     } catch (error) {
-      console.error('Failed to fetch chat history:', error);
+      logger.error('Failed to fetch chat history:', error instanceof Error ? error : String(error));
       toast.error('Failed to load chat history');
     } finally {
       setIsLoadingHistory(false);
@@ -442,7 +279,7 @@ export function MessagePanel({
     const pollInterval = setInterval(() => {
       // Fetch with the current limit we've loaded
       const currentLimit = loadedLimitRef.current[chatId] || 20;
-      console.log(`[MessagePanel] Polling for new messages (limit: ${currentLimit})`);
+      logger.debug(`[MessagePanel] Polling for new messages (limit: ${currentLimit})`);
       fetchHistory(currentLimit, false);
     }, 5000); // Poll every 5 seconds
 
@@ -455,13 +292,13 @@ export function MessagePanel({
   // Load more messages (increase limit)
   const handleLoadMore = useCallback(() => {
     if (!chatId) {
-      console.log('[LoadMore] No chatId, returning');
+      logger.debug('[LoadMore] No chatId, returning');
       return;
     }
     const currentLimit = loadedLimitRef.current[chatId] || 20;
     const newLimit = currentLimit + 20; // Add 20 more messages each time
     loadedLimitRef.current[chatId] = newLimit;
-    console.log(`[LoadMore] Fetching ${newLimit} messages for chat ${chatId}`);
+    logger.debug(`[LoadMore] Fetching ${newLimit} messages for chat ${chatId}`);
     fetchHistory(newLimit, true);
   }, [chatId, fetchHistory]);
 
@@ -497,7 +334,7 @@ export function MessagePanel({
         toast.success(`Thread context updated with ${result.data.length} messages from last 24h`);
       }
     } catch (error) {
-      console.error('Failed to refresh context:', error);
+      logger.error('Failed to refresh context:', error instanceof Error ? error : String(error));
       toast.error('Failed to refresh thread context');
     } finally {
       setIsRefreshingContext(false);
@@ -542,7 +379,7 @@ export function MessagePanel({
           threadContext: threadContextStr,
           aiChatSummary,
           // Provider settings
-          provider: settings.aiProvider || 'anthropic',
+          provider: getEffectiveAiProvider(settings),
           ollamaModel: settings.ollamaModel,
           ollamaBaseUrl: settings.ollamaBaseUrl,
         }),
@@ -555,7 +392,7 @@ export function MessagePanel({
         toast.error(result.error);
       }
     } catch (error) {
-      console.error('Failed to generate suggestion:', error);
+      logger.error('Failed to generate suggestion:', error instanceof Error ? error : String(error));
       toast.error('Failed to generate AI suggestion');
     } finally {
       setIsGenerating(false);
@@ -746,7 +583,9 @@ export function MessagePanel({
                         )}
                         {/* Text content */}
                         {hasText && (
-                          <p className="text-xs whitespace-pre-wrap break-words">{renderTextWithLinks(msg.text)}</p>
+                          <p className="text-xs whitespace-pre-wrap break-words">
+                            <TextWithLinks text={msg.text} />
+                          </p>
                         )}
                       </div>
                       <span className="text-xs text-muted-foreground mt-1 px-2">

@@ -27,7 +27,19 @@
       "Bash(git log:*)",
       "Bash(convert:*)",
       "Bash(gradient:'#6366f1-#8b5cf6' )",
-      "Bash(icon.png)"
+      "Bash(icon.png)",
+      "Bash(magick:*)",
+      "Bash(iconutil:*)",
+      "Bash(ls:*)",
+      "Bash(files=\"\napp/api/beeper/messages/route.ts\napp/api/ai/draft/route.ts\napp/api/beeper/user-messages/route.ts\napp/api/beeper/contacts/route.ts\napp/api/ai/conversation-summary/route.ts\napp/api/ai/chat/route.ts\napp/api/ollama/models/route.ts\napp/api/media/route.ts\napp/api/beeper/send/route.ts\napp/api/beeper/chats/route.ts\napp/api/beeper/chats/[chatId]/unarchive/route.ts\napp/api/beeper/chats/[chatId]/archive/route.ts\napp/api/beeper/archived/route.ts\napp/api/beeper/accounts/route.ts\napp/api/avatar/route.ts\n\")",
+      "Bash(__NEW_LINE__ for file in $files)",
+      "Bash(do)",
+      "Bash(if [ -f \"$file\" ])",
+      "Bash(then)",
+      "Bash(/tmp/replace-console.sh:*)",
+      "Bash(fi)",
+      "Bash(done)",
+      "Bash(xargs perl:*)"
     ]
   }
 }

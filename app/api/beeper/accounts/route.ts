@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { logger } from '@/lib/logger';
 import { getBeeperClient, getPlatformFromAccountId, getPlatformInfo } from '@/lib/beeper-client';
 import { BeeperAccount } from '@/lib/types';
 
@@ -22,7 +23,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ data: accounts });
   } catch (error) {
-    console.error('Error fetching accounts:', error);
+    logger.error('Error fetching accounts:', error instanceof Error ? error : String(error));
     return NextResponse.json(
       { error: 'Failed to fetch accounts. Make sure Beeper Desktop is running.' },
       { status: 500 }

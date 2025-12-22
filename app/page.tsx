@@ -1,9 +1,9 @@
 'use client';
 
 import { useState, useCallback, useEffect, useMemo } from 'react';
+import { logger } from '@/lib/logger';
 import Link from 'next/link';
-import { Settings, RefreshCw, Loader2, Plus, Archive } from 'lucide-react';
-import { ThemeToggle } from '@/components/theme-toggle';
+import { Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { MessageBoard } from '@/components/kanban/message-board';
 import { MessageDetail } from '@/components/message-detail';
@@ -12,6 +12,9 @@ import { MessagePanel } from '@/components/message-panel';
 import { AiChatPanel } from '@/components/ai-chat-panel';
 import { ContactsDialog } from '@/components/contacts-dialog';
 import { HandoffSummaryCard } from '@/components/autopilot/handoff-summary-card';
+import { ErrorState } from '@/components/dashboard/error-state';
+import { LoadingState } from '@/components/dashboard/loading-state';
+import { BottomNavigation } from '@/components/dashboard/bottom-navigation';
 import type { Contact } from '@/app/api/beeper/contacts/route';
 import { useSettingsContext } from '@/contexts/settings-context';
 import { useMessages } from '@/hooks/use-messages';
@@ -20,9 +23,11 @@ import { useDrafts } from '@/hooks/use-drafts';
 import { useAiChatHistory } from '@/hooks/use-ai-chat-history';
 import { useBatchDraftGenerator } from '@/hooks/use-batch-draft-generator';
 import { useBatchSend } from '@/hooks/use-batch-send';
+import { useSendMessage } from '@/hooks/use-send-message';
 import { useAutopilot } from '@/contexts/autopilot-context';
 import { KanbanCard, ColumnId, BeeperMessage, Draft } from '@/lib/types';
 import { loadHiddenChats, addHiddenChat, loadWritingStylePatterns, loadToneSettings, getChatAutopilotConfig } from '@/lib/storage';
+import { getBeeperHeaders, getAIHeaders, getEffectiveAiProvider } from '@/lib/api-headers';
 import { toast } from 'sonner';
 
 export default function Home() {
@@ -60,6 +65,12 @@ export default function Home() {
 
   // Autopilot integration
   const { processNewMessages, handoffSummaries, dismissHandoff, configVersion } = useAutopilot();
+
+  // Send message hook
+  const { sendMessage } = useSendMessage({
+    autoRefresh: true,
+    refetch,
+  });
 
   // Process new messages through autopilot when they arrive
   useEffect(() => {
@@ -239,10 +250,7 @@ export default function Home() {
       const toastId = toast.loading('Generating draft...');
 
       try {
-        const headers: HeadersInit = { 'Content-Type': 'application/json' };
-        if (settings.anthropicApiKey && settings.aiProvider !== 'ollama') {
-          headers['x-anthropic-key'] = settings.anthropicApiKey;
-        }
+        const headers = getAIHeaders(settings);
 
         const toneSettings = loadToneSettings();
         const writingStyle = loadWritingStylePatterns();
@@ -255,7 +263,7 @@ export default function Home() {
             senderName: message.senderName,
             toneSettings,
             writingStyle: writingStyle.sampleMessages.length > 0 ? writingStyle : undefined,
-            provider: settings.aiProvider || 'anthropic',
+            provider: getEffectiveAiProvider(settings),
             ollamaModel: settings.ollamaModel,
             ollamaBaseUrl: settings.ollamaBaseUrl,
           }),
@@ -276,7 +284,7 @@ export default function Home() {
           toast.error('Failed to generate draft', { id: toastId });
         }
       } catch (error) {
-        console.error('Failed to generate draft:', error);
+        logger.error('Failed to generate draft:', error instanceof Error ? error : String(error));
         // Keep the draft but clear placeholder
         updateDraft(optimisticDraft.id, { draftText: '' });
         toast.error('Failed to generate draft', { id: toastId });
@@ -293,10 +301,7 @@ export default function Home() {
     setArchivedChats(prev => new Set(prev).add(chatId));
 
     try {
-      const headers: HeadersInit = { 'Content-Type': 'application/json' };
-      if (settings.beeperAccessToken) {
-        headers['x-beeper-token'] = settings.beeperAccessToken;
-      }
+      const headers = getBeeperHeaders(settings.beeperAccessToken);
 
       const response = await fetch(`/api/beeper/chats/${encodeURIComponent(chatId)}/archive`, {
         method: 'POST',
@@ -338,10 +343,7 @@ export default function Home() {
     if (!chatId) return;
 
     try {
-      const headers: HeadersInit = { 'Content-Type': 'application/json' };
-      if (settings.beeperAccessToken) {
-        headers['x-beeper-token'] = settings.beeperAccessToken;
-      }
+      const headers = getBeeperHeaders(settings.beeperAccessToken);
 
       const response = await fetch(`/api/beeper/chats/${encodeURIComponent(chatId)}/unarchive`, {
         method: 'POST',
@@ -487,31 +489,17 @@ export default function Home() {
       throw new Error('Cannot send: missing chat ID');
     }
 
-    const headers: HeadersInit = { 'Content-Type': 'application/json' };
-    if (settings.beeperAccessToken) {
-      headers['x-beeper-token'] = settings.beeperAccessToken;
-    }
+    const result = await sendMessage(chatId, draftText);
 
-    const response = await fetch('/api/beeper/send', {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ chatId, text: draftText }),
-    });
-
-    const result = await response.json();
-
-    if (result.error) {
-      throw new Error(result.error);
+    if (!result.success) {
+      throw new Error(result.error || 'Failed to send message');
     }
 
     // Delete draft if it exists
     if (composerDraft) {
       deleteDraft(composerDraft.id);
     }
-
-    // Refresh messages after a short delay
-    setTimeout(refetch, 1000);
-  }, [composerDraft, composerMessage, deleteDraft, refetch, settings.beeperAccessToken]);
+  }, [composerDraft, composerMessage, deleteDraft, sendMessage]);
 
   // Handle delete draft (from composer)
   const handleDeleteDraft = useCallback(() => {
@@ -537,38 +525,24 @@ export default function Home() {
       throw new Error('Cannot send: missing chat ID');
     }
 
-    const headers: HeadersInit = { 'Content-Type': 'application/json' };
-    if (settings.beeperAccessToken) {
-      headers['x-beeper-token'] = settings.beeperAccessToken;
-    }
+    const result = await sendMessage(chatId, text);
 
-    const response = await fetch('/api/beeper/send', {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ chatId, text }),
-    });
-
-    const result = await response.json();
-
-    if (result.error) {
-      throw new Error(result.error);
+    if (!result.success) {
+      throw new Error(result.error || 'Failed to send message');
     }
 
     // Delete draft if sending from a draft card
     if (selectedCard?.type === 'draft' && selectedCard.draft) {
       deleteDraft(selectedCard.draft.id);
     }
-
-    // Refresh messages after a short delay
-    setTimeout(refetch, 1000);
-  }, [selectedCard, settings.beeperAccessToken, refetch, deleteDraft]);
+  }, [selectedCard, sendMessage, deleteDraft]);
 
 
   // Show loading while settings are being loaded
   if (!settingsLoaded) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" strokeWidth={2} />
+      <div className="flex min-h-screen">
+        <LoadingState />
       </div>
     );
   }
@@ -601,19 +575,9 @@ export default function Home() {
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <main className="flex-1 overflow-hidden pt-6 pl-6">
           {error ? (
-            <div className="flex h-full items-center justify-center">
-              <div className="rounded-lg bg-destructive/10 p-6 text-center text-destructive">
-                <p className="text-xs font-medium">Connection Error</p>
-                <p className="text-xs">{error}</p>
-                <Button variant="outline" className="mt-4" onClick={refetch}>
-                  Try Again
-                </Button>
-              </div>
-            </div>
+            <ErrorState error={error} onRetry={refetch} />
           ) : isLoading && unreadMessages.length === 0 && sentMessages.length === 0 ? (
-            <div className="flex h-full items-center justify-center">
-              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" strokeWidth={2} />
-            </div>
+            <LoadingState />
           ) : (
             <div className="h-full overflow-x-auto">
               <MessageBoard
@@ -657,40 +621,13 @@ export default function Home() {
           />
 
           {/* Bottom nav */}
-          <div className="flex items-center gap-2 rounded-full bg-white dark:bg-card shadow-lg dark:border px-2 py-2">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="rounded-full"
-              onClick={() => setContactsDialogOpen(true)}
-            >
-              <Plus className="h-4 w-4" strokeWidth={2} />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="rounded-full"
-              onClick={refetch}
-              disabled={isLoading}
-            >
-              <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} strokeWidth={2} />
-            </Button>
-            <Button
-              variant={settings.showArchivedColumn ? "default" : "ghost"}
-              size="icon"
-              className="rounded-full"
-              onClick={() => updateSettings({ showArchivedColumn: !settings.showArchivedColumn })}
-              title={settings.showArchivedColumn ? "Hide archived column" : "Show archived column"}
-            >
-              <Archive className="h-4 w-4" strokeWidth={2} />
-            </Button>
-            <ThemeToggle />
-            <Link href="/settings">
-              <Button variant="ghost" size="icon" className="rounded-full">
-                <Settings className="h-4 w-4" strokeWidth={2} />
-              </Button>
-            </Link>
-          </div>
+          <BottomNavigation
+            isLoading={isLoading}
+            showArchivedColumn={settings.showArchivedColumn ?? false}
+            onNewContact={() => setContactsDialogOpen(true)}
+            onRefresh={refetch}
+            onToggleArchived={() => updateSettings({ showArchivedColumn: !settings.showArchivedColumn })}
+          />
         </div>
       </div>
 

@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
+import { logger } from '@/lib/logger';
 import OpenAI from 'openai';
 import { AiProvider } from '@/lib/types';
 import { ollamaChat, OllamaMessage, getFirstAvailableModel } from '@/lib/ollama';
@@ -64,7 +65,7 @@ export async function callAiProvider(options: AiProviderOptions): Promise<string
       try {
         return await ollamaChat(ollamaBaseUrl, modelToUse, ollamaMessages, maxTokens, temperature);
       } catch (modelError) {
-        console.log(`[AI Provider] Model ${modelToUse} failed, trying first available model`);
+        logger.debug(`[AI Provider] Model ${modelToUse} failed, trying first available model`);
         const firstAvailable = await getFirstAvailableModel(ollamaBaseUrl);
         if (firstAvailable) {
           modelToUse = firstAvailable;
@@ -74,7 +75,7 @@ export async function callAiProvider(options: AiProviderOptions): Promise<string
         }
       }
     } catch (error) {
-      console.error('[AI Provider] Ollama error:', error);
+      logger.error('[AI Provider] Ollama error:', error instanceof Error ? error : String(error));
       throw new Error('Failed to connect to Ollama. Make sure Ollama is running and has models installed.');
     }
   } else if (provider === 'openai') {

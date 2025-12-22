@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback, useRef } from 'react';
+import { logger } from '@/lib/logger';
 import { BeeperMessage, Draft, ToneSettings } from '@/lib/types';
 import { loadSettings, loadToneSettings, loadWritingStylePatterns } from '@/lib/storage';
 
@@ -51,14 +52,14 @@ export function useBatchDraftGenerator({
       });
 
       if (!response.ok) {
-        console.error(`Failed to generate draft for message ${message.id}`);
+        logger.error(`Failed to generate draft for message ${message.id}`);
         return null;
       }
 
       const result = await response.json();
 
       if (result.error) {
-        console.error(`Error generating draft: ${result.error}`);
+        logger.error(`Error generating draft: ${result.error}`);
         return null;
       }
 
@@ -67,7 +68,7 @@ export function useBatchDraftGenerator({
       if (error instanceof Error && error.name === 'AbortError') {
         return null;
       }
-      console.error('Error generating draft:', error);
+      logger.error('Error generating draft:', error instanceof Error ? error : String(error));
       return null;
     }
   }, []);

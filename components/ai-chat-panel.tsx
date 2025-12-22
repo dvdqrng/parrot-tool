@@ -1,85 +1,20 @@
 'use client';
 
 import { useState, useCallback, useRef, useEffect } from 'react';
+import { logger } from '@/lib/logger';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Loader2, X, Copy, Check, Trash2, Plus, Mic, MicOff, Volume2, Square, Paperclip, Image, Send } from 'lucide-react';
+import { Loader2, X, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { loadSettings } from '@/lib/storage';
+import { getAIHeaders, getEffectiveAiProvider } from '@/lib/api-headers';
 import { toast } from 'sonner';
-
-// Type declarations for Web Speech API
-interface SpeechRecognitionEvent extends Event {
-  results: SpeechRecognitionResultList;
-}
-
-interface SpeechRecognitionErrorEvent extends Event {
-  error: string;
-}
-
-interface SpeechRecognition extends EventTarget {
-  continuous: boolean;
-  interimResults: boolean;
-  lang: string;
-  onstart: ((this: SpeechRecognition, ev: Event) => void) | null;
-  onresult: ((this: SpeechRecognition, ev: SpeechRecognitionEvent) => void) | null;
-  onerror: ((this: SpeechRecognition, ev: SpeechRecognitionErrorEvent) => void) | null;
-  onend: ((this: SpeechRecognition, ev: Event) => void) | null;
-  start(): void;
-  stop(): void;
-}
-
-declare global {
-  interface Window {
-    SpeechRecognition?: new () => SpeechRecognition;
-    webkitSpeechRecognition?: new () => SpeechRecognition;
-  }
-}
-
-// Parse message content to extract draft sections
-type ContentPart = { type: 'text'; content: string } | { type: 'draft'; content: string };
-
-function parseMessageContent(content: string): ContentPart[] {
-  const parts: ContentPart[] = [];
-  const draftRegex = /<draft>([\s\S]*?)<\/draft>/g;
-  let lastIndex = 0;
-  let match;
-
-  while ((match = draftRegex.exec(content)) !== null) {
-    // Add text before the draft
-    if (match.index > lastIndex) {
-      const text = content.slice(lastIndex, match.index).trim();
-      if (text) {
-        parts.push({ type: 'text', content: text });
-      }
-    }
-    // Add the draft
-    parts.push({ type: 'draft', content: match[1].trim() });
-    lastIndex = match.index + match[0].length;
-  }
-
-  // Add remaining text after last draft
-  if (lastIndex < content.length) {
-    const text = content.slice(lastIndex).trim();
-    if (text) {
-      parts.push({ type: 'text', content: text });
-    }
-  }
-
-  // If no drafts found, return the whole content as text
-  if (parts.length === 0) {
-    parts.push({ type: 'text', content });
-  }
-
-  return parts;
-}
-
-export interface AiChatMessage {
-  id: string;
-  role: 'user' | 'assistant';
-  content: string;
-}
+import { AiChatMessage, SpeechRecognition, SpeechRecognitionEvent, SpeechRecognitionErrorEvent } from './ai-chat-panel/types';
+import { EmptyState } from './ai-chat-panel/empty-state';
+import { UserMessage } from './ai-chat-panel/user-message';
+import { AssistantMessage } from './ai-chat-panel/assistant-message';
+import { AttachmentsPreview } from './ai-chat-panel/attachments-preview';
+import { InputArea } from './ai-chat-panel/input-area';
 
 interface AiChatPanelProps {
   isOpen: boolean;
@@ -171,7 +106,7 @@ export function AiChatPanel({
           })),
           userMessage: userMessage.content,
           // Provider settings
-          provider: settings.aiProvider || 'anthropic',
+          provider: getEffectiveAiProvider(settings),
           ollamaModel: settings.ollamaModel,
           ollamaBaseUrl: settings.ollamaBaseUrl,
         }),
@@ -192,7 +127,7 @@ export function AiChatPanel({
 
       onMessagesChange([...updatedMessages, assistantMessage]);
     } catch (error) {
-      console.error('Failed to send message:', error);
+      logger.error('Failed to send message:', error instanceof Error ? error : String(error));
       toast.error('Failed to get AI response');
     } finally {
       setIsLoading(false);
@@ -272,7 +207,7 @@ export function AiChatPanel({
       setIsRecording(true);
       toast.success('Recording started...');
     } catch (error) {
-      console.error('Failed to start recording:', error);
+      logger.error('Failed to start recording:', error instanceof Error ? error : String(error));
       toast.error('Could not access microphone');
     }
   }, []);
@@ -316,7 +251,7 @@ export function AiChatPanel({
     };
 
     recognition.onerror = (event) => {
-      console.error('Speech recognition error:', event.error);
+      logger.error('Speech recognition error:', event.error);
       toast.error(`Speech error: ${event.error}`);
       setIsRecording(false);
     };
@@ -401,16 +336,7 @@ export function AiChatPanel({
           <ScrollArea className="flex-1 min-h-0" ref={scrollRef}>
             <div className="p-4 space-y-4">
               {messages.length === 0 ? (
-                <div className="text-center py-8 text-xs text-muted-foreground">
-                  <p>Ask me anything about this conversation.</p>
-                  <p className="mt-2">I can help you:</p>
-                  <ul className="mt-2 space-y-1">
-                    <li>Draft a reply</li>
-                    <li>Summarize the conversation</li>
-                    <li>Suggest talking points</li>
-                    <li>Brainstorm ideas</li>
-                  </ul>
-                </div>
+                <EmptyState />
               ) : (
                 messages.map((msg) => (
                   <div
@@ -421,69 +347,17 @@ export function AiChatPanel({
                     )}
                   >
                     {msg.role === 'user' ? (
-                      <div className="max-w-[90%] rounded-2xl px-4 py-2 bg-primary text-primary-foreground">
-                        <p className="text-xs whitespace-pre-wrap">{msg.content}</p>
-                      </div>
+                      <UserMessage content={msg.content} />
                     ) : (
-                      <div className="max-w-[90%] space-y-2">
-                        {parseMessageContent(msg.content).map((part, idx) => (
-                          <div key={idx}>
-                            {part.type === 'text' ? (
-                              <div className="rounded-2xl px-4 py-2 bg-muted">
-                                <p className="text-xs whitespace-pre-wrap">{part.content}</p>
-                              </div>
-                            ) : (
-                              <div className="border rounded-xl overflow-hidden">
-                                <div className="px-4 py-2 bg-muted/50">
-                                  <p className="text-xs whitespace-pre-wrap">{part.content}</p>
-                                </div>
-                                {onUseDraft && (
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="w-full h-8 text-xs text-muted-foreground hover:text-foreground hover:bg-muted rounded-none border-t"
-                                    onClick={() => handleUseDraft(part.content)}
-                                  >
-                                    <span className="text-xs">Use as draft</span>
-                                  </Button>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        ))}
-                        <div className="flex gap-1 px-2">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
-                            onClick={() => handleCopy(msg.id, msg.content.replace(/<\/?draft>/g, ''))}
-                          >
-                            {copiedId === msg.id ? (
-                              <Check className="h-4 w-4 mr-1" strokeWidth={2} />
-                            ) : (
-                              <Copy className="h-4 w-4 mr-1" strokeWidth={2} />
-                            )}
-                            <span className="text-xs">{copiedId === msg.id ? 'Copied' : 'Copy all'}</span>
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className={cn(
-                              "h-6 px-2 text-xs text-muted-foreground hover:text-foreground",
-                              isSpeaking && "text-primary"
-                            )}
-                            onClick={() => handleTextToSpeech(msg.content.replace(/<\/?draft>/g, ''))}
-                            title={isSpeaking ? "Stop speaking" : "Read aloud"}
-                          >
-                            {isSpeaking ? (
-                              <Square className="h-4 w-4 mr-1" strokeWidth={2} />
-                            ) : (
-                              <Volume2 className="h-4 w-4 mr-1" strokeWidth={2} />
-                            )}
-                            <span className="text-xs">{isSpeaking ? 'Stop' : 'Listen'}</span>
-                          </Button>
-                        </div>
-                      </div>
+                      <AssistantMessage
+                        messageId={msg.id}
+                        content={msg.content}
+                        onUseDraft={onUseDraft}
+                        onCopy={handleCopy}
+                        onSpeak={handleTextToSpeech}
+                        copiedId={copiedId}
+                        isSpeaking={isSpeaking}
+                      />
                     )}
                   </div>
                 ))
@@ -508,113 +382,22 @@ export function AiChatPanel({
           />
 
           {/* Attachments preview */}
-          {attachments.length > 0 && (
-            <div className="shrink-0 px-4 pb-2">
-              <div className="flex flex-wrap gap-2">
-                {attachments.map((file, index) => (
-                  <div
-                    key={index}
-                    className="flex items-center gap-1 rounded-full bg-muted px-3 py-1"
-                  >
-                    <span className="max-w-[100px] truncate text-xs">{file.name}</span>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-4 w-4 ml-1"
-                      onClick={() => removeAttachment(index)}
-                    >
-                      <X className="h-4 w-4" strokeWidth={2} />
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+          <AttachmentsPreview attachments={attachments} onRemove={removeAttachment} />
 
           {/* Input area */}
-          <div className="shrink-0 p-4 pt-2">
-            {/* Attachment menu */}
-            {showAttachMenu && (
-              <div className="mb-2 flex gap-2 rounded-lg border bg-background p-2 shadow-sm">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="flex-1"
-                  onClick={() => handleFileSelect('file')}
-                >
-                  <Paperclip className="h-4 w-4 mr-2" strokeWidth={2} />
-                  File
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="flex-1"
-                  onClick={() => handleFileSelect('image')}
-                >
-                  <Image className="h-4 w-4 mr-2" strokeWidth={2} />
-                  Image
-                </Button>
-              </div>
-            )}
-            <div className="flex items-center gap-2 rounded-full border bg-background px-3 py-2">
-              <Button
-                variant="ghost"
-                size="icon"
-                className={cn(
-                  "h-8 w-8 shrink-0 rounded-full",
-                  showAttachMenu && "bg-muted"
-                )}
-                onClick={() => setShowAttachMenu(!showAttachMenu)}
-                disabled={isLoading}
-              >
-                <Plus className={cn(
-                  "h-4 w-4 text-muted-foreground transition-transform",
-                  showAttachMenu && "rotate-45"
-                )} strokeWidth={2} />
-              </Button>
-              <Input
-                ref={inputRef}
-                type="text"
-                placeholder="Ask anything"
-                value={inputText}
-                onChange={(e) => setInputText(e.target.value)}
-                onKeyDown={handleKeyDown}
-                className="flex-1 border-0 bg-transparent text-xs shadow-none focus-visible:ring-0 h-8"
-                disabled={isLoading}
-              />
-              <Button
-                variant="ghost"
-                size="icon"
-                className={cn(
-                  "h-8 w-8 shrink-0 rounded-full",
-                  isRecording && "bg-red-100 text-red-600 hover:bg-red-200"
-                )}
-                onClick={handleVoiceInput}
-                disabled={isLoading}
-                title={isRecording ? "Stop recording" : "Voice input"}
-              >
-                {isRecording ? (
-                  <MicOff className="h-4 w-4" strokeWidth={2} />
-                ) : (
-                  <Mic className="h-4 w-4 text-muted-foreground" strokeWidth={2} />
-                )}
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 shrink-0 rounded-full"
-                onClick={sendMessage}
-                disabled={!inputText.trim() || isLoading}
-                title="Send message"
-              >
-                {isLoading ? (
-                  <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2} />
-                ) : (
-                  <Send className="h-4 w-4 text-muted-foreground" strokeWidth={2} />
-                )}
-              </Button>
-            </div>
-          </div>
+          <InputArea
+            inputText={inputText}
+            isLoading={isLoading}
+            isRecording={isRecording}
+            showAttachMenu={showAttachMenu}
+            inputRef={inputRef}
+            onInputChange={setInputText}
+            onKeyDown={handleKeyDown}
+            onSend={sendMessage}
+            onVoiceInput={handleVoiceInput}
+            onToggleAttachMenu={() => setShowAttachMenu(!showAttachMenu)}
+            onFileSelect={handleFileSelect}
+          />
         </>
       )}
     </div>

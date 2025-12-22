@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { logger } from '@/lib/logger';
 import {
   AutopilotAgent,
   AgentBehaviorSettings,
@@ -137,7 +138,7 @@ export function useAutopilotAgents() {
 
       return newAgents.length;
     } catch {
-      console.error('Failed to import agents');
+      logger.error('Failed to import agents');
       return 0;
     }
   }, [agents]);

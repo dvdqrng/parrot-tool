@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { logger } from '@/lib/logger';
 import { AiProvider } from '@/lib/types';
 import { callAiProvider, handleAiProviderError } from '@/lib/ai-provider';
 import { AI_TOKENS, AI_TEMPERATURE } from '@/lib/ai-constants';
@@ -102,7 +103,7 @@ Provide a handoff summary:`;
 
       return NextResponse.json({ data: parsed });
     } catch (parseError) {
-      console.error('Failed to parse summary response:', parseError);
+      logger.error('Failed to parse summary response:', parseError instanceof Error ? parseError : String(parseError));
       // Return a fallback summary
       return NextResponse.json({
         data: {
@@ -114,7 +115,7 @@ Provide a handoff summary:`;
       });
     }
   } catch (error) {
-    console.error('Error generating conversation summary:', error);
+    logger.error('Error generating conversation summary:', error instanceof Error ? error : String(error));
     const { error: errorMessage, status } = handleAiProviderError(error);
     return NextResponse.json({ error: errorMessage }, { status });
   }

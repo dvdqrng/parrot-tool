@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo, useRef } from 'react';
+import { logger } from '@/lib/logger';
 import { Search, Users, Loader2, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -65,7 +66,7 @@ export function ContactsDialog({ open, onOpenChange, onSelectContact }: Contacts
     setTimeout(() => inputRef.current?.focus(), 100);
 
     async function fetchContacts() {
-      console.log('[ContactsDialog] Fetching contacts...');
+      logger.debug('[ContactsDialog] Fetching contacts...');
       setIsLoading(true);
       setError(null);
 
@@ -83,10 +84,10 @@ export function ContactsDialog({ open, onOpenChange, onSelectContact }: Contacts
         const response = await fetch(`/api/beeper/contacts?${params}`, { headers });
         const result = await response.json();
 
-        console.log('[ContactsDialog] Received contacts:', result.data?.length, 'contacts');
+        logger.debug('[ContactsDialog] Received contacts:', { count: result.data?.length });
         // Log first few contacts to debug
         if (result.data?.length > 0) {
-          console.log('[ContactsDialog] First 5 contacts:', result.data.slice(0, 5).map((c: { name: string; chatId: string }) => ({ name: c.name, chatId: c.chatId })));
+          logger.debug('[ContactsDialog] First 5 contacts:', result.data.slice(0, 5).map((c: { name: string; chatId: string }) => ({ name: c.name, chatId: c.chatId })));
         }
 
         if (result.error) {

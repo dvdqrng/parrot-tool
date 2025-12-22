@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { logger } from '@/lib/logger';
 import { Eye, EyeOff, Key, Check, Cpu, RefreshCw, CheckCircle, XCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -64,7 +65,7 @@ export default function ApiKeysPage() {
           setOllamaModel(currentModel => {
             if (!availableModelNames.includes(currentModel)) {
               const firstModel = result.data.models[0].name;
-              console.log(`[Settings] Auto-selected first available model: ${firstModel}`);
+              logger.debug(`[Settings] Auto-selected first available model: ${firstModel}`);
               return firstModel;
             }
             return currentModel;
@@ -94,7 +95,7 @@ export default function ApiKeysPage() {
         setOllamaModel(currentModel => {
           if (!availableModelNames.includes(currentModel)) {
             const firstModel = result.data.models[0].name;
-            console.log(`[Settings] Auto-selected first available model: ${firstModel}`);
+            logger.debug(`[Settings] Auto-selected first available model: ${firstModel}`);
             return firstModel;
           }
           return currentModel;

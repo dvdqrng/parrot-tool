@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { logger } from '@/lib/logger';
 import { ToneSettings, AiProvider, WritingStylePatterns } from '@/lib/types';
 import { callAiProvider, handleAiProviderError } from '@/lib/ai-provider';
 import { AI_TOKENS, AI_TEMPERATURE, DEFAULT_OLLAMA_MODEL } from '@/lib/ai-constants';
@@ -382,7 +383,7 @@ Consider the conversation history and create an engaging, contextual message.`;
           // Remove the goal analysis from the reply
           finalReply = suggestedReply.replace(/<goal_analysis>[\s\S]*?<\/goal_analysis>/, '').trim();
         } catch (e) {
-          console.error('Failed to parse goal analysis:', e);
+          logger.error('Failed to parse goal analysis:', e instanceof Error ? e : String(e));
         }
       }
     }
@@ -392,7 +393,7 @@ Consider the conversation history and create an engaging, contextual message.`;
     const containsMetadataOnly = /^(isGoalAchieved|confidence|reasoning)/.test(finalReply);
 
     if (!finalReply || finalReply.length < 3 || looksLikeJson || containsMetadataOnly) {
-      console.error('[Draft] Invalid reply generated:', {
+      logger.error('[Draft] Invalid reply generated:', {
         finalReply: finalReply.slice(0, 100),
         suggestedReply: suggestedReply.slice(0, 200)
       });
@@ -438,7 +439,7 @@ Consider the conversation history and create an engaging, contextual message.`;
       }
     });
   } catch (error) {
-    console.error('Error generating draft:', error);
+    logger.error('Error generating draft:', error instanceof Error ? error : String(error));
     const { error: errorMessage, status } = handleAiProviderError(error);
     return NextResponse.json({ error: errorMessage }, { status });
   }

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
+import { logger } from '@/lib/logger';
 import { formatDistanceToNow } from 'date-fns';
 import {
   Dialog,
@@ -131,7 +132,7 @@ export function MessageModal({
         }
       }
     } catch (error) {
-      console.error('Failed to fetch chat history:', error);
+      logger.error('Failed to fetch chat history:', error instanceof Error ? error : String(error));
       toast.error('Failed to load chat history');
     } finally {
       setIsLoadingHistory(false);
@@ -197,7 +198,7 @@ export function MessageModal({
         toast.error(result.error);
       }
     } catch (error) {
-      console.error('Failed to generate suggestion:', error);
+      logger.error('Failed to generate suggestion:', error instanceof Error ? error : String(error));
       toast.error('Failed to generate AI suggestion');
     } finally {
       setIsGenerating(false);

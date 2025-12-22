@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { AiProvider } from '@/lib/types';
 import { callAiProvider, handleAiProviderError } from '@/lib/ai-provider';
 import { AI_TOKENS, AI_TEMPERATURE } from '@/lib/ai-constants';
+import { logger } from '@/lib/logger';
 
 interface ChatMessage {
   role: 'user' | 'assistant';
@@ -86,7 +87,7 @@ Be helpful, concise, and friendly in your responses.`;
       }
     });
   } catch (error) {
-    console.error('Error in AI chat:', error);
+    logger.error('Error in AI chat:', error instanceof Error ? error : String(error));
     const { error: errorMessage, status } = handleAiProviderError(error);
     return NextResponse.json({ error: errorMessage }, { status });
   }

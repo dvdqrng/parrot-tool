@@ -17,20 +17,20 @@ The app has been configured with:
 
 ### Running in Development Mode
 
-**Option 1: Manual (Two terminals)**
+**Recommended: Single Command**
+```bash
+npm run dev:electron
+```
+This will start both the Next.js dev server and Electron app automatically!
+
+**Alternative: Manual (Two terminals)**
 ```bash
 # Terminal 1: Start Next.js dev server
 npm run dev
 
-# Terminal 2: Start Electron
+# Terminal 2: Start Electron (after Next.js is ready)
 npm run electron:dev
 ```
-
-**Option 2: Using the dev script**
-```bash
-npm run electron:dev
-```
-Note: Make sure Next.js is running on port 3000 first.
 
 ### Development Features
 - Auto-opens DevTools for debugging

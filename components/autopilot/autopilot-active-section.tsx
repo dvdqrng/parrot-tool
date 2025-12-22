@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import { logger } from '@/lib/logger';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
@@ -54,7 +55,7 @@ export function AutopilotActiveSection({ chatId, compactMode, controlsOnly }: Au
     if (pendingDraft?.messageId) {
       regenerateDraft(pendingDraft.messageId);
     } else {
-      console.error('No messageId found for pending draft to regenerate');
+      logger.error('No messageId found for pending draft to regenerate');
       // Optionally show a toast error
     }
     notifyConfigChange(); // To re-trigger draft generation display

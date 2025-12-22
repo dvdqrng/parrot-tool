@@ -24,6 +24,7 @@ import {
   saveHandoffSummary,
   getCachedMessageById,
 } from '@/lib/storage';
+import { getEffectiveAiProvider } from '@/lib/api-headers';
 import {
   useAutopilotScheduler,
   calculateReplyDelay,
@@ -105,11 +106,11 @@ export function useAutopilotEngine(options: UseAutopilotEngineOptions = {}) {
   ) => {
     const { chatId, id: messageId, text, senderName } = message;
 
-    logger.engine( handleIncomingMessage called', { chatId, messageId, text: text?.slice(0, 50), forceProcess });
+    logger.engine('handleIncomingMessage called', { chatId, messageId, text: text?.slice(0, 50), forceProcess });
 
     // Skip if we've already processed this message (unless forced to process)
     if (!forceProcess && processedMessagesRef.current.has(messageId)) {
-      logger.engine( Message already processed, skipping', { messageId });
+      logger.engine('Message already processed, skipping', { messageId });
       return;
     }
     processedMessagesRef.current.add(messageId);
@@ -122,9 +123,9 @@ export function useAutopilotEngine(options: UseAutopilotEngineOptions = {}) {
 
     // Check if autopilot is enabled for this chat
     const config = getChatAutopilotConfig(chatId);
-    logger.engine( Chat config', { chatId, config: config ? { enabled: config.enabled, status: config.status, agentId: config.agentId } : null });
+    logger.engine('Chat config', { chatId, config: config ? { enabled: config.enabled, status: config.status, agentId: config.agentId } : null });
     if (!config || !config.enabled || config.status !== 'active') {
-      logger.engine( Autopilot not active for chat, skipping', { chatId });
+      logger.engine('Autopilot not active for chat, skipping', { chatId });
       return;
     }
 
@@ -150,9 +151,9 @@ export function useAutopilotEngine(options: UseAutopilotEngineOptions = {}) {
 
     // Get the agent
     const agent = getAutopilotAgentById(config.agentId);
-    logger.engine( Agent lookup', { agentId: config.agentId, found: !!agent });
+    logger.engine('Agent lookup', { agentId: config.agentId, found: !!agent });
     if (!agent) {
-      logger.engine( Agent not found', { agentId: config.agentId });
+      logger.engine('Agent not found', { agentId: config.agentId });
       onError?.(chatId, 'Agent not found');
       return;
     }
@@ -160,14 +161,14 @@ export function useAutopilotEngine(options: UseAutopilotEngineOptions = {}) {
     // Check activity hours (unless forced to process)
     if (!forceProcess) {
       const withinHours = isWithinActivityHours(agent.behavior);
-      logger.engine( Activity hours check', { withinHours, behavior: agent.behavior });
+      logger.engine('Activity hours check', { withinHours, behavior: agent.behavior });
       if (!withinHours) {
-        logger.engine( Outside activity hours, skipping');
+        logger.engine('Outside activity hours, skipping');
         // Outside activity hours - skip processing
         return;
       }
     } else {
-      logger.engine( Bypassing activity hours check (forceProcess=true)');
+      logger.engine('Bypassing activity hours check (forceProcess=true)');
     }
 
     // Log the received message
@@ -193,7 +194,7 @@ export function useAutopilotEngine(options: UseAutopilotEngineOptions = {}) {
         effectiveResponseRate = Math.max(30, effectiveResponseRate - reduction); // Min 30%
 
         if (reduction > 0) {
-          logger.engine( Fatigue applied', { messagesHandled: config.messagesHandled, reduction, effectiveResponseRate });
+          logger.engine('Fatigue applied', { messagesHandled: config.messagesHandled, reduction, effectiveResponseRate });
           addAutopilotActivityEntry({
             id: generateId(),
             chatId,
@@ -209,7 +210,7 @@ export function useAutopilotEngine(options: UseAutopilotEngineOptions = {}) {
     // Response rate check - simulate being busy
     const responseRoll = Math.random() * 100;
     if (responseRoll > effectiveResponseRate) {
-      logger.engine( Skipping message (busy simulation)', { responseRoll, effectiveResponseRate });
+      logger.engine('Skipping message (busy simulation)', { responseRoll, effectiveResponseRate });
       addAutopilotActivityEntry({
         id: generateId(),
         chatId,
@@ -239,7 +240,7 @@ export function useAutopilotEngine(options: UseAutopilotEngineOptions = {}) {
       (Date.now() - new Date(config.lastActivityAt).getTime()) > (agent.behavior.closingTriggerIdleMinutes ?? 30) * 60 * 1000;
 
     try {
-      logger.engine( Generating draft via API...', { shouldSendEmojiOnly, shouldSuggestClosing });
+      logger.engine('Generating draft via API...', { shouldSendEmojiOnly, shouldSuggestClosing });
       // Generate draft via API
       const response = await fetch('/api/ai/draft', {
         method: 'POST',
@@ -257,7 +258,7 @@ export function useAutopilotEngine(options: UseAutopilotEngineOptions = {}) {
           toneSettings,
           writingStyle,
           detectGoalCompletion: true,
-          provider: settings.aiProvider || 'anthropic',
+          provider: getEffectiveAiProvider(settings),
           ollamaModel: settings.ollamaModel,
           ollamaBaseUrl: settings.ollamaBaseUrl,
           // Human-like behaviors
@@ -269,12 +270,12 @@ export function useAutopilotEngine(options: UseAutopilotEngineOptions = {}) {
 
       if (!response.ok) {
         const error = await response.json();
-        logger.engine( API error', error);
+        logger.engine('API error', error);
         throw new Error(error.error || 'Failed to generate draft');
       }
 
       const result = await response.json();
-      logger.engine( API response', result);
+      logger.engine('API response', result);
       const { data } = result;
       const { suggestedReply, suggestedMessages, goalAnalysis } = data;
 
@@ -323,9 +324,9 @@ export function useAutopilotEngine(options: UseAutopilotEngineOptions = {}) {
       }
 
       // Handle based on mode
-      logger.engine( Handling mode', { mode: config.mode, suggestedReply: suggestedReply?.slice(0, 50) });
+      logger.engine('Handling mode', { mode: config.mode, suggestedReply: suggestedReply?.slice(0, 50) });
       if (config.mode === 'manual-approval') {
-        logger.engine( Manual approval mode - scheduling draft for approval');
+        logger.engine('Manual approval mode - scheduling draft for approval');
         // Schedule the message far in the future (24 hours) so it appears as pending
         // User approval will reschedule it to send immediately
         const PENDING_APPROVAL_DELAY = AUTOPILOT.PENDING_APPROVAL_DELAY;
@@ -371,8 +372,8 @@ export function useAutopilotEngine(options: UseAutopilotEngineOptions = {}) {
         onMessageScheduled?.(chatId, new Date(Date.now() + replyDelay * 1000));
       }
     } catch (error) {
-      logger.error('Error in autopilot engine:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      logger.error('Error in autopilot engine:', error instanceof Error ? error : errorMessage);
 
       // Update config with error
       saveChatAutopilotConfig({
@@ -415,7 +416,7 @@ export function useAutopilotEngine(options: UseAutopilotEngineOptions = {}) {
           threadContext,
           agentGoal: agent.goal,
           senderName,
-          provider: settings.aiProvider || 'anthropic',
+          provider: getEffectiveAiProvider(settings),
           ollamaModel: settings.ollamaModel,
           ollamaBaseUrl: settings.ollamaBaseUrl,
         }),
@@ -443,27 +444,27 @@ export function useAutopilotEngine(options: UseAutopilotEngineOptions = {}) {
         onGoalCompleted?.(chatId, summary);
       }
     } catch (error) {
-      logger.error('Failed to generate handoff summary:', error);
+      logger.error('Failed to generate handoff summary:', error instanceof Error ? error : String(error));
     }
   };
 
   // Generate a proactive initial message (not in response to an incoming message)
   const generateProactiveMessage = useCallback(async (chatId: string) => {
-    logger.engine( generateProactiveMessage called', { chatId });
+    logger.engine('generateProactiveMessage called', { chatId });
 
     // Check if autopilot is enabled for this chat
     const config = getChatAutopilotConfig(chatId);
-    logger.engine( Chat config', { chatId, config: config ? { enabled: config.enabled, status: config.status, agentId: config.agentId } : null });
+    logger.engine('Chat config', { chatId, config: config ? { enabled: config.enabled, status: config.status, agentId: config.agentId } : null });
     if (!config || !config.enabled || config.status !== 'active') {
-      logger.engine( Autopilot not active for chat, skipping', { chatId });
+      logger.engine('Autopilot not active for chat, skipping', { chatId });
       return;
     }
 
     // Get the agent
     const agent = getAutopilotAgentById(config.agentId);
-    logger.engine( Agent lookup', { agentId: config.agentId, found: !!agent });
+    logger.engine('Agent lookup', { agentId: config.agentId, found: !!agent });
     if (!agent) {
-      logger.engine( Agent not found', { agentId: config.agentId });
+      logger.engine('Agent not found', { agentId: config.agentId });
       onError?.(chatId, 'Agent not found');
       return;
     }
@@ -476,7 +477,7 @@ export function useAutopilotEngine(options: UseAutopilotEngineOptions = {}) {
     const threadContextStr = formatThreadContextForPrompt(threadContext);
 
     try {
-      logger.engine( Generating proactive draft via API...');
+      logger.engine('Generating proactive draft via API...');
       // Generate draft via API (with empty original message for proactive mode)
       const response = await fetch('/api/ai/draft', {
         method: 'POST',
@@ -494,7 +495,7 @@ export function useAutopilotEngine(options: UseAutopilotEngineOptions = {}) {
           toneSettings,
           writingStyle,
           detectGoalCompletion: false, // Don't check goal on initial message
-          provider: settings.aiProvider || 'anthropic',
+          provider: getEffectiveAiProvider(settings),
           ollamaModel: settings.ollamaModel,
           ollamaBaseUrl: settings.ollamaBaseUrl,
         }),
@@ -502,12 +503,12 @@ export function useAutopilotEngine(options: UseAutopilotEngineOptions = {}) {
 
       if (!response.ok) {
         const error = await response.json();
-        logger.engine( API error', error);
+        logger.engine('API error', error);
         throw new Error(error.error || 'Failed to generate draft');
       }
 
       const result = await response.json();
-      logger.engine( API response', result);
+      logger.engine('API response', result);
       const { data } = result;
       const { suggestedReply, suggestedMessages } = data;
 
@@ -522,9 +523,9 @@ export function useAutopilotEngine(options: UseAutopilotEngineOptions = {}) {
       });
 
       // Handle based on mode
-      logger.engine( Handling mode', { mode: config.mode, suggestedReply: suggestedReply?.slice(0, 50) });
+      logger.engine('Handling mode', { mode: config.mode, suggestedReply: suggestedReply?.slice(0, 50) });
       if (config.mode === 'manual-approval') {
-        logger.engine( Manual approval mode - scheduling draft for approval');
+        logger.engine('Manual approval mode - scheduling draft for approval');
         // Schedule the message far in the future (24 hours) so it appears as pending
         const PENDING_APPROVAL_DELAY = AUTOPILOT.PENDING_APPROVAL_DELAY;
 
@@ -562,8 +563,8 @@ export function useAutopilotEngine(options: UseAutopilotEngineOptions = {}) {
         onMessageScheduled?.(chatId, new Date(Date.now() + replyDelay * 1000));
       }
     } catch (error) {
-      logger.error('Error in proactive message generation:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      logger.error('Error in proactive message generation:', error instanceof Error ? error : errorMessage);
 
       // Update config with error
       saveChatAutopilotConfig({

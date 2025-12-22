@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { logger } from '@/lib/logger';
 import { readFile } from 'fs/promises';
 import { existsSync } from 'fs';
 import path from 'path';
@@ -58,7 +59,7 @@ export async function GET(request: NextRequest) {
       },
     });
   } catch (error) {
-    console.error('Error serving avatar:', error);
+    logger.error('Error serving avatar:', error instanceof Error ? error : String(error));
     return NextResponse.json({ error: 'Failed to load avatar' }, { status: 500 });
   }
 }
