@@ -26,8 +26,8 @@ npm run build
 
 # Copy necessary files for standalone mode
 echo "📂 Copying static assets for standalone mode..."
-# Next.js standalone entry is nested in Projects/parrot
-STANDALONE_DIR=".next/standalone/Projects/parrot"
+# Next.js standalone entry is nested based on actual project folder name
+STANDALONE_DIR=".next/standalone/Projects/beeper-kanban"
 
 # Ensure the directories exist
 mkdir -p "$STANDALONE_DIR/public"

@@ -33,7 +33,7 @@ if (isDev) {
     // In production, run the Next.js standalone server
     // The standalone output is in .next/standalone with the full project path
     // When packaged in asar, we can require it directly without fs.existsSync
-    const standaloneServerPath = path.join(__dirname, '.next', 'standalone', 'Projects', 'parrot', 'server.js');
+    const standaloneServerPath = path.join(__dirname, '.next', 'standalone', 'Projects', 'beeper-kanban', 'server.js');
 
     try {
         console.log('Starting Next.js standalone server...');
