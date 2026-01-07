@@ -1,6 +1,6 @@
 # API Documentation
 
-This document describes all API endpoints available in the Beeper Kanban application.
+This document describes all API endpoints available in the Parrot application.
 
 ## Table of Contents
 

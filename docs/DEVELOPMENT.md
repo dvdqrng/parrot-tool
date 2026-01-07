@@ -1,6 +1,6 @@
 # Development Guide
 
-This guide covers everything you need to know to develop and contribute to Beeper Kanban.
+This guide covers everything you need to know to develop and contribute to Parrot.
 
 ## Table of Contents
 
@@ -31,8 +31,8 @@ This guide covers everything you need to know to develop and contribute to Beepe
 
 1. **Clone the repository**:
 ```bash
-git clone https://github.com/yourusername/beeper-kanban.git
-cd beeper-kanban
+git clone https://github.com/yourusername/parrot.git
+cd parrot
 ```
 
 2. **Install dependencies**:
@@ -862,8 +862,8 @@ CMD ["npm", "start"]
 ```
 
 ```bash
-docker build -t beeper-kanban .
-docker run -p 3000:3000 beeper-kanban
+docker build -t parrot .
+docker run -p 3000:3000 parrot
 ```
 
 ---

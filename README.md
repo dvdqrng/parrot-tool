@@ -1,10 +1,10 @@
-# Beeper Kanban
+# Parrot
 
 A powerful Kanban-style message management interface for Beeper, featuring AI-assisted draft generation and autonomous conversation handling through intelligent autopilot agents.
 
 ## Overview
 
-Beeper Kanban transforms your messaging workflow by providing a visual kanban board interface for managing conversations across all your messaging platforms connected through Beeper. With AI assistance and autopilot capabilities, you can efficiently handle high volumes of messages while maintaining personal, context-aware responses.
+Parrot transforms your messaging workflow by providing a visual kanban board interface for managing conversations across all your messaging platforms connected through Beeper. With AI assistance and autopilot capabilities, you can efficiently handle high volumes of messages while maintaining personal, context-aware responses.
 
 ### Key Features
 
@@ -58,8 +58,8 @@ Beeper Kanban transforms your messaging workflow by providing a visual kanban bo
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/beeper-kanban.git
-cd beeper-kanban
+git clone https://github.com/yourusername/parrot.git
+cd parrot
 ```
 
 2. Install dependencies:
@@ -111,7 +111,7 @@ npm run electron
 2. Open Developer Tools (View > Toggle Developer Tools)
 3. Go to Application > Local Storage
 4. Find your access token under the appropriate key
-5. Copy and paste into Beeper Kanban settings
+5. Copy and paste into Parrot settings
 
 For detailed configuration instructions, see [CONFIGURATION.md](docs/CONFIGURATION.md).
 
@@ -161,7 +161,7 @@ Each conversation has a dedicated AI assistant:
 ### Project Structure
 
 ```
-beeper-kanban/
+parrot/
 ├── app/                      # Next.js app directory
 │   ├── api/                  # API routes
 │   │   ├── ai/               # AI integration endpoints

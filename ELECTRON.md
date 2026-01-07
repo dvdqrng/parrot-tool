@@ -1,6 +1,6 @@
 # Electron App Guide
 
-Your Beeper Kanban app is now a proper Electron desktop application! This guide covers everything you need to know about running, building, and distributing your app.
+Your Parrot app is now a proper Electron desktop application! This guide covers everything you need to know about running, building, and distributing your app.
 
 ## Overview
 
@@ -64,9 +64,9 @@ npm run pack
 
 ### Build Output
 Built applications are saved to the `dist/` directory:
-- **macOS**: `dist/Beeper Kanban-0.1.0-arm64.dmg`
-- **Windows**: `dist/Beeper Kanban Setup 0.1.0.exe`
-- **Linux**: `dist/Beeper Kanban-0.1.0.AppImage`
+- **macOS**: `dist/Parrot-0.1.0-arm64.dmg`
+- **Windows**: `dist/Parrot Setup 0.1.0.exe`
+- **Linux**: `dist/Parrot-0.1.0.AppImage`
 
 ## Architecture
 
@@ -90,7 +90,7 @@ The app automatically:
 
 ### File Structure
 ```
-beeper-kanban/
+parrot/
 ├── electron.js              # Main Electron process
 ├── preload.js              # Preload script for security
 ├── electron-builder.json   # Packaging configuration
@@ -108,7 +108,7 @@ beeper-kanban/
 Edit `package.json`:
 ```json
 {
-  "name": "beeper-kanban",
+  "name": "parrot",
   "version": "0.1.0",
   "description": "Your app description",
   "author": "Your Name"
@@ -224,7 +224,7 @@ The app includes modern Electron security practices:
 1. **Auto-updater**: Add electron-updater for automatic updates
 2. **Native notifications**: Use Electron's Notification API
 3. **System tray**: Add tray icon for background operation
-4. **Deep linking**: Register custom protocol (e.g., `beeper://`)
+4. **Deep linking**: Register custom protocol (e.g., `parrot://`)
 5. **Crash reporting**: Integrate Sentry or similar service
 
 ### Resources:

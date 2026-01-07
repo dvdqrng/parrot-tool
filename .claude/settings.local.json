@@ -39,7 +39,9 @@
       "Bash(/tmp/replace-console.sh:*)",
       "Bash(fi)",
       "Bash(done)",
-      "Bash(xargs perl:*)"
+      "Bash(xargs perl:*)",
+      "Bash(./build-mac.sh)",
+      "Bash(git commit:*)"
     ]
   }
 }

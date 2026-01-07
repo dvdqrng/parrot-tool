@@ -1,16 +1,16 @@
 {
-  "name": "beeper-kanban",
+  "name": "parrot",
   "version": "0.1.0",
-  "description": "A Kanban board for managing Beeper messages with AI assistance",
+  "description": "Parrot is a Kanban board for managing Beeper messages with AI assistance",
   "main": "electron.js",
   "author": {
-    "name": "Beeper Kanban",
-    "email": "hello@beeper-kanban.app"
+    "name": "Parrot",
+    "email": "hello@parrot.app"
   },
-  "homepage": "https://github.com/yourusername/beeper-kanban",
+  "homepage": "https://github.com/yourusername/parrot",
   "repository": {
     "type": "git",
-    "url": "https://github.com/yourusername/beeper-kanban.git"
+    "url": "https://github.com/yourusername/parrot.git"
   },
   "keywords": [
     "beeper",
@@ -29,7 +29,7 @@
     "lint": "eslint",
     "electron:dev": "NODE_ENV=development electron electron.js",
     "electron:build": "npm run build && electron-builder",
-    "electron:build:mac": "npm run build && electron-builder --mac",
+    "electron:build:mac": "./build-mac.sh",
     "electron:build:win": "npm run build && electron-builder --win",
     "electron:build:linux": "npm run build && electron-builder --linux",
     "pack": "npm run build && electron-builder --dir"
@@ -61,6 +61,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
+    "electron-updater": "^6.6.2",
     "framer-motion": "^12.23.26",
     "lucide-react": "^0.559.0",
     "next": "16.0.8",

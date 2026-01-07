@@ -1,6 +1,6 @@
 # Troubleshooting Guide
 
-Common issues and their solutions for Beeper Kanban.
+Common issues and their solutions for Parrot.
 
 ## Table of Contents
 
@@ -128,7 +128,7 @@ curl https://api.beeper.com/health
 
 1. **Log out and back in to Beeper Desktop**
 2. **Get new token** from Developer Tools
-3. **Update token** in Beeper Kanban settings
+3. **Update token** in Parrot settings
 4. **Verify token** is copied completely
 
 ### API calls failing
@@ -452,7 +452,7 @@ curl http://localhost:11434/api/tags
 3. **Review scheduled actions**:
    - Open browser DevTools
    - Application → Local Storage
-   - Look for `beeper-kanban-autopilot-actions`
+   - Look for `parrot-autopilot-actions`
    - Check `scheduledFor` timestamps
 
 ### Self-driving mode not working
@@ -689,7 +689,7 @@ rmdir /s %APPDATA%\Electron
 2. **Check storage**:
 ```javascript
 // Open console (F12)
-console.log(localStorage.getItem('beeper-kanban-settings'))
+console.log(localStorage.getItem('parrot-settings'))
 // Should return JSON string, not null
 ```
 
@@ -740,8 +740,8 @@ console.log(localStorage.getItem('beeper-kanban-settings'))
 ```javascript
 // Open console (F12)
 const data = {
-  settings: localStorage.getItem('beeper-kanban-settings'),
-  drafts: localStorage.getItem('beeper-kanban-drafts'),
+  settings: localStorage.getItem('parrot-settings'),
+  drafts: localStorage.getItem('parrot-drafts'),
   // Add other keys as needed
 }
 console.log(JSON.stringify(data, null, 2))
@@ -816,9 +816,9 @@ If all else fails:
 // Open browser console (F12)
 // WARNING: This deletes ALL data
 
-// Clear all Beeper Kanban data
+// Clear all Parrot data
 Object.keys(localStorage)
-  .filter(key => key.startsWith('beeper-kanban-'))
+  .filter(key => key.startsWith('parrot-'))
   .forEach(key => localStorage.removeItem(key))
 
 // Reload page
@@ -845,7 +845,7 @@ Then reconfigure from scratch.
 
 If this guide didn't help:
 
-1. **Search GitHub Issues**: https://github.com/yourusername/beeper-kanban/issues
+1. **Search GitHub Issues**: https://github.com/yourusername/parrot/issues
 2. **Open New Issue**: Provide details as described above
 3. **Community**: Discord/Forum if available
 4. **Check Updates**: Ensure you're on latest version

@@ -552,7 +552,7 @@ export default function Home() {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-4 p-8">
         <div className="text-center">
-          <h1 className="text-xs font-medium">Welcome to Beeper Kanban</h1>
+          <h1 className="text-xs font-medium">Welcome to Parrot</h1>
           <p className="mt-2 text-xs text-muted-foreground">
             Configure your platforms to get started
           </p>

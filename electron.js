@@ -132,42 +132,25 @@ function createMenu() {
 
 function startNextServer() {
   return new Promise((resolve, reject) => {
-    const nextCommand = isDev ? 'dev' : 'start';
-    console.log(`Starting Next.js server with command: ${nextCommand}...`);
+    console.log('Starting Next.js server...');
 
-    // In production, we try to run the next binary directly from node_modules
-    // specifically looking for it in the app's directory
-    const nextPath = path.join(__dirname, 'node_modules', '.bin', 'next');
-    
-    // Fallback to npm if we can't find it directly (mostly for dev)
-    const cmd = process.platform === 'win32' ? (isDev ? 'npm.cmd' : nextPath) : (isDev ? 'npm' : nextPath);
-    const args = isDev ? ['run', 'dev'] : ['start', '-p', port.toString()];
+    // Set environment variables for the server
+    process.env.NODE_ENV = isDev ? 'development' : 'production';
+    process.env.PORT = port.toString();
 
-    nextServer = spawn(cmd, args, {
-      cwd: __dirname,
-      stdio: 'inherit',
-      shell: true,
-    });
+    try {
+      // Directly require the server.js module instead of spawning it
+      // This works correctly in packaged apps where node binary isn't available
+      const serverPath = path.join(__dirname, 'server.js');
+      require(serverPath);
 
-    nextServer.on('error', (err) => {
+      // Give the server time to start
+      const startupTime = isDev ? 8000 : 4000;
+      setTimeout(resolve, startupTime);
+    } catch (err) {
       console.error('Failed to start Next.js server:', err);
-      // If direct binary fails, try npm as a last resort
-      if (!isDev && cmd !== 'npm') {
-         console.log('Retrying with npm...');
-         nextServer = spawn('npm', ['run', 'start', '--', '-p', port.toString()], {
-           cwd: __dirname,
-           stdio: 'inherit',
-           shell: true,
-         });
-      } else {
-        reject(err);
-      }
-    });
-
-    // Give the server time to start
-    // In dev mode, wait longer for initial build
-    const startupTime = isDev ? 8000 : 4000;
-    setTimeout(resolve, startupTime);
+      reject(err);
+    }
   });
 }
 

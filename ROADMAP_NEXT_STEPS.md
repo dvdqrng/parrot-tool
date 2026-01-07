@@ -40,8 +40,8 @@ The initial refactoring successfully established foundation utilities and reduce
 #### Hidden Chats (Lines 233-331)
 ```typescript
 // Current: Manual Set operations
-const HIDDEN_CHATS_KEY = 'beeper-kanban-hidden-chats';
-const HIDDEN_CHATS_META_KEY = 'beeper-kanban-hidden-chats-meta';
+const HIDDEN_CHATS_KEY = 'parrot-hidden-chats';
+const HIDDEN_CHATS_META_KEY = 'parrot-hidden-chats-meta';
 
 export function loadHiddenChats(): Set<string> { /* 8 lines */ }
 export function saveHiddenChats(hiddenChats: Set<string>): void { /* 7 lines */ }
@@ -73,8 +73,8 @@ export const addHiddenChat = (chatId: string, meta?: HiddenChatInfo) => {
 #### Tone & Writing Style (Lines 333-420)
 ```typescript
 // Current: 87 lines with boilerplate
-const TONE_SETTINGS_KEY = 'beeper-kanban-tone-settings';
-const WRITING_STYLE_KEY = 'beeper-kanban-writing-style';
+const TONE_SETTINGS_KEY = 'parrot-tone-settings';
+const WRITING_STYLE_KEY = 'parrot-writing-style';
 
 export function loadToneSettings(): ToneSettings { /* 11 lines */ }
 export function saveToneSettings(settings: ToneSettings): void { /* 7 lines */ }

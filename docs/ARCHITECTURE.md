@@ -2,7 +2,7 @@
 
 ## Overview
 
-Beeper Kanban is built as a modern Next.js application with a client-side heavy architecture. The application follows React best practices with hooks, contexts, and component composition patterns.
+Parrot is built as a modern Next.js application with a client-side heavy architecture. The application follows React best practices with hooks, contexts, and component composition patterns.
 
 ## System Architecture
 

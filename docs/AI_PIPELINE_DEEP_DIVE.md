@@ -1,6 +1,6 @@
 # AI Pipeline Deep Dive
 
-A comprehensive technical guide to the AI system in Beeper Kanban - how context flows through drafts, autopilot, and AI chat, how providers are selected, and how agents work.
+A comprehensive technical guide to the AI system in Parrot - how context flows through drafts, autopilot, and AI chat, how providers are selected, and how agents work.
 
 ## Table of Contents
 
@@ -21,7 +21,7 @@ A comprehensive technical guide to the AI system in Beeper Kanban - how context 
 
 ### The Three AI Systems
 
-Beeper Kanban has three interconnected AI systems:
+Parrot has three interconnected AI systems:
 
 1. **Draft Generation**: One-off AI-powered reply suggestions
 2. **AI Chat Assistant**: Conversational help per thread
@@ -427,18 +427,18 @@ CRITICAL RULES:
 
 ```typescript
 // Tone settings (global)
-'beeper-kanban-tone-settings': ToneSettings
+'parrot-tone-settings': ToneSettings
 
 // Writing style (global)
-'beeper-kanban-writing-style': WritingStylePatterns
+'parrot-writing-style': WritingStylePatterns
 
 // Thread context (per chat)
-'beeper-kanban-thread-context': {
+'parrot-thread-context': {
   [chatId]: ThreadContext
 }
 
 // AI chat history (per chat)
-'beeper-kanban-ai-chat-history': {
+'parrot-ai-chat-history': {
   [chatId]: AiChatMessage[]
 }
 ```
@@ -936,7 +936,7 @@ const messages = getAiChatForThread(chatId);
 **Storage Structure**:
 ```json
 {
-  "beeper-kanban-ai-chat-history": {
+  "parrot-ai-chat-history": {
     "chat-123": [
       { "id": "msg-1", "role": "user", "content": "How should I respond?" },
       { "id": "msg-2", "role": "assistant", "content": "Here are some options..." }
@@ -1686,17 +1686,17 @@ const handleGoalCompletion = async (
 **All data stored in browser LocalStorage**:
 ```
 window.localStorage
-  ├─ beeper-kanban-settings            (App settings)
-  ├─ beeper-kanban-tone-settings       (Tone sliders)
-  ├─ beeper-kanban-writing-style       (Writing patterns)
-  ├─ beeper-kanban-thread-context      (Per-chat history)
-  ├─ beeper-kanban-ai-chat-history     (Per-chat AI conversations)
-  ├─ beeper-kanban-drafts              (Draft messages)
-  ├─ beeper-kanban-autopilot-agents    (Agent definitions)
-  ├─ beeper-kanban-autopilot-chat-configs (Per-chat autopilot config)
-  ├─ beeper-kanban-autopilot-activity  (Activity log)
-  ├─ beeper-kanban-autopilot-scheduled (Scheduled actions)
-  └─ beeper-kanban-autopilot-handoffs  (Handoff summaries)
+  ├─ parrot-settings            (App settings)
+  ├─ parrot-tone-settings       (Tone sliders)
+  ├─ parrot-writing-style       (Writing patterns)
+  ├─ parrot-thread-context      (Per-chat history)
+  ├─ parrot-ai-chat-history     (Per-chat AI conversations)
+  ├─ parrot-drafts              (Draft messages)
+  ├─ parrot-autopilot-agents    (Agent definitions)
+  ├─ parrot-autopilot-chat-configs (Per-chat autopilot config)
+  ├─ parrot-autopilot-activity  (Activity log)
+  ├─ parrot-autopilot-scheduled (Scheduled actions)
+  └─ parrot-autopilot-handoffs  (Handoff summaries)
 ```
 
 ### Key-Value Patterns
@@ -1775,7 +1775,7 @@ const exportData = () => {
     type: 'application/json'
   });
 
-  downloadBlob(blob, `beeper-kanban-export-${Date.now()}.json`);
+  downloadBlob(blob, `parrot-export-${Date.now()}.json`);
 };
 ```
 

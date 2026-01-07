@@ -1,6 +1,6 @@
 # Autopilot System Documentation
 
-Complete guide to the Beeper Kanban Autopilot system - autonomous AI agents that handle conversations with human-like behavior.
+Complete guide to the Parrot Autopilot system - autonomous AI agents that handle conversations with human-like behavior.
 
 ## Table of Contents
 

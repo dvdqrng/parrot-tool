@@ -1,6 +1,6 @@
-# Contributing to Beeper Kanban
+# Contributing to Parrot
 
-Thank you for considering contributing to Beeper Kanban! This document provides guidelines and instructions for contributing.
+Thank you for considering contributing to Parrot! This document provides guidelines and instructions for contributing.
 
 ## Table of Contents
 
@@ -49,7 +49,7 @@ Instances of abusive, harassing, or otherwise unacceptable behavior may be repor
 
 **Before submitting a bug report**:
 1. Check the [troubleshooting guide](TROUBLESHOOTING.md)
-2. Search existing [GitHub issues](https://github.com/yourusername/beeper-kanban/issues)
+2. Search existing [GitHub issues](https://github.com/yourusername/parrot/issues)
 3. Verify you're on the latest version
 
 **How to submit a good bug report**:
@@ -187,13 +187,13 @@ Help others by:
 
 2. **Clone your fork**:
 ```bash
-git clone https://github.com/YOUR_USERNAME/beeper-kanban.git
-cd beeper-kanban
+git clone https://github.com/YOUR_USERNAME/parrot.git
+cd parrot
 ```
 
 3. **Add upstream remote**:
 ```bash
-git remote add upstream https://github.com/ORIGINAL_OWNER/beeper-kanban.git
+git remote add upstream https://github.com/ORIGINAL_OWNER/parrot.git
 ```
 
 4. **Install dependencies**:
@@ -703,7 +703,7 @@ Contributors will be recognized in:
 - GitHub contributors page
 - Release notes (for significant contributions)
 
-Thank you for contributing to Beeper Kanban! Your efforts help make this project better for everyone.
+Thank you for contributing to Parrot! Your efforts help make this project better for everyone.
 
 ---
 

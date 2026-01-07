@@ -1,6 +1,6 @@
 # Configuration Guide
 
-This guide covers all configuration options available in Beeper Kanban.
+This guide covers all configuration options available in Parrot.
 
 ## Table of Contents
 
@@ -49,7 +49,7 @@ Your Beeper access token is required to fetch and send messages.
    - `token`
    - `authToken`
 6. Copy the token value
-7. Paste into Beeper Kanban Settings → Platforms
+7. Paste into Parrot Settings → Platforms
 
 #### Method 2: From Network Requests
 
@@ -82,7 +82,7 @@ The kanban board will now show messages from selected accounts.
 
 ## AI Provider Setup
 
-Beeper Kanban supports three AI providers:
+Parrot supports three AI providers:
 
 ### Anthropic (Claude)
 
@@ -498,9 +498,9 @@ Data is stored in browser LocalStorage:
 1. Open browser DevTools (F12)
 2. Go to Application → Local Storage
 3. Find keys like:
-   - `beeper-kanban-settings`
-   - `beeper-kanban-drafts`
-   - `beeper-kanban-autopilot-*`
+   - `parrot-settings`
+   - `parrot-drafts`
+   - `parrot-autopilot-*`
 
 ### Performance Tuning
 
@@ -525,7 +525,7 @@ Messages are paginated. Click "Load More" to fetch additional messages.
 You can use multiple Beeper accounts:
 1. Log in to different Beeper account in desktop app
 2. Get the new access token
-3. Switch between tokens in Beeper Kanban
+3. Switch between tokens in Parrot
 
 Or run multiple browser profiles with different configs.
 
@@ -618,16 +618,16 @@ All configuration is stored in browser LocalStorage as JSON:
 
 ### Storage Keys
 
-- `beeper-kanban-settings` - App settings
-- `beeper-kanban-drafts` - Saved drafts
-- `beeper-kanban-hidden-chats` - Hidden chat list
-- `beeper-kanban-tone` - Tone settings
-- `beeper-kanban-writing-style` - Writing patterns
-- `beeper-kanban-autopilot-agents` - Agent definitions
-- `beeper-kanban-autopilot-config-*` - Per-chat configs
-- `beeper-kanban-autopilot-actions` - Scheduled actions
-- `beeper-kanban-autopilot-activity` - Activity log
-- `beeper-kanban-ai-chat-*` - AI chat history
+- `parrot-settings` - App settings
+- `parrot-drafts` - Saved drafts
+- `parrot-hidden-chats` - Hidden chat list
+- `parrot-tone` - Tone settings
+- `parrot-writing-style` - Writing patterns
+- `parrot-autopilot-agents` - Agent definitions
+- `parrot-autopilot-config-*` - Per-chat configs
+- `parrot-autopilot-actions` - Scheduled actions
+- `parrot-autopilot-activity` - Activity log
+- `parrot-ai-chat-*` - AI chat history
 
 ---
 

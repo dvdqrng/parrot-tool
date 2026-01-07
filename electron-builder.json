@@ -1,6 +1,6 @@
 {
-  "appId": "com.beeper.kanban",
-  "productName": "Beeper Kanban",
+  "appId": "app.parrot.desktop",
+  "productName": "Parrot",
   "copyright": "Copyright © 2025",
   "directories": {
     "output": "dist",
@@ -9,10 +9,11 @@
   "files": [
     "electron.js",
     "preload.js",
-    ".next/**/*",
-    "node_modules/**/*",
+    "server.js",
+    ".next/standalone/**/*",
     "package.json",
-    "public/**/*"
+    "!public",
+    "!node_modules"
   ],
   "extraMetadata": {
     "main": "electron.js"
@@ -22,11 +23,17 @@
     "target": [
       {
         "target": "dmg",
-        "arch": ["x64", "arm64"]
+        "arch": [
+          "x64",
+          "arm64"
+        ]
       },
       {
         "target": "zip",
-        "arch": ["x64", "arm64"]
+        "arch": [
+          "x64",
+          "arm64"
+        ]
       }
     ],
     "icon": "build/icon.icns",
@@ -36,7 +43,7 @@
     "entitlementsInherit": "build/entitlements.mac.plist"
   },
   "dmg": {
-    "title": "Beeper Kanban Installer",
+    "title": "Parrot Installer",
     "icon": "build/icon.icns",
     "background": null,
     "contents": [
@@ -56,15 +63,19 @@
     "target": [
       {
         "target": "nsis",
-        "arch": ["x64", "arm64"]
+        "arch": [
+          "x64",
+          "arm64"
+        ]
       },
       {
         "target": "portable",
-        "arch": ["x64"]
+        "arch": [
+          "x64"
+        ]
       }
     ],
-    "icon": "build/icon.ico",
-    "publisherName": "Beeper Kanban"
+    "icon": "build/icon.ico"
   },
   "nsis": {
     "oneClick": false,
@@ -78,15 +89,23 @@
     "target": [
       {
         "target": "AppImage",
-        "arch": ["x64", "arm64"]
+        "arch": [
+          "x64",
+          "arm64"
+        ]
       },
       {
         "target": "deb",
-        "arch": ["x64", "arm64"]
+        "arch": [
+          "x64",
+          "arm64"
+        ]
       },
       {
         "target": "rpm",
-        "arch": ["x64"]
+        "arch": [
+          "x64"
+        ]
       }
     ],
     "icon": "build/icon.png",

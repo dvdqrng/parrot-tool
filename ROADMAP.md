@@ -1,6 +1,6 @@
 # Code Quality Refactoring Roadmap
 
-This document tracks code quality improvements, refactoring tasks, and technical debt resolution for the Beeper Kanban project.
+This document tracks code quality improvements, refactoring tasks, and technical debt resolution for the Parrot project.
 
 ## 🔴 High Priority Tasks
 

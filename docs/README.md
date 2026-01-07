@@ -1,12 +1,12 @@
-# Beeper Kanban Documentation
+# Parrot Documentation
 
-Welcome to the Beeper Kanban documentation! This directory contains comprehensive guides for users, developers, and contributors.
+Welcome to the Parrot documentation! This directory contains comprehensive guides for users, developers, and contributors.
 
 ## Documentation Index
 
 ### For Users
 
-**[User Guide](USER_GUIDE.md)** - Complete guide to using Beeper Kanban
+**[User Guide](USER_GUIDE.md)** - Complete guide to using Parrot
 - Getting started
 - Basic workflows
 - Managing messages and drafts
@@ -119,7 +119,7 @@ All documentation follows these principles:
 
 ## How to Read the Docs
 
-### If you're new to Beeper Kanban:
+### If you're new to Parrot:
 1. Start with [README.md](../README.md) in the root directory
 2. Follow [Quick Start](../README.md#quick-start) to install
 3. Read [Configuration Guide](CONFIGURATION.md) to set up
@@ -183,7 +183,7 @@ Your feedback helps improve the documentation for everyone!
 ## Document Summaries
 
 ### USER_GUIDE.md
-Complete walkthrough of using Beeper Kanban. Covers basic workflows, message management, drafts, AI features, organization strategies, keyboard shortcuts, tips and tricks, and common workflows. Perfect for new and intermediate users.
+Complete walkthrough of using Parrot. Covers basic workflows, message management, drafts, AI features, organization strategies, keyboard shortcuts, tips and tricks, and common workflows. Perfect for new and intermediate users.
 
 ### CONFIGURATION.md
 Detailed configuration instructions. Covers Beeper integration, AI provider setup (Anthropic, OpenAI, Ollama), writing style training, autopilot configuration, hidden chats, and data management. Essential for initial setup.

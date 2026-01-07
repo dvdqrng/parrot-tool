@@ -49,6 +49,10 @@
 }
 
 :root {
+  --font-sans: "SF Pro Display", "SF Pro Text", "SF Pro", -apple-system,
+    BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", sans-serif;
+  --font-mono: "SF Pro Display", "SF Pro Text", "SF Pro", -apple-system,
+    BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", sans-serif;
   --background: oklch(0.97 0.003 106.424);
 --foreground: oklch(0.147 0.004 49.25);
 --card: oklch(1 0 0);
@@ -122,6 +126,7 @@
   @apply border-border outline-ring/50;
 }
 body {
+  font-family: var(--font-sans);
   @apply bg-background text-foreground;
 }
 }

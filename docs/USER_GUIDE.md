@@ -1,6 +1,6 @@
 # User Guide
 
-Complete guide to using Beeper Kanban effectively.
+Complete guide to using Parrot effectively.
 
 ## Table of Contents
 
@@ -717,6 +717,6 @@ Now that you know the basics:
 2. **Train your writing style**: Add sample messages for personalization
 3. **Try autopilot**: Create an agent for routine tasks
 4. **Optimize your process**: Find what works for your use case
-5. **Share feedback**: Help improve Beeper Kanban!
+5. **Share feedback**: Help improve Parrot!
 
 Happy messaging! 🎉

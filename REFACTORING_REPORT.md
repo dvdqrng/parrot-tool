@@ -1,4 +1,4 @@
-# Beeper Kanban Code Refactoring Report
+# Parrot Code Refactoring Report
 
 **Date:** 2025-12-17
 **Objective:** Deep investigation and refactoring of AI and API pipeline for improvements, simplification, dead code removal, and redundancy elimination
