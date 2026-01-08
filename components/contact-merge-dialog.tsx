@@ -121,8 +121,6 @@ export function ContactMergeDialog({
 
   // Filter Beeper contacts (exclude already linked chats and chats that are in CRM contacts)
   const availableBeeperContacts = useMemo(() => {
-    console.log('[ContactMergeDialog] Filter - sourceContact:', !!sourceContact, 'searchQuery:', searchQuery, 'beeperContacts count:', beeperContacts.length);
-
     if (!sourceContact || !searchQuery) return [];
 
     // Get all chat IDs that are already in CRM
@@ -134,17 +132,10 @@ export function ContactMergeDialog({
     });
 
     const query = searchQuery.toLowerCase();
-    const filtered = beeperContacts
+    return beeperContacts
       .filter(c => !linkedChatIds.has(c.chatId)) // Not already linked to source
       .filter(c => !crmChatIds.has(c.chatId)) // Not in any CRM contact
-      .filter(c => c.name.toLowerCase().includes(query));
-
-    console.log('[ContactMergeDialog] After filtering by query "' + query + '":', filtered.length, 'contacts');
-    if (filtered.length > 0) {
-      console.log('[ContactMergeDialog] Sample matches:', filtered.slice(0, 3).map(c => c.name));
-    }
-
-    return filtered
+      .filter(c => c.name.toLowerCase().includes(query))
       .sort((a, b) => a.name.localeCompare(b.name))
       .slice(0, 20); // Limit results
   }, [beeperContacts, sourceContact, searchQuery, linkedChatIds, allContacts]);

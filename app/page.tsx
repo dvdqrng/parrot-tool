@@ -227,6 +227,7 @@ export default function Home() {
     linkChatToContact,
     unlinkChatFromContact,
     mergeContacts: mergeCrmContacts,
+    updateInteractionStats,
   } = useCrm();
 
   // Get the current contact profile for the selected card
@@ -507,6 +508,14 @@ export default function Home() {
     setSenderName(sender);
   }, []);
 
+  // Handle messages loaded - update CRM contact interaction stats
+  const handleMessagesLoaded = useCallback((chatId: string, messages: Array<{ timestamp: string; isFromMe: boolean }>) => {
+    const contact = getContactForChat(chatId);
+    if (contact) {
+      updateInteractionStats(contact.id, messages);
+    }
+  }, [getContactForChat, updateInteractionStats]);
+
   // Handle using a draft from AI chat
   const handleUseDraftFromAi = useCallback((draft: string) => {
     setDraftTextFromAi(draft);
@@ -731,6 +740,7 @@ export default function Home() {
           draftTextFromAi={draftTextFromAi}
           onDraftTextFromAiConsumed={handleDraftTextFromAiConsumed}
           onMessageContextChange={handleMessageContextChange}
+          onMessagesLoaded={handleMessagesLoaded}
         />
         <AiChatPanel
           isOpen={isPanelOpen && isAiChatOpen}

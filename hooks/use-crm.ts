@@ -17,6 +17,7 @@ import {
   deleteCrmTag,
   searchCrmContacts,
   getContactsByTag,
+  updateContactInteractionStats,
 } from '@/lib/storage';
 
 // Get initial data synchronously to avoid flash of empty state
@@ -190,6 +191,18 @@ export function useCrm() {
     return createContactFromChat(displayName, chatId, platform, accountId, avatarUrl);
   }, [createContactFromChat]);
 
+  // Update interaction stats for a contact
+  const updateInteractionStats = useCallback((
+    contactId: string,
+    messages: Array<{ timestamp: string; isFromMe: boolean }>
+  ): CrmContactProfile | null => {
+    const updated = updateContactInteractionStats(contactId, messages);
+    if (updated) {
+      setContacts(loadCrmContacts());
+    }
+    return updated;
+  }, []);
+
   return {
     // Data
     contacts,
@@ -205,6 +218,7 @@ export function useCrm() {
     unlinkChatFromContact,
     mergeContacts,
     getOrCreateContactForChat,
+    updateInteractionStats,
 
     // Tag operations
     createTag,

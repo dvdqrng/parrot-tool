@@ -1009,6 +1009,112 @@ export function mergeCrmContacts(targetContactId: string, sourceContactId: strin
   return updated;
 }
 
+// Update contact interaction stats from messages
+export function updateContactInteractionStats(
+  contactId: string,
+  messages: Array<{ timestamp: string; isFromMe: boolean }>
+): CrmContactProfile | null {
+  const contact = getCrmContactById(contactId);
+  if (!contact || messages.length === 0) return contact;
+
+  // Sort messages by timestamp
+  const sortedMessages = [...messages].sort((a, b) =>
+    new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+  );
+
+  // Calculate stats
+  let messagesSent = 0;
+  let messagesReceived = 0;
+  let firstTimestamp: string | undefined;
+  let lastTimestamp: string | undefined;
+  let lastInboundAt: string | undefined;
+  let lastOutboundAt: string | undefined;
+
+  // For response time calculation
+  const responseTimes: number[] = [];
+  let prevMessage: { timestamp: string; isFromMe: boolean } | null = null;
+
+  for (const msg of sortedMessages) {
+    if (msg.isFromMe) {
+      messagesSent++;
+      lastOutboundAt = msg.timestamp;
+
+      // Calculate response time if replying to their message
+      if (prevMessage && !prevMessage.isFromMe) {
+        const responseTime = new Date(msg.timestamp).getTime() - new Date(prevMessage.timestamp).getTime();
+        responseTimes.push(responseTime);
+      }
+    } else {
+      messagesReceived++;
+      lastInboundAt = msg.timestamp;
+    }
+
+    // Track first and last message times
+    if (!firstTimestamp || msg.timestamp < firstTimestamp) {
+      firstTimestamp = msg.timestamp;
+    }
+    if (!lastTimestamp || msg.timestamp > lastTimestamp) {
+      lastTimestamp = msg.timestamp;
+    }
+
+    prevMessage = msg;
+  }
+
+  // Determine who initiated the last conversation
+  // A "conversation" starts after 4+ hours of silence
+  const CONVERSATION_GAP_MS = 4 * 60 * 60 * 1000; // 4 hours
+  let lastConversationInitiator: 'me' | 'them' | undefined;
+
+  for (let i = sortedMessages.length - 1; i >= 0; i--) {
+    const msg = sortedMessages[i];
+    const prevMsg = sortedMessages[i - 1];
+
+    // If this is the first message or there's a gap before it
+    if (!prevMsg ||
+        new Date(msg.timestamp).getTime() - new Date(prevMsg.timestamp).getTime() > CONVERSATION_GAP_MS) {
+      lastConversationInitiator = msg.isFromMe ? 'me' : 'them';
+      break;
+    }
+  }
+
+  // Calculate average response time (in minutes)
+  let avgResponseTimeMinutes: number | undefined;
+  if (responseTimes.length > 0) {
+    const avgMs = responseTimes.reduce((a, b) => a + b, 0) / responseTimes.length;
+    avgResponseTimeMinutes = Math.round(avgMs / (1000 * 60));
+  }
+
+  // Calculate message frequency (messages per day)
+  let messageFrequencyPerDay: number | undefined;
+  if (firstTimestamp && lastTimestamp) {
+    const daysDiff = Math.max(1,
+      (new Date(lastTimestamp).getTime() - new Date(firstTimestamp).getTime()) / (1000 * 60 * 60 * 24)
+    );
+    messageFrequencyPerDay = Math.round((messages.length / daysDiff) * 10) / 10;
+  }
+
+  // Update contact with new stats
+  const updates: Partial<CrmContactProfile> = {
+    totalMessageCount: messages.length,
+    messagesSent,
+    messagesReceived,
+    lastConversationInitiator,
+    avgResponseTimeMinutes,
+    messageFrequencyPerDay,
+    lastInboundAt,
+    lastOutboundAt,
+  };
+
+  if (firstTimestamp) {
+    updates.firstInteractionAt = firstTimestamp;
+  }
+  if (lastTimestamp) {
+    updates.lastInteractionAt = lastTimestamp;
+  }
+
+  return updateCrmContact(contactId, updates);
+}
+
 // CRM Tag operations
 export function loadCrmTags(): Record<string, CrmTag> {
   return crmTagsManager.load();

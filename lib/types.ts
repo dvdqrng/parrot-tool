@@ -402,7 +402,17 @@ export interface CrmContactProfile {
 
   // Interaction metrics (computed)
   lastInteractionAt?: string;
+  firstInteractionAt?: string;
   totalMessageCount?: number;
+  messagesSent?: number;        // Messages sent by me to this contact
+  messagesReceived?: number;    // Messages received from this contact
+
+  // Phase 4: Enhanced interaction tracking
+  lastConversationInitiator?: 'me' | 'them'; // Who started the most recent conversation
+  avgResponseTimeMinutes?: number;           // Average time to respond in minutes
+  messageFrequencyPerDay?: number;           // Average messages per day
+  lastInboundAt?: string;                    // Last message received from them
+  lastOutboundAt?: string;                   // Last message sent by me
 
   // Timestamps
   createdAt: string;

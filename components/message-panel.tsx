@@ -45,6 +45,7 @@ interface MessagePanelProps {
   draftTextFromAi?: string;
   onDraftTextFromAiConsumed?: () => void;
   onMessageContextChange?: (context: string, senderName: string) => void;
+  onMessagesLoaded?: (chatId: string, messages: Array<{ timestamp: string; isFromMe: boolean }>) => void;
 }
 
 interface ChatMessage {
@@ -69,6 +70,7 @@ export function MessagePanel({
   draftTextFromAi,
   onDraftTextFromAiConsumed,
   onMessageContextChange,
+  onMessagesLoaded,
 }: MessagePanelProps) {
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
@@ -224,6 +226,14 @@ export function MessagePanel({
           timestamp: m.timestamp,
         }));
         updateThreadContextWithNewMessages(chatId, senderName, contextMessages);
+
+        // Notify parent about loaded messages for CRM stats tracking
+        if (onMessagesLoaded && newMessages.length > 0) {
+          onMessagesLoaded(chatId, newMessages.map(m => ({
+            timestamp: m.timestamp,
+            isFromMe: m.isFromMe,
+          })));
+        }
       }
     } catch (error) {
       logger.error('Failed to fetch chat history:', error instanceof Error ? error : String(error));
@@ -232,7 +242,7 @@ export function MessagePanel({
       setIsLoadingHistory(false);
       setIsLoadingMore(false);
     }
-  }, [chatId, message?.senderName, draft?.recipientName]);
+  }, [chatId, message?.senderName, draft?.recipientName, onMessagesLoaded]);
 
   // Load initial history when panel opens with a new card
   useEffect(() => {

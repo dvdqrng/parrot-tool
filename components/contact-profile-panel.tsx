@@ -35,6 +35,10 @@ import {
   Save,
   Users,
   Merge,
+  MessageSquare,
+  Calendar,
+  ArrowUpRight,
+  ArrowDownLeft,
 } from 'lucide-react';
 import { ContactMergeDialog } from '@/components/contact-merge-dialog';
 
@@ -352,6 +356,64 @@ export function ContactProfilePanel({
             </div>
 
             <Separator />
+
+            {/* Interaction Stats */}
+            {(contact.totalMessageCount || contact.lastInteractionAt) && (
+              <>
+                <div className="space-y-3">
+                  <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+                    <MessageSquare className="h-3 w-3" />
+                    Activity
+                  </h3>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    {/* Total messages */}
+                    {contact.totalMessageCount !== undefined && contact.totalMessageCount > 0 && (
+                      <div className="p-2 rounded-lg bg-muted/50">
+                        <div className="text-lg font-semibold">{contact.totalMessageCount}</div>
+                        <div className="text-xs text-muted-foreground">Total messages</div>
+                      </div>
+                    )}
+
+                    {/* Messages breakdown */}
+                    {(contact.messagesSent !== undefined || contact.messagesReceived !== undefined) && (
+                      <div className="p-2 rounded-lg bg-muted/50 space-y-1">
+                        {contact.messagesReceived !== undefined && contact.messagesReceived > 0 && (
+                          <div className="flex items-center gap-1 text-xs">
+                            <ArrowDownLeft className="h-3 w-3 text-green-500" />
+                            <span>{contact.messagesReceived} received</span>
+                          </div>
+                        )}
+                        {contact.messagesSent !== undefined && contact.messagesSent > 0 && (
+                          <div className="flex items-center gap-1 text-xs">
+                            <ArrowUpRight className="h-3 w-3 text-blue-500" />
+                            <span>{contact.messagesSent} sent</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Timeline */}
+                  <div className="space-y-1">
+                    {contact.firstInteractionAt && (
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <Calendar className="h-3 w-3" />
+                        <span>First message: {new Date(contact.firstInteractionAt).toLocaleDateString()}</span>
+                      </div>
+                    )}
+                    {contact.lastInteractionAt && (
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <Calendar className="h-3 w-3" />
+                        <span>Last message: {new Date(contact.lastInteractionAt).toLocaleDateString()}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <Separator />
+              </>
+            )}
 
             {/* Tags */}
             <div className="space-y-3">
