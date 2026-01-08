@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { logger } from '@/lib/logger';
-import { getBeeperClient, getPlatformFromAccountId } from '@/lib/beeper-client';
+import { getBeeperClient, MissingTokenError } from '@/lib/beeper-client';
 
 interface UserMessage {
   id: string;
@@ -62,6 +62,12 @@ export async function GET(request: NextRequest) {
       },
     });
   } catch (error) {
+    if (error instanceof MissingTokenError) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: 401 }
+      );
+    }
     logger.error('Error fetching user messages:', error instanceof Error ? error : String(error));
     return NextResponse.json(
       { error: 'Failed to fetch user messages. Make sure Beeper Desktop is running.' },

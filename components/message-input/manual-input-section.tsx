@@ -40,6 +40,14 @@ export function ManualInputSection({
         placeholder="Type your reply..."
         value={draftText}
         onChange={(e) => onDraftTextChange(e.target.value)}
+        onKeyDown={(e) => {
+          if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+            e.preventDefault();
+            if (draftText.trim() && !isSending && !sendSuccess) {
+              onSend();
+            }
+          }
+        }}
         className="min-h-[80px] resize-none shadow-none"
       />
 

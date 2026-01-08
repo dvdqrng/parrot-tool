@@ -340,3 +340,89 @@ export interface ConversationHandoffSummary {
   suggestedNextSteps: string[];
   goalStatus: 'achieved' | 'in-progress' | 'unclear';
 }
+
+// ============================================
+// CRM TYPES
+// ============================================
+
+/**
+ * Platform-specific chat link for a contact identity
+ * Links a contact to their chat on a specific platform
+ */
+export interface CrmPlatformLink {
+  platform: string;        // 'whatsapp', 'telegram', 'instagram', etc.
+  chatId: string;          // The chatId on this platform
+  accountId: string;       // Which account this is on
+  displayName?: string;    // Name shown on this platform
+  avatarUrl?: string;      // Avatar from this platform
+  addedAt: string;         // When this link was added
+}
+
+/**
+ * Custom tag for organizing contacts
+ */
+export interface CrmTag {
+  id: string;
+  name: string;
+  color: string;           // Hex color for display
+  createdAt: string;
+}
+
+/**
+ * Contact profile - metadata and notes about a contact
+ * Links to one or more platform chats
+ */
+export interface CrmContactProfile {
+  id: string;              // Unique ID for this contact
+
+  // Display info (can override platform defaults)
+  displayName: string;     // User-defined name
+  nickname?: string;       // Optional nickname
+  avatarUrl?: string;      // User-defined avatar (or from platform)
+
+  // Contact details
+  email?: string;
+  phone?: string;
+  company?: string;
+  role?: string;
+  location?: string;
+
+  // Platform links - connects this contact to platform chats
+  platformLinks: CrmPlatformLink[];
+
+  // Organization
+  tags: string[];          // Tag IDs
+
+  // Notes
+  notes: string;           // Free-form notes
+
+  // Relationship tracking
+  relationship?: 'personal' | 'professional' | 'family' | 'acquaintance' | 'other';
+  importance?: 'high' | 'medium' | 'low';
+
+  // Interaction metrics (computed)
+  lastInteractionAt?: string;
+  totalMessageCount?: number;
+
+  // Timestamps
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Simplified contact info for quick lookups
+ * Maps chatId -> contactId for fast resolution
+ */
+export interface CrmChatMapping {
+  chatId: string;
+  contactId: string;
+}
+
+/**
+ * CRM store state
+ */
+export interface CrmStore {
+  contacts: Record<string, CrmContactProfile>;  // contactId -> profile
+  tags: Record<string, CrmTag>;                  // tagId -> tag
+  chatMappings: Record<string, string>;          // chatId -> contactId
+}

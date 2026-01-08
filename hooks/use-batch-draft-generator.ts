@@ -4,6 +4,7 @@ import { useState, useCallback, useRef } from 'react';
 import { logger } from '@/lib/logger';
 import { BeeperMessage, Draft, ToneSettings } from '@/lib/types';
 import { loadSettings, loadToneSettings, loadWritingStylePatterns } from '@/lib/storage';
+import { getEffectiveAiProvider } from '@/lib/api-headers';
 
 interface BatchDraftGeneratorOptions {
   onDraftGenerated: (message: BeeperMessage, draftText: string) => void;
@@ -38,6 +39,9 @@ export function useBatchDraftGenerator({
       if (settings.anthropicApiKey) {
         headers['x-anthropic-key'] = settings.anthropicApiKey;
       }
+      if (settings.openaiApiKey) {
+        headers['x-openai-key'] = settings.openaiApiKey;
+      }
 
       const response = await fetch('/api/ai/draft', {
         method: 'POST',
@@ -47,6 +51,9 @@ export function useBatchDraftGenerator({
           senderName: message.senderName,
           toneSettings: toneSettings || undefined,
           writingStyle: writingStyle.sampleMessages.length > 0 ? writingStyle : undefined,
+          provider: getEffectiveAiProvider(settings),
+          ollamaModel: settings.ollamaModel,
+          ollamaBaseUrl: settings.ollamaBaseUrl,
         }),
         signal,
       });

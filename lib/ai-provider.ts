@@ -21,13 +21,50 @@ export interface AiProviderOptions {
 }
 
 /**
+ * Determines the effective provider to use based on available API keys
+ * Falls back to an available provider if the selected one isn't configured
+ */
+function getEffectiveProvider(
+  requestedProvider: AiProvider,
+  anthropicKey?: string,
+  openaiKey?: string
+): AiProvider {
+  // Ollama doesn't need an API key, always use it if requested
+  if (requestedProvider === 'ollama') {
+    return 'ollama';
+  }
+
+  // Check if the requested provider has a key configured
+  if (requestedProvider === 'anthropic' && anthropicKey) {
+    return 'anthropic';
+  }
+  if (requestedProvider === 'openai' && openaiKey) {
+    return 'openai';
+  }
+
+  // Fall back to whichever provider has a key configured
+  if (anthropicKey) {
+    logger.debug(`[AI Provider] ${requestedProvider} not configured, falling back to Anthropic`);
+    return 'anthropic';
+  }
+  if (openaiKey) {
+    logger.debug(`[AI Provider] ${requestedProvider} not configured, falling back to OpenAI`);
+    return 'openai';
+  }
+
+  // No keys configured, return the requested provider (will error later with helpful message)
+  return requestedProvider;
+}
+
+/**
  * Unified AI provider interface
  * Handles Anthropic, OpenAI, and Ollama in one place
  * Eliminates code duplication across AI API routes
+ * Automatically falls back to available provider if selected one isn't configured
  */
 export async function callAiProvider(options: AiProviderOptions): Promise<string> {
   const {
-    provider,
+    provider: requestedProvider,
     systemPrompt,
     userPrompt,
     messages = [],
@@ -38,6 +75,9 @@ export async function callAiProvider(options: AiProviderOptions): Promise<string
     anthropicKey,
     openaiKey,
   } = options;
+
+  // Determine which provider to actually use based on available keys
+  const provider = getEffectiveProvider(requestedProvider, anthropicKey, openaiKey);
 
   // Build messages array - either from provided messages or from userPrompt
   let messagesList: Array<{ role: 'user' | 'assistant'; content: string }>;
@@ -80,7 +120,7 @@ export async function callAiProvider(options: AiProviderOptions): Promise<string
     }
   } else if (provider === 'openai') {
     if (!openaiKey) {
-      throw new Error('OpenAI API key not configured. Add it in Settings.');
+      throw new Error('No AI API key configured. Add an OpenAI or Anthropic API key in Settings.');
     }
 
     const openai = new OpenAI({
@@ -106,7 +146,7 @@ export async function callAiProvider(options: AiProviderOptions): Promise<string
   } else {
     // Anthropic
     if (!anthropicKey) {
-      throw new Error('Anthropic API key not configured. Add it in Settings.');
+      throw new Error('No AI API key configured. Add an OpenAI or Anthropic API key in Settings.');
     }
 
     const anthropic = new Anthropic({
@@ -137,14 +177,9 @@ export async function callAiProvider(options: AiProviderOptions): Promise<string
  */
 export function handleAiProviderError(error: unknown): { error: string; status: number } {
   if (error instanceof Error) {
-    if (error.message.includes('Anthropic API key')) {
+    if (error.message.includes('No AI API key configured')) {
       return {
-        error: 'Anthropic API key not configured. Add it in Settings.',
-        status: 401,
-      };
-    } else if (error.message.includes('OpenAI API key')) {
-      return {
-        error: 'OpenAI API key not configured. Add it in Settings.',
+        error: 'No AI API key configured. Add an OpenAI or Anthropic API key in Settings.',
         status: 401,
       };
     } else if (error.message.includes('Ollama')) {

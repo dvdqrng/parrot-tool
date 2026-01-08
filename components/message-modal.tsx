@@ -30,6 +30,7 @@ import {
   formatAiChatSummaryForPrompt,
   ThreadContextMessage,
 } from '@/lib/storage';
+import { getEffectiveAiProvider } from '@/lib/api-headers';
 import { Loader2, ChevronUp, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { MessageBottomSection } from '@/components/message-bottom-section';
@@ -169,6 +170,9 @@ export function MessageModal({
       if (settings.anthropicApiKey) {
         headers['x-anthropic-key'] = settings.anthropicApiKey;
       }
+      if (settings.openaiApiKey) {
+        headers['x-openai-key'] = settings.openaiApiKey;
+      }
 
       // Get persistent thread context
       const threadContext = getThreadContext(chatId);
@@ -188,6 +192,9 @@ export function MessageModal({
           writingStyle: writingStyle.sampleMessages.length > 0 ? writingStyle : undefined,
           threadContext: threadContextStr,
           aiChatSummary,
+          provider: getEffectiveAiProvider(settings),
+          ollamaModel: settings.ollamaModel,
+          ollamaBaseUrl: settings.ollamaBaseUrl,
         }),
       });
 

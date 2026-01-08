@@ -131,6 +131,26 @@ body {
 }
 }
 
+/* Electron draggable title bar region */
+.electron-drag-region {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 38px;
+  -webkit-app-region: drag;
+  z-index: 9999;
+  pointer-events: none;
+}
+
+/* Make interactive elements within the drag region clickable */
+.electron-drag-region ~ * button,
+.electron-drag-region ~ * a,
+.electron-drag-region ~ * input,
+.electron-drag-region ~ * [role="button"] {
+  -webkit-app-region: no-drag;
+}
+
 /* Autopilot pulsating glow effect - iOS Siri-like (inner glow) */
 
 /* Active/Processing - Blue/Cyan (working normally) */

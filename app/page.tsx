@@ -10,7 +10,9 @@ import { MessageDetail } from '@/components/message-detail';
 import { DraftComposer } from '@/components/draft-composer';
 import { MessagePanel } from '@/components/message-panel';
 import { AiChatPanel } from '@/components/ai-chat-panel';
+import { ContactProfilePanel } from '@/components/contact-profile-panel';
 import { ContactsDialog } from '@/components/contacts-dialog';
+import { useCrm } from '@/hooks/use-crm';
 import { HandoffSummaryCard } from '@/components/autopilot/handoff-summary-card';
 import { ErrorState } from '@/components/dashboard/error-state';
 import { LoadingState } from '@/components/dashboard/loading-state';
@@ -210,6 +212,25 @@ export default function Home() {
   // Get the current chat ID from selected card (for per-thread AI chat)
   const currentChatId = selectedCard?.message?.chatId || selectedCard?.draft?.chatId || null;
   const { messages: aiChatMessages, setMessages: setAiChatMessages } = useAiChatHistory(currentChatId);
+
+  // CRM state
+  const [isContactProfileOpen, setIsContactProfileOpen] = useState(false);
+  const {
+    contacts: crmContacts,
+    tags: crmTags,
+    getContactForChat,
+    getOrCreateContactForChat,
+    updateContact: updateCrmContact,
+    createTag: createCrmTag,
+    addTagToContact,
+    removeTagFromContact,
+    linkChatToContact,
+    unlinkChatFromContact,
+    mergeContacts: mergeCrmContacts,
+  } = useCrm();
+
+  // Get the current contact profile for the selected card
+  const currentContact = currentChatId ? getContactForChat(currentChatId) : null;
 
   // Handle card click - open panel for both messages and drafts
   const handleCardClick = useCallback((card: KanbanCard) => {
@@ -422,12 +443,63 @@ export default function Home() {
   const handleClosePanel = useCallback(() => {
     setSelectedCard(null);
     setIsAiChatOpen(false);
+    setIsContactProfileOpen(false);
   }, []);
 
   // Toggle AI chat panel
   const handleToggleAiChat = useCallback(() => {
     setIsAiChatOpen(prev => !prev);
   }, []);
+
+  // Toggle contact profile panel
+  const handleToggleContactProfile = useCallback(() => {
+    // If opening and no contact exists yet, create one
+    if (!isContactProfileOpen && !currentContact && selectedCard) {
+      const card = selectedCard;
+      const chatId = card.message?.chatId || card.draft?.chatId;
+      const platform = card.message?.platform || card.draft?.platform || 'unknown';
+      const accountId = card.message?.accountId || card.draft?.accountId || '';
+      if (chatId) {
+        getOrCreateContactForChat(chatId, card.title, platform, accountId, card.avatarUrl);
+      }
+    }
+    setIsContactProfileOpen(prev => !prev);
+  }, [isContactProfileOpen, currentContact, selectedCard, getOrCreateContactForChat]);
+
+  // CRM handlers
+  const handleSaveCrmContact = useCallback((contactId: string, updates: Partial<import('@/lib/types').CrmContactProfile>) => {
+    updateCrmContact(contactId, updates);
+  }, [updateCrmContact]);
+
+  const handleCreateCrmTag = useCallback((name: string) => {
+    return createCrmTag(name);
+  }, [createCrmTag]);
+
+  const handleAddCrmTag = useCallback((contactId: string, tagId: string) => {
+    addTagToContact(contactId, tagId);
+  }, [addTagToContact]);
+
+  const handleRemoveCrmTag = useCallback((contactId: string, tagId: string) => {
+    removeTagFromContact(contactId, tagId);
+  }, [removeTagFromContact]);
+
+  const handleUnlinkPlatform = useCallback((contactId: string, chatId: string) => {
+    unlinkChatFromContact(contactId, chatId);
+  }, [unlinkChatFromContact]);
+
+  const handleLinkPlatform = useCallback((contactId: string, chatId: string, platform: string, accountId: string, displayName: string, avatarUrl?: string) => {
+    linkChatToContact(contactId, chatId, platform, accountId, displayName, avatarUrl);
+    toast.success('Platform linked to contact');
+  }, [linkChatToContact]);
+
+  const handleMergeCrmContacts = useCallback((targetContactId: string, sourceContactId: string) => {
+    mergeCrmContacts(targetContactId, sourceContactId);
+    toast.success('Contacts merged successfully');
+    // Close the panel if the current contact was merged away
+    if (currentContact?.id === sourceContactId) {
+      setIsContactProfileOpen(false);
+    }
+  }, [mergeCrmContacts, currentContact]);
 
   // Handle message context change from MessagePanel
   const handleMessageContextChange = useCallback((context: string, sender: string) => {
@@ -633,6 +705,20 @@ export default function Home() {
 
       {/* Floating panels - fixed position on right side */}
       <div className={`fixed top-4 right-4 bottom-4 flex gap-4 transition-all duration-300 ease-in-out z-20 ${isPanelOpen ? 'pointer-events-auto' : 'pointer-events-none'}`}>
+        <ContactProfilePanel
+          contact={currentContact}
+          allContacts={crmContacts}
+          tags={crmTags}
+          isOpen={isPanelOpen && isContactProfileOpen}
+          onClose={() => setIsContactProfileOpen(false)}
+          onSave={handleSaveCrmContact}
+          onCreateTag={handleCreateCrmTag}
+          onAddTag={handleAddCrmTag}
+          onRemoveTag={handleRemoveCrmTag}
+          onUnlinkPlatform={handleUnlinkPlatform}
+          onMerge={handleMergeCrmContacts}
+          onLinkPlatform={handleLinkPlatform}
+        />
         <MessagePanel
           card={isPanelOpen ? selectedCard : null}
           onClose={handleClosePanel}
@@ -640,6 +726,8 @@ export default function Home() {
           onSaveDraft={handleSaveDraftFromPanel}
           isAiChatOpen={isAiChatOpen}
           onToggleAiChat={handleToggleAiChat}
+          isContactProfileOpen={isContactProfileOpen}
+          onToggleContactProfile={handleToggleContactProfile}
           draftTextFromAi={draftTextFromAi}
           onDraftTextFromAiConsumed={handleDraftTextFromAiConsumed}
           onMessageContextChange={handleMessageContextChange}

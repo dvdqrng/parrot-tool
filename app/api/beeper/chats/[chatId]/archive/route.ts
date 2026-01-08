@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { logger } from '@/lib/logger';
-import { getBeeperClient } from '@/lib/beeper-client';
+import { getBeeperClient, MissingTokenError } from '@/lib/beeper-client';
 
 export async function POST(
   request: NextRequest,
@@ -17,6 +17,13 @@ export async function POST(
 
     return NextResponse.json({ success: true });
   } catch (error: unknown) {
+    if (error instanceof MissingTokenError) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: 401 }
+      );
+    }
+
     // The Beeper SDK may throw a JSON parse error for empty responses
     // but the archive action still succeeds. Check if it's this case.
     if (error instanceof SyntaxError && error.message.includes('JSON')) {

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { logger } from '@/lib/logger';
-import { Eye, EyeOff, Key, Check, Cpu, RefreshCw, CheckCircle, XCircle } from 'lucide-react';
+import { Eye, EyeOff, Key, Check, Cpu, RefreshCw, CheckCircle, XCircle, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -40,6 +40,12 @@ export default function ApiKeysPage() {
   const [ollamaBaseUrl, setOllamaBaseUrl] = useState('http://localhost:11434');
   const [ollamaStatus, setOllamaStatus] = useState<OllamaStatus | null>(null);
   const [isCheckingOllama, setIsCheckingOllama] = useState(false);
+
+  // API key testing state
+  const [isTestingAnthropicKey, setIsTestingAnthropicKey] = useState(false);
+  const [anthropicKeyStatus, setAnthropicKeyStatus] = useState<{ valid: boolean; error?: string } | null>(null);
+  const [isTestingOpenAiKey, setIsTestingOpenAiKey] = useState(false);
+  const [openAiKeyStatus, setOpenAiKeyStatus] = useState<{ valid: boolean; error?: string } | null>(null);
 
   useEffect(() => {
     setBeeperToken(settings.beeperAccessToken || '');
@@ -114,9 +120,65 @@ export default function ApiKeysPage() {
     setTimeout(refetch, 100);
   };
 
+  const handleTestAnthropicKey = async () => {
+    if (!anthropicKey) {
+      toast.error('Please enter an API key first');
+      return;
+    }
+    setIsTestingAnthropicKey(true);
+    setAnthropicKeyStatus(null);
+    try {
+      const response = await fetch('/api/ai/test-key', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ provider: 'anthropic', apiKey: anthropicKey }),
+      });
+      const result = await response.json();
+      setAnthropicKeyStatus(result);
+      if (result.valid) {
+        toast.success('Anthropic API key is valid!');
+      } else {
+        toast.error(result.error || 'Invalid API key');
+      }
+    } catch {
+      setAnthropicKeyStatus({ valid: false, error: 'Failed to test API key' });
+      toast.error('Failed to test API key');
+    } finally {
+      setIsTestingAnthropicKey(false);
+    }
+  };
+
   const handleSaveAnthropicKey = () => {
     updateSettings({ anthropicApiKey: anthropicKey || undefined });
     toast.success('Anthropic API key saved');
+  };
+
+  const handleTestOpenAiKey = async () => {
+    if (!openAiKey) {
+      toast.error('Please enter an API key first');
+      return;
+    }
+    setIsTestingOpenAiKey(true);
+    setOpenAiKeyStatus(null);
+    try {
+      const response = await fetch('/api/ai/test-key', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ provider: 'openai', apiKey: openAiKey }),
+      });
+      const result = await response.json();
+      setOpenAiKeyStatus(result);
+      if (result.valid) {
+        toast.success('OpenAI API key is valid!');
+      } else {
+        toast.error(result.error || 'Invalid API key');
+      }
+    } catch {
+      setOpenAiKeyStatus({ valid: false, error: 'Failed to test API key' });
+      toast.error('Failed to test API key');
+    } finally {
+      setIsTestingOpenAiKey(false);
+    }
   };
 
   const handleSaveOpenAiKey = () => {
@@ -255,7 +317,10 @@ export default function ApiKeysPage() {
                       type={showAnthropicKey ? 'text' : 'password'}
                       placeholder="sk-ant-..."
                       value={anthropicKey}
-                      onChange={(e) => setAnthropicKey(e.target.value)}
+                      onChange={(e) => {
+                        setAnthropicKey(e.target.value);
+                        setAnthropicKeyStatus(null);
+                      }}
                     />
                     <Button
                       type="button"
@@ -271,11 +336,32 @@ export default function ApiKeysPage() {
                       )}
                     </Button>
                   </div>
+                  <Button
+                    variant="outline"
+                    onClick={handleTestAnthropicKey}
+                    disabled={isTestingAnthropicKey || !anthropicKey}
+                  >
+                    {isTestingAnthropicKey ? (
+                      <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2} />
+                    ) : (
+                      'Test'
+                    )}
+                  </Button>
                   <Button onClick={handleSaveAnthropicKey} size="icon">
                     <Check className="h-4 w-4" strokeWidth={2} />
                   </Button>
                 </div>
-                {isLoaded && settings.anthropicApiKey && (
+                {anthropicKeyStatus && (
+                  <div className={`flex items-center gap-2 mt-2 text-xs ${anthropicKeyStatus.valid ? 'text-green-600' : 'text-red-500'}`}>
+                    {anthropicKeyStatus.valid ? (
+                      <CheckCircle className="h-3 w-3" strokeWidth={2} />
+                    ) : (
+                      <XCircle className="h-3 w-3" strokeWidth={2} />
+                    )}
+                    <span>{anthropicKeyStatus.valid ? 'API key is valid' : anthropicKeyStatus.error}</span>
+                  </div>
+                )}
+                {isLoaded && settings.anthropicApiKey && !anthropicKeyStatus && (
                   <p className="text-xs text-green-600 mt-2">API key configured</p>
                 )}
               </div>
@@ -304,7 +390,10 @@ export default function ApiKeysPage() {
                       type={showOpenAiKey ? 'text' : 'password'}
                       placeholder="sk-..."
                       value={openAiKey}
-                      onChange={(e) => setOpenAiKey(e.target.value)}
+                      onChange={(e) => {
+                        setOpenAiKey(e.target.value);
+                        setOpenAiKeyStatus(null);
+                      }}
                     />
                     <Button
                       type="button"
@@ -320,11 +409,32 @@ export default function ApiKeysPage() {
                       )}
                     </Button>
                   </div>
+                  <Button
+                    variant="outline"
+                    onClick={handleTestOpenAiKey}
+                    disabled={isTestingOpenAiKey || !openAiKey}
+                  >
+                    {isTestingOpenAiKey ? (
+                      <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2} />
+                    ) : (
+                      'Test'
+                    )}
+                  </Button>
                   <Button onClick={handleSaveOpenAiKey} size="icon">
                     <Check className="h-4 w-4" strokeWidth={2} />
                   </Button>
                 </div>
-                {isLoaded && settings.openaiApiKey && (
+                {openAiKeyStatus && (
+                  <div className={`flex items-center gap-2 mt-2 text-xs ${openAiKeyStatus.valid ? 'text-green-600' : 'text-red-500'}`}>
+                    {openAiKeyStatus.valid ? (
+                      <CheckCircle className="h-3 w-3" strokeWidth={2} />
+                    ) : (
+                      <XCircle className="h-3 w-3" strokeWidth={2} />
+                    )}
+                    <span>{openAiKeyStatus.valid ? 'API key is valid' : openAiKeyStatus.error}</span>
+                  </div>
+                )}
+                {isLoaded && settings.openaiApiKey && !openAiKeyStatus && (
                   <p className="text-xs text-green-600 mt-2">API key configured</p>
                 )}
               </div>

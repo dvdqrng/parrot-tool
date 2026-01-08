@@ -1,5 +1,4 @@
-const { app, BrowserWindow, Menu, shell } = require('electron');
-const { spawn } = require('child_process');
+const { app, BrowserWindow, Menu, shell, nativeTheme } = require('electron');
 const path = require('path');
 
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
@@ -14,6 +13,9 @@ function createWindow() {
     height: 800,
     minWidth: 800,
     minHeight: 600,
+    titleBarStyle: 'hiddenInset',
+    trafficLightPosition: { x: 16, y: 18 },
+    backgroundColor: nativeTheme.shouldUseDarkColors ? '#262625' : '#f5f5f4',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -52,6 +54,13 @@ function createWindow() {
 
   mainWindow.on('closed', () => {
     mainWindow = null;
+  });
+
+  // Update background color when system theme changes
+  nativeTheme.on('updated', () => {
+    if (mainWindow) {
+      mainWindow.setBackgroundColor(nativeTheme.shouldUseDarkColors ? '#262625' : '#f5f5f4');
+    }
   });
 }
 

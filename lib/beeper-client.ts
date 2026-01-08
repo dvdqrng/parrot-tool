@@ -1,11 +1,23 @@
 import BeeperDesktop from '@beeper/desktop-api';
 
-// Cache clients by token to avoid recreating them
+// Cache clients by token to avoid recreating them - v2
 const clientCache = new Map<string, BeeperDesktop>();
+
+export class MissingTokenError extends Error {
+  constructor() {
+    super('Beeper access token is required. Please configure it in Settings → API Keys.');
+    this.name = 'MissingTokenError';
+  }
+}
 
 export function getBeeperClient(accessToken?: string): BeeperDesktop {
   // Use provided token, fall back to env var
   const token = accessToken || process.env.BEEPER_ACCESS_TOKEN || '';
+
+  // Check for missing token before creating client to provide better error
+  if (!token) {
+    throw new MissingTokenError();
+  }
 
   // Return cached client if exists for this token
   if (clientCache.has(token)) {
@@ -14,13 +26,11 @@ export function getBeeperClient(accessToken?: string): BeeperDesktop {
 
   // Create new client
   const client = new BeeperDesktop({
-    accessToken: token || undefined,
+    accessToken: token,
   });
 
   // Cache it
-  if (token) {
-    clientCache.set(token, client);
-  }
+  clientCache.set(token, client);
 
   return client;
 }

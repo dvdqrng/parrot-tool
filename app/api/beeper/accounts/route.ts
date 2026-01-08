@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { logger } from '@/lib/logger';
-import { getBeeperClient, getPlatformFromAccountId, getPlatformInfo } from '@/lib/beeper-client';
+import { getBeeperClient, getPlatformFromAccountId, getPlatformInfo, MissingTokenError } from '@/lib/beeper-client';
 import { BeeperAccount } from '@/lib/types';
 
 export async function GET(request: NextRequest) {
@@ -23,6 +23,12 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ data: accounts });
   } catch (error) {
+    if (error instanceof MissingTokenError) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: 401 }
+      );
+    }
     logger.error('Error fetching accounts:', error instanceof Error ? error : String(error));
     return NextResponse.json(
       { error: 'Failed to fetch accounts. Make sure Beeper Desktop is running.' },

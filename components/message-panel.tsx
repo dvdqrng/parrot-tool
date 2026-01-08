@@ -24,7 +24,7 @@ import {
 } from '@/lib/storage';
 import { getAIHeaders, getEffectiveAiProvider } from '@/lib/api-headers';
 import { logger } from '@/lib/logger';
-import { Loader2, ChevronUp, Users, X, MessagesSquare, RefreshCw } from 'lucide-react';
+import { Loader2, ChevronUp, Users, X, MessagesSquare, RefreshCw, User } from 'lucide-react';
 import { MessageBottomSection } from '@/components/message-bottom-section';
 import { MediaAttachments } from '@/components/message-panel/media-attachments';
 import { TextWithLinks } from '@/components/message-panel/text-with-links';
@@ -40,6 +40,8 @@ interface MessagePanelProps {
   onSaveDraft?: (text: string) => void;
   isAiChatOpen?: boolean;
   onToggleAiChat?: () => void;
+  isContactProfileOpen?: boolean;
+  onToggleContactProfile?: () => void;
   draftTextFromAi?: string;
   onDraftTextFromAiConsumed?: () => void;
   onMessageContextChange?: (context: string, senderName: string) => void;
@@ -62,6 +64,8 @@ export function MessagePanel({
   onSaveDraft,
   isAiChatOpen,
   onToggleAiChat,
+  isContactProfileOpen,
+  onToggleContactProfile,
   draftTextFromAi,
   onDraftTextFromAiConsumed,
   onMessageContextChange,
@@ -508,6 +512,16 @@ export function MessagePanel({
                   <RefreshCw className="h-4 w-4" strokeWidth={2} />
                 )}
               </Button>
+              {onToggleContactProfile && (
+                <Button
+                  variant={isContactProfileOpen ? 'secondary' : 'ghost'}
+                  size="icon"
+                  onClick={onToggleContactProfile}
+                  title="Contact Profile"
+                >
+                  <User className="h-4 w-4" strokeWidth={2} />
+                </Button>
+              )}
               {onToggleAiChat && (
                 <Button
                   variant={isAiChatOpen ? 'secondary' : 'ghost'}

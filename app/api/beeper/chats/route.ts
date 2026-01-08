@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { logger } from '@/lib/logger';
-import { getBeeperClient, getPlatformFromAccountId } from '@/lib/beeper-client';
+import { getBeeperClient, getPlatformFromAccountId, MissingTokenError } from '@/lib/beeper-client';
 import { BeeperChat, BeeperMessage, BeeperAttachment } from '@/lib/types';
 
 // Convert Beeper API attachment to our type
@@ -124,6 +124,12 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ data: chats });
   } catch (error) {
+    if (error instanceof MissingTokenError) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: 401 }
+      );
+    }
     logger.error('Error fetching chats:', error instanceof Error ? error : String(error));
     return NextResponse.json(
       { error: 'Failed to fetch chats. Make sure Beeper Desktop is running.' },

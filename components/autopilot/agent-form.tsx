@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Save, X, ChevronDown } from 'lucide-react';
+import { Save, X, ChevronDown, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -34,6 +34,11 @@ import {
   GoalCompletionBehavior,
   DEFAULT_AGENT_BEHAVIOR,
 } from '@/lib/types';
+import {
+  AGENT_TEMPLATES,
+  TEMPLATE_CATEGORIES,
+  AgentTemplate,
+} from '@/lib/agent-templates';
 
 interface AgentFormProps {
   agent?: AutopilotAgent;
@@ -61,6 +66,9 @@ export function AgentForm({ agent, onSave, onCancel }: AgentFormProps) {
   const router = useRouter();
   const isEditing = !!agent;
 
+  // Template selection
+  const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
+
   // Basic info
   const [name, setName] = useState(agent?.name || '');
   const [description, setDescription] = useState(agent?.description || '');
@@ -83,6 +91,17 @@ export function AgentForm({ agent, onSave, onCancel }: AgentFormProps) {
     multiMessage: false,
     humanBehavior: false,
   });
+
+  // Apply template to form
+  const applyTemplate = (template: AgentTemplate) => {
+    setSelectedTemplate(template.id);
+    setName(template.name);
+    setDescription(template.description);
+    setGoal(template.goal);
+    setSystemPrompt(template.systemPrompt);
+    setGoalCompletionBehavior(template.goalCompletionBehavior);
+    setBehavior({ ...template.behavior });
+  };
 
   const toggleSection = (section: string) => {
     setOpenSections(prev => ({ ...prev, [section]: !prev[section] }));
@@ -110,8 +129,88 @@ export function AgentForm({ agent, onSave, onCancel }: AgentFormProps) {
 
   const isValid = name.trim() && goal.trim();
 
+  // Group templates by category
+  const templatesByCategory = Object.entries(TEMPLATE_CATEGORIES).map(([key, category]) => ({
+    key: key as AgentTemplate['category'],
+    ...category,
+    templates: AGENT_TEMPLATES.filter(t => t.category === key),
+  }));
+
   return (
     <div className="space-y-6">
+      {/* Template Selector - only show for new agents */}
+      {!isEditing && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm flex items-center gap-2">
+              <Sparkles className="h-4 w-4" />
+              Start from Template
+            </CardTitle>
+            <CardDescription className="text-xs">
+              Choose a pre-configured template to get started quickly
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {templatesByCategory.map(category => (
+              <div key={category.key} className="space-y-2">
+                <div className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                  <span>{category.emoji}</span>
+                  <span>{category.name}</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {category.templates.map(template => (
+                    <button
+                      key={template.id}
+                      type="button"
+                      onClick={() => applyTemplate(template)}
+                      className={`
+                        flex items-start gap-2 p-3 rounded-lg border text-left transition-colors
+                        hover:bg-accent hover:border-accent-foreground/20
+                        ${selectedTemplate === template.id
+                          ? 'border-primary bg-primary/5'
+                          : 'border-border'
+                        }
+                      `}
+                    >
+                      <span className="text-lg flex-shrink-0">{template.emoji}</span>
+                      <div className="min-w-0">
+                        <div className="text-sm font-medium truncate">{template.name}</div>
+                        <div className="text-xs text-muted-foreground line-clamp-2">
+                          {template.description}
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+            {selectedTemplate && (
+              <div className="flex items-center justify-between pt-2 border-t">
+                <span className="text-xs text-muted-foreground">
+                  Template applied - customize below
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setSelectedTemplate(null);
+                    setName('');
+                    setDescription('');
+                    setGoal('');
+                    setSystemPrompt('');
+                    setGoalCompletionBehavior('auto-disable');
+                    setBehavior(DEFAULT_AGENT_BEHAVIOR);
+                  }}
+                  className="text-xs h-7"
+                >
+                  Clear
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {/* Basic Info */}
       <Card>
         <CardHeader>

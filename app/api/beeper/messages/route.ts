@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { logger } from '@/lib/logger';
-import { getBeeperClient, getPlatformFromAccountId } from '@/lib/beeper-client';
+import { getBeeperClient, getPlatformFromAccountId, MissingTokenError } from '@/lib/beeper-client';
 import { BeeperMessage, BeeperAttachment } from '@/lib/types';
 
 // Convert Beeper API attachment to our type
@@ -97,23 +97,6 @@ export async function GET(request: NextRequest) {
       // For DMs, find the OTHER participant (not self) to get their avatar and name
       const otherParticipant = participants.find(p => !p.isSelf) || participants[0];
 
-      // Debug: Log participant info to understand the data structure
-      if (!isGroup && participants.length > 0) {
-        logger.debug(`[Messages] Chat ${chat.id} (title: "${chat.title}") otherParticipant:`, {
-          selected: otherParticipant ? {
-            id: otherParticipant.id,
-            fullName: otherParticipant.fullName,
-            username: otherParticipant.username,
-            isSelf: otherParticipant.isSelf,
-          } : null,
-          allParticipants: participants.map(p => ({
-            id: p.id,
-            fullName: p.fullName,
-            isSelf: p.isSelf,
-          })),
-        });
-      }
-
       // Get avatar for single chats from the other participant
       let avatarUrl: string | undefined;
       if (!isGroup && otherParticipant?.imgURL) {
@@ -130,11 +113,6 @@ export async function GET(request: NextRequest) {
         chatDisplayName = otherParticipant.fullName || otherParticipant.username || chat.title || 'Unknown';
       } else {
         chatDisplayName = chat.title || 'Unknown';
-      }
-
-      // Debug: Log the final display name
-      if (!isGroup) {
-        logger.debug(`[Messages] FINAL: Chat ${chat.id} -> displayName: "${chatDisplayName}" (otherParticipant.fullName: "${otherParticipant?.fullName}", otherParticipant.isSelf: ${otherParticipant?.isSelf})`);
       }
 
       // Cache and return chat info
@@ -186,6 +164,12 @@ export async function GET(request: NextRequest) {
       chatInfo: chatInfoToReturn,
     });
   } catch (error) {
+    if (error instanceof MissingTokenError) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: 401 }
+      );
+    }
     logger.error('Error fetching messages:', error instanceof Error ? error : String(error));
     return NextResponse.json(
       { error: 'Failed to fetch messages. Make sure Beeper Desktop is running.' },

@@ -117,6 +117,10 @@ export const STORAGE_KEYS = {
   AUTOPILOT_SCHEDULED: 'parrot-autopilot-scheduled',
   AUTOPILOT_HANDOFFS: 'parrot-autopilot-handoffs',
   CACHE_TIMESTAMP: 'parrot-cache-timestamp',
+  // CRM storage keys
+  CRM_CONTACTS: 'parrot-crm-contacts',
+  CRM_TAGS: 'parrot-crm-tags',
+  CRM_CHAT_MAPPINGS: 'parrot-crm-chat-mappings',
 } as const;
 
 /**

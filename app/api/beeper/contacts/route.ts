@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { logger } from '@/lib/logger';
-import { getBeeperClient, getPlatformFromAccountId } from '@/lib/beeper-client';
+import { getBeeperClient, getPlatformFromAccountId, MissingTokenError } from '@/lib/beeper-client';
 
 export interface Contact {
   chatId: string;
@@ -96,6 +96,12 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ data: contacts });
   } catch (error) {
+    if (error instanceof MissingTokenError) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: 401 }
+      );
+    }
     logger.error('Error fetching contacts:', error instanceof Error ? error : String(error));
     return NextResponse.json(
       { error: 'Failed to fetch contacts. Make sure Beeper Desktop is running.' },

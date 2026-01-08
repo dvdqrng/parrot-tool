@@ -29,6 +29,8 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className="antialiased">
+        {/* Draggable title bar region for Electron */}
+        <div className="electron-drag-region" />
         <ThemeProvider
           attribute="class"
           defaultTheme="system"

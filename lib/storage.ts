@@ -10,6 +10,8 @@ import {
   AutopilotActivityEntry,
   ScheduledAutopilotAction,
   ConversationHandoffSummary,
+  CrmContactProfile,
+  CrmTag,
 } from './types';
 import { emitActivityAdded, emitActionScheduled, emitConfigChanged } from './autopilot-events';
 import { logger } from './logger';
@@ -790,4 +792,303 @@ export function saveHandoffSummary(summary: ConversationHandoffSummary): void {
 
 export function deleteHandoffSummary(chatId: string): void {
   autopilotHandoffsManager.delete(chatId);
+}
+
+// ============================================
+// CRM STORAGE
+// ============================================
+
+// Default tag colors
+const DEFAULT_TAG_COLORS = [
+  '#ef4444', // red
+  '#f97316', // orange
+  '#eab308', // yellow
+  '#22c55e', // green
+  '#14b8a6', // teal
+  '#3b82f6', // blue
+  '#8b5cf6', // violet
+  '#ec4899', // pink
+];
+
+// Create manager instances for CRM storage
+const crmContactsManager = new MapStorageManager<string, CrmContactProfile>(
+  STORAGE_KEYS.CRM_CONTACTS,
+  'crmContacts'
+);
+
+const crmTagsManager = new MapStorageManager<string, CrmTag>(
+  STORAGE_KEYS.CRM_TAGS,
+  'crmTags'
+);
+
+const crmChatMappingsManager = new MapStorageManager<string, string>(
+  STORAGE_KEYS.CRM_CHAT_MAPPINGS,
+  'crmChatMappings'
+);
+
+// CRM Contact operations
+export function loadCrmContacts(): Record<string, CrmContactProfile> {
+  return crmContactsManager.load();
+}
+
+export function saveCrmContacts(contacts: Record<string, CrmContactProfile>): void {
+  crmContactsManager.save(contacts);
+}
+
+export function getCrmContactById(contactId: string): CrmContactProfile | null {
+  const contacts = loadCrmContacts();
+  return contacts[contactId] || null;
+}
+
+export function getCrmContactByChatId(chatId: string): CrmContactProfile | null {
+  const mappings = loadCrmChatMappings();
+  const contactId = mappings[chatId];
+  if (!contactId) return null;
+  return getCrmContactById(contactId);
+}
+
+export function saveCrmContact(contact: CrmContactProfile): void {
+  crmContactsManager.merge({
+    [contact.id]: { ...contact, updatedAt: new Date().toISOString() }
+  });
+
+  // Update chat mappings for all platform links
+  const mappings: Record<string, string> = {};
+  for (const link of contact.platformLinks) {
+    mappings[link.chatId] = contact.id;
+  }
+  if (Object.keys(mappings).length > 0) {
+    crmChatMappingsManager.merge(mappings);
+  }
+}
+
+export function createCrmContact(
+  displayName: string,
+  chatId: string,
+  platform: string,
+  accountId: string,
+  avatarUrl?: string
+): CrmContactProfile {
+  const now = new Date().toISOString();
+  const contact: CrmContactProfile = {
+    id: generateId(),
+    displayName,
+    avatarUrl,
+    platformLinks: [{
+      platform,
+      chatId,
+      accountId,
+      displayName,
+      avatarUrl,
+      addedAt: now,
+    }],
+    tags: [],
+    notes: '',
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  saveCrmContact(contact);
+  return contact;
+}
+
+export function updateCrmContact(contactId: string, updates: Partial<CrmContactProfile>): CrmContactProfile | null {
+  const contact = getCrmContactById(contactId);
+  if (!contact) return null;
+
+  const updated = {
+    ...contact,
+    ...updates,
+    updatedAt: new Date().toISOString(),
+  };
+  saveCrmContact(updated);
+  return updated;
+}
+
+export function deleteCrmContact(contactId: string): void {
+  const contact = getCrmContactById(contactId);
+  if (contact) {
+    // Remove chat mappings
+    for (const link of contact.platformLinks) {
+      crmChatMappingsManager.delete(link.chatId);
+    }
+  }
+  crmContactsManager.delete(contactId);
+}
+
+export function addPlatformLinkToContact(
+  contactId: string,
+  chatId: string,
+  platform: string,
+  accountId: string,
+  displayName?: string,
+  avatarUrl?: string
+): CrmContactProfile | null {
+  const contact = getCrmContactById(contactId);
+  if (!contact) return null;
+
+  // Check if link already exists
+  if (contact.platformLinks.some(link => link.chatId === chatId)) {
+    return contact;
+  }
+
+  const updated: CrmContactProfile = {
+    ...contact,
+    platformLinks: [
+      ...contact.platformLinks,
+      {
+        platform,
+        chatId,
+        accountId,
+        displayName,
+        avatarUrl,
+        addedAt: new Date().toISOString(),
+      }
+    ],
+    updatedAt: new Date().toISOString(),
+  };
+
+  saveCrmContact(updated);
+  return updated;
+}
+
+export function removePlatformLinkFromContact(contactId: string, chatId: string): CrmContactProfile | null {
+  const contact = getCrmContactById(contactId);
+  if (!contact) return null;
+
+  const updated: CrmContactProfile = {
+    ...contact,
+    platformLinks: contact.platformLinks.filter(link => link.chatId !== chatId),
+    updatedAt: new Date().toISOString(),
+  };
+
+  // Remove chat mapping
+  crmChatMappingsManager.delete(chatId);
+
+  saveCrmContact(updated);
+  return updated;
+}
+
+// Merge two contacts into one
+export function mergeCrmContacts(targetContactId: string, sourceContactId: string): CrmContactProfile | null {
+  const target = getCrmContactById(targetContactId);
+  const source = getCrmContactById(sourceContactId);
+  if (!target || !source) return null;
+
+  // Merge platform links (avoid duplicates)
+  const existingChatIds = new Set(target.platformLinks.map(l => l.chatId));
+  const newLinks = source.platformLinks.filter(l => !existingChatIds.has(l.chatId));
+
+  // Merge tags (unique)
+  const mergedTags = [...new Set([...target.tags, ...source.tags])];
+
+  // Merge notes
+  const mergedNotes = target.notes && source.notes
+    ? `${target.notes}\n\n---\nMerged from ${source.displayName}:\n${source.notes}`
+    : target.notes || source.notes;
+
+  const updated: CrmContactProfile = {
+    ...target,
+    platformLinks: [...target.platformLinks, ...newLinks],
+    tags: mergedTags,
+    notes: mergedNotes,
+    // Keep target's primary info, but fill in blanks from source
+    email: target.email || source.email,
+    phone: target.phone || source.phone,
+    company: target.company || source.company,
+    role: target.role || source.role,
+    location: target.location || source.location,
+    updatedAt: new Date().toISOString(),
+  };
+
+  saveCrmContact(updated);
+
+  // Delete the source contact
+  deleteCrmContact(sourceContactId);
+
+  return updated;
+}
+
+// CRM Tag operations
+export function loadCrmTags(): Record<string, CrmTag> {
+  return crmTagsManager.load();
+}
+
+export function saveCrmTags(tags: Record<string, CrmTag>): void {
+  crmTagsManager.save(tags);
+}
+
+export function getCrmTagById(tagId: string): CrmTag | null {
+  const tags = loadCrmTags();
+  return tags[tagId] || null;
+}
+
+export function createCrmTag(name: string, color?: string): CrmTag {
+  const tags = loadCrmTags();
+  const tagCount = Object.keys(tags).length;
+
+  const tag: CrmTag = {
+    id: generateId(),
+    name,
+    color: color || DEFAULT_TAG_COLORS[tagCount % DEFAULT_TAG_COLORS.length],
+    createdAt: new Date().toISOString(),
+  };
+
+  crmTagsManager.merge({ [tag.id]: tag });
+  return tag;
+}
+
+export function updateCrmTag(tagId: string, updates: Partial<CrmTag>): CrmTag | null {
+  const tag = getCrmTagById(tagId);
+  if (!tag) return null;
+
+  const updated = { ...tag, ...updates };
+  crmTagsManager.merge({ [tagId]: updated });
+  return updated;
+}
+
+export function deleteCrmTag(tagId: string): void {
+  // Remove tag from all contacts
+  const contacts = loadCrmContacts();
+  for (const contact of Object.values(contacts)) {
+    if (contact.tags.includes(tagId)) {
+      updateCrmContact(contact.id, {
+        tags: contact.tags.filter(t => t !== tagId)
+      });
+    }
+  }
+  crmTagsManager.delete(tagId);
+}
+
+// CRM Chat mappings operations
+export function loadCrmChatMappings(): Record<string, string> {
+  return crmChatMappingsManager.load();
+}
+
+export function saveCrmChatMappings(mappings: Record<string, string>): void {
+  crmChatMappingsManager.save(mappings);
+}
+
+// Get all contacts with a specific tag
+export function getContactsByTag(tagId: string): CrmContactProfile[] {
+  const contacts = loadCrmContacts();
+  return Object.values(contacts).filter(c => c.tags.includes(tagId));
+}
+
+// Search contacts by name
+export function searchCrmContacts(query: string): CrmContactProfile[] {
+  const contacts = loadCrmContacts();
+  const lowerQuery = query.toLowerCase();
+
+  return Object.values(contacts).filter(contact => {
+    const matchesName = contact.displayName.toLowerCase().includes(lowerQuery);
+    const matchesNickname = contact.nickname?.toLowerCase().includes(lowerQuery);
+    const matchesCompany = contact.company?.toLowerCase().includes(lowerQuery);
+    const matchesNotes = contact.notes.toLowerCase().includes(lowerQuery);
+    const matchesPlatformName = contact.platformLinks.some(
+      link => link.displayName?.toLowerCase().includes(lowerQuery)
+    );
+
+    return matchesName || matchesNickname || matchesCompany || matchesNotes || matchesPlatformName;
+  });
 }

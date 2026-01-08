@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { logger } from '@/lib/logger';
-import { getBeeperClient, getPlatformFromAccountId } from '@/lib/beeper-client';
+import { getBeeperClient, getPlatformFromAccountId, MissingTokenError } from '@/lib/beeper-client';
 import { BeeperMessage } from '@/lib/types';
 
 export async function GET(request: NextRequest) {
@@ -84,6 +84,12 @@ export async function GET(request: NextRequest) {
       chatInfo: chatInfoToReturn,
     });
   } catch (error) {
+    if (error instanceof MissingTokenError) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: 401 }
+      );
+    }
     logger.error('Error fetching archived chats:', error instanceof Error ? error : String(error));
     return NextResponse.json(
       { error: 'Failed to fetch archived chats. Make sure Beeper Desktop is running.' },
