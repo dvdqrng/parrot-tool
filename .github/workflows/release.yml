@@ -9,9 +9,14 @@ jobs:
   release:
     runs-on: macos-latest
 
+    permissions:
+      contents: write
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -22,33 +27,27 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Get version from package.json
+      - name: Get version info
         id: version
-        run: echo "version=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
-
-      - name: Check if release exists
-        id: check_release
         run: |
-          if gh release view "v${{ steps.version.outputs.version }}" &>/dev/null; then
-            echo "exists=true" >> $GITHUB_OUTPUT
-          else
-            echo "exists=false" >> $GITHUB_OUTPUT
-          fi
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION=$(node -p "require('./package.json').version")
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          TIMESTAMP=$(date +%Y%m%d%H%M%S)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag=v${VERSION}-${TIMESTAMP}-${SHORT_SHA}" >> $GITHUB_OUTPUT
+          echo "name=v${VERSION} (${SHORT_SHA})" >> $GITHUB_OUTPUT
 
       - name: Build Electron app (macOS)
-        if: steps.check_release.outputs.exists == 'false'
         run: npm run electron:build
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create Release
-        if: steps.check_release.outputs.exists == 'false'
         run: |
-          gh release create "v${{ steps.version.outputs.version }}" \
-            --title "v${{ steps.version.outputs.version }}" \
+          gh release create "${{ steps.version.outputs.tag }}" \
+            --title "${{ steps.version.outputs.name }}" \
             --generate-notes \
+            --latest \
             dist/*.dmg
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -57,6 +56,9 @@ jobs:
     runs-on: windows-latest
     needs: release
 
+    permissions:
+      contents: write
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -70,31 +72,29 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Get version from package.json
+      - name: Get version info
         id: version
         run: |
-          $version = node -p "require('./package.json').version"
-          echo "version=$version" >> $env:GITHUB_OUTPUT
-
-      - name: Check if release exists
-        id: check_release
-        run: |
-          $exists = gh release view "v${{ steps.version.outputs.version }}" 2>$null
-          if ($LASTEXITCODE -eq 0) {
-            echo "exists=true" >> $env:GITHUB_OUTPUT
-          } else {
-            echo "exists=false" >> $env:GITHUB_OUTPUT
-          }
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          $VERSION = node -p "require('./package.json').version"
+          $SHORT_SHA = git rev-parse --short HEAD
+          $TIMESTAMP = Get-Date -Format "yyyyMMddHHmmss"
+          echo "tag=v${VERSION}-${TIMESTAMP}-${SHORT_SHA}" >> $env:GITHUB_OUTPUT
 
       - name: Build Electron app (Windows)
         run: npm run electron:build:win
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Get latest release tag
+        id: latest
+        run: |
+          $TAG = gh release list --limit 1 --json tagName --jq '.[0].tagName'
+          echo "tag=$TAG" >> $env:GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Upload Windows assets to release
         run: |
-          gh release upload "v${{ steps.version.outputs.version }}" dist/*.exe --clobber
+          gh release upload "${{ steps.latest.outputs.tag }}" dist/*.exe --clobber
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
