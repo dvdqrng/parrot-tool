@@ -90,7 +90,11 @@ export interface AppSettings {
 
 // Kanban types
 
-export type ColumnId = 'unread' | 'autopilot' | 'drafts' | 'sent' | 'archived';
+// Status-based column IDs (used when groupBy='status')
+export type StatusColumnId = 'unread' | 'autopilot' | 'drafts' | 'sent' | 'archived';
+
+// ColumnId is a string to support both status columns and dynamic platform columns
+export type ColumnId = string;
 
 // Media type indicators for preview display
 export type MediaType = 'photo' | 'video' | 'audio' | 'voice' | 'gif' | 'sticker' | 'file' | 'link';
@@ -116,7 +120,8 @@ export interface KanbanCard {
   mediaTypes?: MediaType[];
 }
 
-export type KanbanColumns = Record<ColumnId, KanbanCard[]>;
+// KanbanColumns uses string keys to support both status and platform grouping
+export type KanbanColumns = Record<string, KanbanCard[]>;
 
 // API response types
 

@@ -666,6 +666,7 @@ export default function Home() {
           ) : (
             <div className="h-full overflow-x-auto">
               <MessageBoard
+                groupBy={settings.kanbanGroupBy ?? 'status'}
                 unreadMessages={filteredUnreadMessages}
                 autopilotMessages={autopilotMessages}
                 drafts={drafts}

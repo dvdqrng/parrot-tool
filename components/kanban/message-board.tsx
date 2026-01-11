@@ -8,7 +8,8 @@ import { Button } from '@/components/ui/button';
 import { Loader2, ChevronDown } from 'lucide-react';
 import { MessageCard } from './message-card';
 import { ColumnHeader } from './column-header';
-import { BeeperMessage, BeeperAttachment, Draft, KanbanCard, KanbanColumns, ColumnId, MediaType } from '@/lib/types';
+import { BeeperMessage, BeeperAttachment, Draft, KanbanCard, KanbanColumns, ColumnId, MediaType, KanbanGroupBy, StatusColumnId } from '@/lib/types';
+import { getPlatformInfo } from '@/lib/beeper-client';
 
 // URL detection regex
 const URL_REGEX = /(https?:\/\/[^\s]+)/g;
@@ -107,6 +108,7 @@ function getDraftsKey(drafts: Draft[]): string {
 }
 
 interface MessageBoardProps {
+  groupBy?: KanbanGroupBy;
   unreadMessages: BeeperMessage[];
   autopilotMessages?: BeeperMessage[];
   drafts: Draft[];
@@ -133,6 +135,58 @@ interface MessageBoardProps {
   isSendingAllDrafts?: boolean;
   sendingProgress?: { current: number; total: number };
   onCancelSending?: () => void;
+}
+
+// Check if a column ID is a status column
+function isStatusColumnId(id: string): id is StatusColumnId {
+  return ['unread', 'autopilot', 'drafts', 'sent', 'archived'].includes(id);
+}
+
+// Compute platform-based columns from messages and drafts
+function computePlatformColumns(
+  unreadMessages: BeeperMessage[],
+  drafts: Draft[],
+  sentMessages: BeeperMessage[],
+  avatars?: Record<string, string>,
+  chatInfo?: Record<string, ChatInfo>
+): KanbanColumns {
+  const columns: KanbanColumns = {};
+
+  // Helper to add a card to a platform column
+  const addToColumn = (platform: string, card: KanbanCard) => {
+    const normalizedPlatform = platform.toLowerCase() || 'unknown';
+    if (!columns[normalizedPlatform]) {
+      columns[normalizedPlatform] = [];
+    }
+    columns[normalizedPlatform].push(card);
+  };
+
+  // Add unread messages
+  for (const message of unreadMessages) {
+    const card = messageToCard(message, avatars, chatInfo);
+    addToColumn(card.platform, card);
+  }
+
+  // Add sent messages
+  for (const message of sentMessages.slice(0, 50)) {
+    const card = messageToCard(message, avatars, chatInfo);
+    addToColumn(card.platform, card);
+  }
+
+  // Add drafts
+  for (const draft of drafts) {
+    const card = draftToCard(draft);
+    addToColumn(card.platform, card);
+  }
+
+  // Sort each column by timestamp (most recent first)
+  for (const platformId of Object.keys(columns)) {
+    columns[platformId].sort((a, b) =>
+      new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    );
+  }
+
+  return columns;
 }
 
 function messageToCard(
@@ -179,6 +233,7 @@ function draftToCard(draft: Draft): KanbanCard {
 }
 
 export function MessageBoard({
+  groupBy = 'status',
   unreadMessages,
   autopilotMessages = [],
   drafts,
@@ -206,6 +261,7 @@ export function MessageBoard({
   sendingProgress,
   onCancelSending,
 }: MessageBoardProps) {
+  const isPlatformMode = groupBy === 'platform';
   // Store previous column arrays to reuse when content hasn't changed
   const prevColumnsRef = useRef<KanbanColumns>({
     unread: [],
@@ -235,6 +291,12 @@ export function MessageBoard({
 
   // Only rebuild column arrays when their content actually changes
   const columns: KanbanColumns = useMemo(() => {
+    // Platform mode: group all messages by platform
+    if (isPlatformMode) {
+      return computePlatformColumns(unreadMessages, drafts, sentMessages, avatars, chatInfo);
+    }
+
+    // Status mode: use existing logic with optimization
     // Check if ANY column changed
     const unreadChanged = currentKeys.unread !== prevKeysRef.current.unread;
     const autopilotChanged = currentKeys.autopilot !== prevKeysRef.current.autopilot;
@@ -251,19 +313,19 @@ export function MessageBoard({
     const newColumns: KanbanColumns = {
       unread: unreadChanged
         ? unreadMessages.map(m => messageToCard(m, avatars, chatInfo))
-        : prevColumnsRef.current.unread,
+        : prevColumnsRef.current.unread || [],
       autopilot: autopilotChanged
         ? autopilotMessages.map(m => messageToCard(m, avatars, chatInfo))
-        : prevColumnsRef.current.autopilot,
+        : prevColumnsRef.current.autopilot || [],
       drafts: draftsChanged
         ? drafts.map(draftToCard)
-        : prevColumnsRef.current.drafts,
+        : prevColumnsRef.current.drafts || [],
       sent: sentChanged
         ? sentMessages.slice(0, 20).map(m => messageToCard(m, avatars, chatInfo))
-        : prevColumnsRef.current.sent,
+        : prevColumnsRef.current.sent || [],
       archived: archivedChanged
         ? archivedMessages.slice(0, 20).map(m => messageToCard(m, avatars, chatInfo))
-        : prevColumnsRef.current.archived,
+        : prevColumnsRef.current.archived || [],
     };
 
     // Update the keys for changed columns
@@ -275,10 +337,19 @@ export function MessageBoard({
 
     prevColumnsRef.current = newColumns;
     return newColumns;
-  }, [currentKeys, unreadMessages, autopilotMessages, drafts, sentMessages, archivedMessages, avatars, chatInfo]);
+  }, [isPlatformMode, currentKeys, unreadMessages, autopilotMessages, drafts, sentMessages, archivedMessages, avatars, chatInfo]);
 
   // Determine which columns to show
   const visibleColumns: ColumnId[] = useMemo(() => {
+    // Platform mode: show platforms sorted by message count (most active first)
+    if (isPlatformMode) {
+      return Object.entries(columns)
+        .filter(([_, cards]) => cards.length > 0)
+        .sort((a, b) => b[1].length - a[1].length)
+        .map(([platformId]) => platformId);
+    }
+
+    // Status mode: show fixed columns
     const cols: ColumnId[] = ['unread'];
     // Show autopilot column if there are any autopilot messages
     if (autopilotMessages.length > 0) {
@@ -289,18 +360,19 @@ export function MessageBoard({
       cols.push('archived');
     }
     return cols;
-  }, [showArchivedColumn, autopilotMessages.length]);
+  }, [isPlatformMode, columns, showArchivedColumn, autopilotMessages.length]);
 
   // Track starting column for drag operations
   const dragStartColumnRef = useRef<ColumnId | null>(null);
 
   // Find which column contains a card by its id
   const findColumnForCard = useCallback((cardId: string): ColumnId | null => {
-    if (columns.unread.some(c => c.id === cardId)) return 'unread';
-    if (columns.autopilot.some(c => c.id === cardId)) return 'autopilot';
-    if (columns.drafts.some(c => c.id === cardId)) return 'drafts';
-    if (columns.sent.some(c => c.id === cardId)) return 'sent';
-    if (columns.archived.some(c => c.id === cardId)) return 'archived';
+    // Search through all columns (works for both status and platform modes)
+    for (const [columnId, cards] of Object.entries(columns)) {
+      if (cards.some(c => c.id === cardId)) {
+        return columnId;
+      }
+    }
     return null;
   }, [columns]);
 
@@ -308,6 +380,12 @@ export function MessageBoard({
   const handleDragEnd = useCallback((event: DragEndEvent) => {
     const { active, over } = event;
     const startColumn = dragStartColumnRef.current;
+
+    // In platform mode, disable cross-column drag entirely
+    if (isPlatformMode) {
+      dragStartColumnRef.current = null;
+      return;
+    }
 
     if (!over || !startColumn) {
       dragStartColumnRef.current = null;
@@ -328,14 +406,14 @@ export function MessageBoard({
 
     // If we moved to a different column (specifically from unread to drafts)
     if (targetColumn && startColumn !== targetColumn && startColumn === 'unread' && targetColumn === 'drafts') {
-      const card = columns.unread.find(c => c.id === activeId);
+      const card = columns.unread?.find(c => c.id === activeId);
       if (card) {
         onMoveToColumn(card, startColumn, targetColumn);
       }
     }
 
     dragStartColumnRef.current = null;
-  }, [columns, findColumnForCard, onMoveToColumn]);
+  }, [isPlatformMode, columns, findColumnForCard, onMoveToColumn]);
 
   // Handle drag start to track source column
   const handleDragStart = useCallback((event: { active: { id: string | number } }) => {
@@ -366,7 +444,8 @@ export function MessageBoard({
           >
             <ColumnHeader
                   columnId={columnId}
-                  count={columns[columnId].length}
+                  groupBy={groupBy}
+                  count={(columns[columnId] || []).length}
                   onGenerateAllDrafts={columnId === 'unread' ? onGenerateAllDrafts : undefined}
                   isGenerating={columnId === 'unread' ? isGeneratingDrafts : undefined}
                   generatingProgress={columnId === 'unread' ? generatingProgress : undefined}
@@ -380,28 +459,31 @@ export function MessageBoard({
             <div className="relative flex-1 h-0 min-h-0">
               <ScrollArea className="h-full">
                 <div className="flex flex-col gap-2 p-4 pb-20">
-                  {columns[columnId].length === 0 ? (
+                  {(columns[columnId] || []).length === 0 ? (
                     <div className="rounded-lg border-2 border-dashed border-muted p-4 text-center text-sm text-muted-foreground">
-                      {columnId === 'unread' && 'No unread messages'}
-                      {columnId === 'autopilot' && 'No chats on autopilot'}
-                      {columnId === 'drafts' && 'Drag messages here to create drafts'}
-                      {columnId === 'sent' && 'No sent messages'}
-                      {columnId === 'archived' && 'No archived chats'}
+                      {/* Status mode empty states */}
+                      {!isPlatformMode && columnId === 'unread' && 'No unread messages'}
+                      {!isPlatformMode && columnId === 'autopilot' && 'No chats on autopilot'}
+                      {!isPlatformMode && columnId === 'drafts' && 'Drag messages here to create drafts'}
+                      {!isPlatformMode && columnId === 'sent' && 'No sent messages'}
+                      {!isPlatformMode && columnId === 'archived' && 'No archived chats'}
+                      {/* Platform mode empty state */}
+                      {isPlatformMode && `No messages from ${getPlatformInfo(columnId).name}`}
                     </div>
                   ) : (
                     <>
-                      {columns[columnId].map((card) => (
+                      {(columns[columnId] || []).map((card) => (
                         <MessageCard
                           key={card.id}
                           card={card}
                           onClick={() => onCardClick(card)}
-                          onArchive={columnId !== 'archived' ? onArchive : undefined}
-                          onUnarchive={columnId === 'archived' ? onUnarchive : undefined}
+                          onArchive={!isPlatformMode && columnId !== 'archived' ? onArchive : undefined}
+                          onUnarchive={!isPlatformMode && columnId === 'archived' ? onUnarchive : undefined}
                           onHide={onHide}
                           onDeleteDraft={onDeleteDraft}
                         />
                       ))}
-                      {columnId === 'unread' && hasMore && onLoadMore && (
+                      {!isPlatformMode && columnId === 'unread' && hasMore && onLoadMore && (
                         <Button
                           variant="outline"
                           size="sm"

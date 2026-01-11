@@ -106,6 +106,8 @@ export function useMessages(accountIds: string[], hiddenChatIds?: Set<string>) {
 
   // Track message IDs for quick lookup
   const messageIdsRef = useRef<Set<string>>(new Set());
+  // Track current messages for diff comparison outside of setState
+  const messagesRef = useRef<BeeperMessage[]>([]);
 
   // Load cached messages, avatars, and chat info on mount
   useEffect(() => {
@@ -113,6 +115,7 @@ export function useMessages(accountIds: string[], hiddenChatIds?: Set<string>) {
     if (cached.length > 0) {
       setMessages(cached);
       messageIdsRef.current = new Set(cached.map(m => m.id));
+      messagesRef.current = cached;
       setIsFromCache(true);
     }
     const cachedAvatars = loadCachedAvatars();
@@ -131,18 +134,28 @@ export function useMessages(accountIds: string[], hiddenChatIds?: Set<string>) {
     if (accountIds.length === 0) {
       setMessages([]);
       messageIdsRef.current = new Set();
+      messagesRef.current = [];
       setHasMore(false);
       setNextCursor(null);
       return;
     }
 
+    // Track if we're setting loading state so we know to clear it in finally
+    let didSetLoadingMore = false;
+    let didSetLoading = false;
+
     // Only show loading state on initial load or manual refresh, not on background polls
     if (cursor) {
       setIsLoadingMore(true);
+      didSetLoadingMore = true;
     } else if (!isBackgroundPoll || !hasLoadedOnceRef.current) {
       setIsLoading(true);
+      didSetLoading = true;
     }
-    setError(null);
+    // Only clear error if not a background poll (to avoid re-renders)
+    if (!isBackgroundPoll) {
+      setError(null);
+    }
 
     try {
       const settings = loadSettings();
@@ -174,10 +187,12 @@ export function useMessages(accountIds: string[], hiddenChatIds?: Set<string>) {
           if (cached.length > 0) {
             setMessages(cached);
             messageIdsRef.current = new Set(cached.map(m => m.id));
+            messagesRef.current = cached;
             setIsFromCache(true);
           } else {
             setMessages([]);
             messageIdsRef.current = new Set();
+            messagesRef.current = [];
           }
         }
       } else {
@@ -187,28 +202,36 @@ export function useMessages(accountIds: string[], hiddenChatIds?: Set<string>) {
             const updated = [...prev, ...(result.data || [])];
             saveCachedMessages(updated);
             messageIdsRef.current = new Set(updated.map(m => m.id));
+            messagesRef.current = updated;
             return updated;
           });
         } else {
           // Diff-based update: only change state if there are actual differences
           const newMessages = result.data || [];
 
-          setMessages(prev => {
-            const diff = diffMessages(prev, newMessages);
+          // Check diff outside of setState to determine if we need other state updates
+          const existingMessages = messagesRef.current;
+          const diff = diffMessages(existingMessages, newMessages);
 
-            if (!diff.hasChanges) {
-              // Nothing changed - keep exact same reference, no re-render
-              return prev;
-            }
+          if (diff.hasChanges) {
+            setMessages(prev => {
+              // Re-check in case state changed between check and update
+              const currentDiff = diffMessages(prev, newMessages);
+              if (!currentDiff.hasChanges) {
+                return prev;
+              }
+              // Apply changes surgically
+              const updated = applyMessageDiff(prev, newMessages, currentDiff);
+              saveCachedMessages(updated);
+              messageIdsRef.current = new Set(updated.map(m => m.id));
+              messagesRef.current = updated;
+              return updated;
+            });
 
-            // Apply changes surgically
-            const updated = applyMessageDiff(prev, newMessages, diff);
-            saveCachedMessages(updated);
-            messageIdsRef.current = new Set(updated.map(m => m.id));
-            return updated;
-          });
+            // Only update these flags when data actually changed
+            setIsFromCache(false);
+          }
 
-          setIsFromCache(false);
           hasLoadedOnceRef.current = true;
         }
 
@@ -273,8 +296,11 @@ export function useMessages(accountIds: string[], hiddenChatIds?: Set<string>) {
           updateCachedChatInfoTitles(titleMap);
         }
 
-        setHasMore(result.hasMore || false);
-        setNextCursor(result.nextCursor || null);
+        // Only update pagination state if values changed
+        const newHasMore = result.hasMore || false;
+        const newNextCursor = result.nextCursor || null;
+        setHasMore(prev => prev === newHasMore ? prev : newHasMore);
+        setNextCursor(prev => prev === newNextCursor ? prev : newNextCursor);
       }
     } catch (err) {
       setError('Failed to fetch messages');
@@ -283,15 +309,22 @@ export function useMessages(accountIds: string[], hiddenChatIds?: Set<string>) {
         if (cached.length > 0) {
           setMessages(cached);
           messageIdsRef.current = new Set(cached.map(m => m.id));
+          messagesRef.current = cached;
           setIsFromCache(true);
         } else {
           setMessages([]);
           messageIdsRef.current = new Set();
+          messagesRef.current = [];
         }
       }
     } finally {
-      setIsLoading(false);
-      setIsLoadingMore(false);
+      // Only clear loading state if we set it
+      if (didSetLoading) {
+        setIsLoading(false);
+      }
+      if (didSetLoadingMore) {
+        setIsLoadingMore(false);
+      }
     }
   }, [accountIds]); // Don't include hiddenChatIdsString - we filter client-side
 
