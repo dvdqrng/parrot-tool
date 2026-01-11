@@ -9,6 +9,7 @@ import {
   signOut as authSignOut,
   getSubscription,
   checkAccess,
+  isSupabaseConfigured,
   type AuthUser,
   type Subscription,
 } from '@/lib/supabase'
@@ -52,6 +53,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   useEffect(() => {
+    // Skip auth initialization if Supabase is not configured (e.g., during build)
+    if (!isSupabaseConfigured) {
+      setIsLoading(false)
+      setHasAccess(true) // Allow access when auth is disabled
+      setAccessReason('Auth disabled')
+      return
+    }
+
     const init = async () => {
       try {
         const currentUser = await getCurrentUser()

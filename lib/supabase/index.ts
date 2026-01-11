@@ -1,4 +1,4 @@
-export { supabase } from './client'
+export { supabase, isSupabaseConfigured } from './client'
 export type { AuthUser } from './client'
 
 export {
