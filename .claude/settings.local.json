@@ -41,7 +41,15 @@
       "Bash(done)",
       "Bash(xargs perl:*)",
       "Bash(./build-mac.sh)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(npx prisma:*)",
+      "Bash(supabase init:*)",
+      "Bash(supabase functions new:*)",
+      "Bash(nc:*)",
+      "Bash(supabase link:*)",
+      "Bash(supabase login:*)",
+      "Bash(supabase functions deploy:*)",
+      "Bash(supabase secrets set:*)"
     ]
   }
 }

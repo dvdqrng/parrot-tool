@@ -1,14 +1,81 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { BeeperMessage } from '@/lib/types';
 import { loadSettings, loadCachedMessages, saveCachedMessages, loadCachedAvatars, mergeCachedAvatars, loadCachedChatInfo, mergeCachedChatInfo, updateCachedMessageNames, updateDraftRecipientNames, updateCachedChatInfoTitles } from '@/lib/storage';
 
-// Deep compare messages by their IDs and timestamps to avoid unnecessary re-renders
+// Deep compare messages using a Map for efficient lookup
+// This handles reordering without triggering unnecessary re-renders
 function messagesEqual(a: BeeperMessage[], b: BeeperMessage[]): boolean {
   if (a.length !== b.length) return false;
-  for (let i = 0; i < a.length; i++) {
-    if (a[i].id !== b[i].id || a[i].timestamp !== b[i].timestamp || a[i].text !== b[i].text) {
+
+  // Build a map of the new messages for O(1) lookup
+  const bMap = new Map<string, BeeperMessage>();
+  for (const msg of b) {
+    bMap.set(msg.id, msg);
+  }
+
+  // Check if all messages in 'a' exist in 'b' with same content
+  for (const msgA of a) {
+    const msgB = bMap.get(msgA.id);
+    if (!msgB) return false; // Message was removed
+    // Compare key fields that would affect display
+    if (msgA.timestamp !== msgB.timestamp ||
+        msgA.text !== msgB.text ||
+        msgA.unreadCount !== msgB.unreadCount ||
+        msgA.isRead !== msgB.isRead) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+// Merge new messages into existing array, preserving object references where possible
+function mergeMessages(existing: BeeperMessage[], incoming: BeeperMessage[]): BeeperMessage[] {
+  const existingMap = new Map<string, BeeperMessage>();
+  for (const msg of existing) {
+    existingMap.set(msg.id, msg);
+  }
+
+  // Map incoming messages, reusing existing references when unchanged
+  return incoming.map(newMsg => {
+    const existingMsg = existingMap.get(newMsg.id);
+    if (existingMsg &&
+        existingMsg.timestamp === newMsg.timestamp &&
+        existingMsg.text === newMsg.text &&
+        existingMsg.unreadCount === newMsg.unreadCount &&
+        existingMsg.isRead === newMsg.isRead) {
+      // Reuse existing object reference to prevent re-renders
+      return existingMsg;
+    }
+    return newMsg;
+  });
+}
+
+// Check if two record objects are equal (shallow comparison of values)
+function recordsEqual<T>(a: Record<string, T>, b: Record<string, T>): boolean {
+  const aKeys = Object.keys(a);
+  const bKeys = Object.keys(b);
+  if (aKeys.length !== bKeys.length) return false;
+  for (const key of aKeys) {
+    if (a[key] !== b[key]) return false;
+  }
+  return true;
+}
+
+// Check if chat info records are equal (deep comparison)
+function chatInfoEqual(
+  a: Record<string, { isGroup: boolean; title?: string }>,
+  b: Record<string, { isGroup: boolean; title?: string }>
+): boolean {
+  const aKeys = Object.keys(a);
+  const bKeys = Object.keys(b);
+  if (aKeys.length !== bKeys.length) return false;
+  for (const key of aKeys) {
+    const aInfo = a[key];
+    const bInfo = b[key];
+    if (!bInfo || aInfo.isGroup !== bInfo.isGroup || aInfo.title !== bInfo.title) {
       return false;
     }
   }
@@ -107,20 +174,22 @@ export function useMessages(accountIds: string[], hiddenChatIds?: Set<string>) {
               // Data hasn't changed, keep previous reference to avoid re-renders
               return prev;
             }
-            saveCachedMessages(newMessages);
-            return newMessages;
+            // Merge to preserve object references for unchanged messages
+            const merged = mergeMessages(prev, newMessages);
+            saveCachedMessages(merged);
+            return merged;
           });
           setIsFromCache(false);
         }
-        // Merge new avatars with cached ones
+        // Merge new avatars with cached ones, only update state if changed
         if (result.avatars && Object.keys(result.avatars).length > 0) {
           const mergedAvatars = mergeCachedAvatars(result.avatars);
-          setAvatars(mergedAvatars);
+          setAvatars(prev => recordsEqual(prev, mergedAvatars) ? prev : mergedAvatars);
         }
-        // Merge new chat info with cached ones
+        // Merge new chat info with cached ones, only update state if changed
         if (result.chatInfo && Object.keys(result.chatInfo).length > 0) {
           const mergedChatInfo = mergeCachedChatInfo(result.chatInfo);
-          setChatInfo(mergedChatInfo);
+          setChatInfo(prev => chatInfoEqual(prev, mergedChatInfo) ? prev : mergedChatInfo);
         }
 
         // Build a name map from fresh data and update any stale cached entries

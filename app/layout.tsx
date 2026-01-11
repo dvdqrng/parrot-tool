@@ -2,8 +2,11 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { SettingsProvider } from "@/contexts/settings-context";
 import { AutopilotProvider } from "@/contexts/autopilot-context";
+import { AuthProvider } from "@/contexts/auth-context";
 import { ThemeProvider } from "@/components/theme-provider";
+import { AuthGuard } from "@/components/auth";
 import { Toaster } from "@/components/ui/sonner";
+import { UpdateNotification } from "@/components/update-notification";
 
 export const metadata: Metadata = {
   title: "Parrot",
@@ -37,12 +40,17 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <SettingsProvider>
-            <AutopilotProvider>
-              {children}
-              <Toaster />
-            </AutopilotProvider>
-          </SettingsProvider>
+          <AuthProvider>
+            <AuthGuard>
+              <SettingsProvider>
+                <AutopilotProvider>
+                  {children}
+                  <Toaster />
+                  <UpdateNotification />
+                </AutopilotProvider>
+              </SettingsProvider>
+            </AuthGuard>
+          </AuthProvider>
         </ThemeProvider>
       </body>
     </html>

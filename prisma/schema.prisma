@@ -1,0 +1,89 @@
+// Prisma schema for Parrot subscription system
+// Uses Supabase PostgreSQL as the database
+
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// User profile - extends Supabase Auth
+model Profile {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @unique @map("user_id") @db.Uuid // References auth.users.id
+  email     String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  subscription Subscription?
+
+  @@map("profiles")
+}
+
+// Subscription management
+model Subscription {
+  id                    String             @id @default(uuid()) @db.Uuid
+  userId                String             @unique @map("user_id") @db.Uuid
+  status                SubscriptionStatus @default(trialing)
+  trialEndsAt           DateTime?          @map("trial_ends_at")
+  stripeCustomerId      String?            @map("stripe_customer_id")
+  stripeSubscriptionId  String?            @map("stripe_subscription_id")
+  currentPeriodEndsAt   DateTime?          @map("current_period_ends_at")
+  canceledAt            DateTime?          @map("canceled_at")
+  createdAt             DateTime           @default(now()) @map("created_at")
+  updatedAt             DateTime           @updatedAt @map("updated_at")
+
+  profile Profile @relation(fields: [userId], references: [userId], onDelete: Cascade)
+
+  @@map("subscriptions")
+}
+
+enum SubscriptionStatus {
+  trialing
+  active
+  past_due
+  canceled
+  expired
+
+  @@map("subscription_status")
+}
+
+// App version management for updates
+model AppVersion {
+  id           String   @id @default(uuid()) @db.Uuid
+  version      String   // Semver: '1.0.0'
+  platform     Platform
+  downloadUrl  String   @map("download_url")
+  releaseNotes String?  @map("release_notes") @db.Text
+  isLatest     Boolean  @default(false) @map("is_latest")
+  isRequired   Boolean  @default(false) @map("is_required") // Force update
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@unique([version, platform])
+  @@map("app_versions")
+}
+
+enum Platform {
+  mac
+  win
+  linux
+
+  @@map("platform")
+}
+
+// Analytics events (optional, for tracking usage)
+model AnalyticsEvent {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String?  @map("user_id") @db.Uuid // Nullable for anonymous events
+  eventName  String   @map("event_name")
+  properties Json?    @default("{}")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@index([eventName])
+  @@index([createdAt])
+  @@map("analytics_events")
+}

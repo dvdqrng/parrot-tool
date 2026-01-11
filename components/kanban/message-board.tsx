@@ -91,6 +91,15 @@ interface ChatInfo {
   title?: string;
 }
 
+// Cache key for memoized cards - includes all fields that affect card rendering
+function getCardCacheKey(
+  message: BeeperMessage,
+  avatarUrl?: string,
+  chatInfo?: ChatInfo
+): string {
+  return `${message.id}|${message.timestamp}|${message.text}|${message.unreadCount}|${avatarUrl || ''}|${chatInfo?.title || ''}|${chatInfo?.isGroup || false}`;
+}
+
 interface MessageBoardProps {
   unreadMessages: BeeperMessage[];
   autopilotMessages?: BeeperMessage[];
@@ -189,14 +198,44 @@ export function MessageBoard({
   sendingProgress,
   onCancelSending,
 }: MessageBoardProps) {
-  // Convert data to kanban format - derive directly from props
+  // Cache for memoized cards - persists across renders
+  const cardCacheRef = useRef<Map<string, KanbanCard>>(new Map());
+
+  // Memoized function to get or create a card, reusing cached cards when possible
+  const getOrCreateCard = useCallback((
+    message: BeeperMessage,
+    messageAvatars?: Record<string, string>,
+    messageChatInfo?: Record<string, ChatInfo>
+  ): KanbanCard => {
+    const info = messageChatInfo?.[message.chatId];
+    const avatarUrl = info?.isGroup ? undefined : (messageAvatars?.[message.chatId] || message.senderAvatarUrl);
+    const cacheKey = getCardCacheKey(message, avatarUrl, info);
+
+    const cached = cardCacheRef.current.get(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
+    const card = messageToCard(message, messageAvatars, messageChatInfo);
+    cardCacheRef.current.set(cacheKey, card);
+
+    // Limit cache size to prevent memory leaks
+    if (cardCacheRef.current.size > 1000) {
+      const firstKey = cardCacheRef.current.keys().next().value;
+      if (firstKey) cardCacheRef.current.delete(firstKey);
+    }
+
+    return card;
+  }, []);
+
+  // Convert data to kanban format - uses memoized card creation
   const columns: KanbanColumns = useMemo(() => ({
-    unread: unreadMessages.map(m => messageToCard(m, avatars, chatInfo)),
-    autopilot: autopilotMessages.map(m => messageToCard(m, avatars, chatInfo)),
+    unread: unreadMessages.map(m => getOrCreateCard(m, avatars, chatInfo)),
+    autopilot: autopilotMessages.map(m => getOrCreateCard(m, avatars, chatInfo)),
     drafts: drafts.map(draftToCard),
-    sent: sentMessages.slice(0, 20).map(m => messageToCard(m, avatars, chatInfo)), // Limit sent messages
-    archived: archivedMessages.slice(0, 20).map(m => messageToCard(m, avatars, chatInfo)),
-  }), [unreadMessages, autopilotMessages, drafts, sentMessages, archivedMessages, avatars, chatInfo]);
+    sent: sentMessages.slice(0, 20).map(m => getOrCreateCard(m, avatars, chatInfo)),
+    archived: archivedMessages.slice(0, 20).map(m => getOrCreateCard(m, avatars, chatInfo)),
+  }), [unreadMessages, autopilotMessages, drafts, sentMessages, archivedMessages, avatars, chatInfo, getOrCreateCard]);
 
   // Determine which columns to show
   const visibleColumns: ColumnId[] = useMemo(() => {
