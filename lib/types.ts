@@ -71,6 +71,9 @@ export interface Draft {
 
 export type AiProvider = 'anthropic' | 'ollama' | 'openai';
 
+// Grouping options for the kanban board
+export type KanbanGroupBy = 'status' | 'platform';
+
 export interface AppSettings {
   selectedAccountIds: string[];
   beeperAccessToken?: string;
@@ -82,6 +85,7 @@ export interface AppSettings {
   ollamaBaseUrl?: string;
   // UI settings
   showArchivedColumn?: boolean;
+  kanbanGroupBy?: KanbanGroupBy;
 }
 
 // Kanban types

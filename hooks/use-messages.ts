@@ -1,85 +1,96 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { BeeperMessage } from '@/lib/types';
 import { loadSettings, loadCachedMessages, saveCachedMessages, loadCachedAvatars, mergeCachedAvatars, loadCachedChatInfo, mergeCachedChatInfo, updateCachedMessageNames, updateDraftRecipientNames, updateCachedChatInfoTitles } from '@/lib/storage';
 
-// Deep compare messages using a Map for efficient lookup
-// This handles reordering without triggering unnecessary re-renders
-function messagesEqual(a: BeeperMessage[], b: BeeperMessage[]): boolean {
-  if (a.length !== b.length) return false;
-
-  // Build a map of the new messages for O(1) lookup
-  const bMap = new Map<string, BeeperMessage>();
-  for (const msg of b) {
-    bMap.set(msg.id, msg);
-  }
-
-  // Check if all messages in 'a' exist in 'b' with same content
-  for (const msgA of a) {
-    const msgB = bMap.get(msgA.id);
-    if (!msgB) return false; // Message was removed
-    // Compare key fields that would affect display
-    if (msgA.timestamp !== msgB.timestamp ||
-        msgA.text !== msgB.text ||
-        msgA.unreadCount !== msgB.unreadCount ||
-        msgA.isRead !== msgB.isRead) {
-      return false;
-    }
-  }
-
-  return true;
+// Detect what changed between old and new message lists
+interface MessageDiff {
+  hasChanges: boolean;
+  newMessages: BeeperMessage[];      // Messages that didn't exist before
+  updatedMessages: BeeperMessage[];  // Messages with changed content
+  removedIds: Set<string>;           // IDs of messages that were removed
 }
 
-// Merge new messages into existing array, preserving object references where possible
-function mergeMessages(existing: BeeperMessage[], incoming: BeeperMessage[]): BeeperMessage[] {
+function diffMessages(existing: BeeperMessage[], incoming: BeeperMessage[]): MessageDiff {
   const existingMap = new Map<string, BeeperMessage>();
   for (const msg of existing) {
     existingMap.set(msg.id, msg);
   }
 
-  // Map incoming messages, reusing existing references when unchanged
+  const incomingIds = new Set<string>();
+  const newMessages: BeeperMessage[] = [];
+  const updatedMessages: BeeperMessage[] = [];
+
+  for (const msg of incoming) {
+    incomingIds.add(msg.id);
+    const existingMsg = existingMap.get(msg.id);
+
+    if (!existingMsg) {
+      // This is a new message
+      newMessages.push(msg);
+    } else if (
+      existingMsg.timestamp !== msg.timestamp ||
+      existingMsg.text !== msg.text ||
+      existingMsg.unreadCount !== msg.unreadCount ||
+      existingMsg.isRead !== msg.isRead
+    ) {
+      // This message was updated
+      updatedMessages.push(msg);
+    }
+  }
+
+  // Find removed messages
+  const removedIds = new Set<string>();
+  for (const id of existingMap.keys()) {
+    if (!incomingIds.has(id)) {
+      removedIds.add(id);
+    }
+  }
+
+  return {
+    hasChanges: newMessages.length > 0 || updatedMessages.length > 0 || removedIds.size > 0,
+    newMessages,
+    updatedMessages,
+    removedIds,
+  };
+}
+
+// Apply diff to existing messages, preserving object references where possible
+function applyMessageDiff(
+  existing: BeeperMessage[],
+  incoming: BeeperMessage[],
+  diff: MessageDiff
+): BeeperMessage[] {
+  if (!diff.hasChanges) {
+    return existing; // No changes, return same reference
+  }
+
+  const existingMap = new Map<string, BeeperMessage>();
+  for (const msg of existing) {
+    existingMap.set(msg.id, msg);
+  }
+
+  // Build updated map with new/updated messages
+  const updatedMap = new Map<string, BeeperMessage>();
+  for (const msg of diff.updatedMessages) {
+    updatedMap.set(msg.id, msg);
+  }
+
+  // Reconstruct list in incoming order, reusing references
   return incoming.map(newMsg => {
+    // If this message was updated, use the new version
+    if (updatedMap.has(newMsg.id)) {
+      return updatedMap.get(newMsg.id)!;
+    }
+    // If this is an existing unchanged message, reuse its reference
     const existingMsg = existingMap.get(newMsg.id);
-    if (existingMsg &&
-        existingMsg.timestamp === newMsg.timestamp &&
-        existingMsg.text === newMsg.text &&
-        existingMsg.unreadCount === newMsg.unreadCount &&
-        existingMsg.isRead === newMsg.isRead) {
-      // Reuse existing object reference to prevent re-renders
+    if (existingMsg) {
       return existingMsg;
     }
+    // This is a new message
     return newMsg;
   });
-}
-
-// Check if two record objects are equal (shallow comparison of values)
-function recordsEqual<T>(a: Record<string, T>, b: Record<string, T>): boolean {
-  const aKeys = Object.keys(a);
-  const bKeys = Object.keys(b);
-  if (aKeys.length !== bKeys.length) return false;
-  for (const key of aKeys) {
-    if (a[key] !== b[key]) return false;
-  }
-  return true;
-}
-
-// Check if chat info records are equal (deep comparison)
-function chatInfoEqual(
-  a: Record<string, { isGroup: boolean; title?: string }>,
-  b: Record<string, { isGroup: boolean; title?: string }>
-): boolean {
-  const aKeys = Object.keys(a);
-  const bKeys = Object.keys(b);
-  if (aKeys.length !== bKeys.length) return false;
-  for (const key of aKeys) {
-    const aInfo = a[key];
-    const bInfo = b[key];
-    if (!bInfo || aInfo.isGroup !== bInfo.isGroup || aInfo.title !== bInfo.title) {
-      return false;
-    }
-  }
-  return true;
 }
 
 export function useMessages(accountIds: string[], hiddenChatIds?: Set<string>) {
@@ -93,11 +104,15 @@ export function useMessages(accountIds: string[], hiddenChatIds?: Set<string>) {
   const [avatars, setAvatars] = useState<Record<string, string>>({});
   const [chatInfo, setChatInfo] = useState<Record<string, { isGroup: boolean; title?: string }>>({});
 
+  // Track message IDs for quick lookup
+  const messageIdsRef = useRef<Set<string>>(new Set());
+
   // Load cached messages, avatars, and chat info on mount
   useEffect(() => {
     const cached = loadCachedMessages();
     if (cached.length > 0) {
       setMessages(cached);
+      messageIdsRef.current = new Set(cached.map(m => m.id));
       setIsFromCache(true);
     }
     const cachedAvatars = loadCachedAvatars();
@@ -109,17 +124,22 @@ export function useMessages(accountIds: string[], hiddenChatIds?: Set<string>) {
   // Convert Set to string for stable dependency comparison
   const hiddenChatIdsString = hiddenChatIds ? Array.from(hiddenChatIds).sort().join(',') : '';
 
-  const fetchMessages = useCallback(async (cursor?: string | null) => {
+  // Track if this is the initial load vs a background poll
+  const hasLoadedOnceRef = useRef(false);
+
+  const fetchMessages = useCallback(async (cursor?: string | null, isBackgroundPoll = false) => {
     if (accountIds.length === 0) {
       setMessages([]);
+      messageIdsRef.current = new Set();
       setHasMore(false);
       setNextCursor(null);
       return;
     }
 
+    // Only show loading state on initial load or manual refresh, not on background polls
     if (cursor) {
       setIsLoadingMore(true);
-    } else {
+    } else if (!isBackgroundPoll || !hasLoadedOnceRef.current) {
       setIsLoading(true);
     }
     setError(null);
@@ -153,9 +173,11 @@ export function useMessages(accountIds: string[], hiddenChatIds?: Set<string>) {
           const cached = loadCachedMessages();
           if (cached.length > 0) {
             setMessages(cached);
+            messageIdsRef.current = new Set(cached.map(m => m.id));
             setIsFromCache(true);
           } else {
             setMessages([]);
+            messageIdsRef.current = new Set();
           }
         }
       } else {
@@ -164,36 +186,76 @@ export function useMessages(accountIds: string[], hiddenChatIds?: Set<string>) {
           setMessages(prev => {
             const updated = [...prev, ...(result.data || [])];
             saveCachedMessages(updated);
+            messageIdsRef.current = new Set(updated.map(m => m.id));
             return updated;
           });
         } else {
-          // Replace messages only if data actually changed
+          // Diff-based update: only change state if there are actual differences
           const newMessages = result.data || [];
+
           setMessages(prev => {
-            if (messagesEqual(prev, newMessages)) {
-              // Data hasn't changed, keep previous reference to avoid re-renders
+            const diff = diffMessages(prev, newMessages);
+
+            if (!diff.hasChanges) {
+              // Nothing changed - keep exact same reference, no re-render
               return prev;
             }
-            // Merge to preserve object references for unchanged messages
-            const merged = mergeMessages(prev, newMessages);
-            saveCachedMessages(merged);
-            return merged;
+
+            // Apply changes surgically
+            const updated = applyMessageDiff(prev, newMessages, diff);
+            saveCachedMessages(updated);
+            messageIdsRef.current = new Set(updated.map(m => m.id));
+            return updated;
           });
+
           setIsFromCache(false);
+          hasLoadedOnceRef.current = true;
         }
-        // Merge new avatars with cached ones, only update state if changed
+
+        // Only update avatars if they actually changed
         if (result.avatars && Object.keys(result.avatars).length > 0) {
           const mergedAvatars = mergeCachedAvatars(result.avatars);
-          setAvatars(prev => recordsEqual(prev, mergedAvatars) ? prev : mergedAvatars);
+          setAvatars(prev => {
+            // Check if any values actually changed
+            const prevKeys = Object.keys(prev);
+            const newKeys = Object.keys(mergedAvatars);
+            if (prevKeys.length === newKeys.length) {
+              let same = true;
+              for (const key of prevKeys) {
+                if (prev[key] !== mergedAvatars[key]) {
+                  same = false;
+                  break;
+                }
+              }
+              if (same) return prev;
+            }
+            return mergedAvatars;
+          });
         }
-        // Merge new chat info with cached ones, only update state if changed
+
+        // Only update chat info if it actually changed
         if (result.chatInfo && Object.keys(result.chatInfo).length > 0) {
           const mergedChatInfo = mergeCachedChatInfo(result.chatInfo);
-          setChatInfo(prev => chatInfoEqual(prev, mergedChatInfo) ? prev : mergedChatInfo);
+          setChatInfo(prev => {
+            const prevKeys = Object.keys(prev);
+            const newKeys = Object.keys(mergedChatInfo);
+            if (prevKeys.length === newKeys.length) {
+              let same = true;
+              for (const key of prevKeys) {
+                const pInfo = prev[key];
+                const nInfo = mergedChatInfo[key];
+                if (!nInfo || pInfo.isGroup !== nInfo.isGroup || pInfo.title !== nInfo.title) {
+                  same = false;
+                  break;
+                }
+              }
+              if (same) return prev;
+            }
+            return mergedChatInfo;
+          });
         }
 
         // Build a name map from fresh data and update any stale cached entries
-        // This corrects cached messages that might have wrong participant names
         if (!cursor && result.data && result.data.length > 0) {
           const nameMap: Record<string, { name: string; avatarUrl?: string }> = {};
           const titleMap: Record<string, string> = {};
@@ -206,7 +268,6 @@ export function useMessages(accountIds: string[], hiddenChatIds?: Set<string>) {
               titleMap[msg.chatId] = msg.senderName;
             }
           }
-          // This will update any cached messages, drafts, and chat info that have different names
           updateCachedMessageNames(nameMap);
           updateDraftRecipientNames(nameMap);
           updateCachedChatInfoTitles(titleMap);
@@ -218,20 +279,21 @@ export function useMessages(accountIds: string[], hiddenChatIds?: Set<string>) {
     } catch (err) {
       setError('Failed to fetch messages');
       if (!cursor) {
-        // Keep cached messages on error if we have them
         const cached = loadCachedMessages();
         if (cached.length > 0) {
           setMessages(cached);
+          messageIdsRef.current = new Set(cached.map(m => m.id));
           setIsFromCache(true);
         } else {
           setMessages([]);
+          messageIdsRef.current = new Set();
         }
       }
     } finally {
       setIsLoading(false);
       setIsLoadingMore(false);
     }
-  }, [accountIds]); // Don't include hiddenChatIdsString - we filter client-side for immediate feedback
+  }, [accountIds]); // Don't include hiddenChatIdsString - we filter client-side
 
   const loadMore = useCallback(() => {
     if (hasMore && nextCursor && !isLoadingMore) {
@@ -239,8 +301,14 @@ export function useMessages(accountIds: string[], hiddenChatIds?: Set<string>) {
     }
   }, [hasMore, nextCursor, isLoadingMore, fetchMessages]);
 
+  // Manual refetch (shows loading indicator)
   const refetch = useCallback(() => {
-    fetchMessages();
+    fetchMessages(null, false);
+  }, [fetchMessages]);
+
+  // Background poll (no loading indicator, silent update)
+  const poll = useCallback(() => {
+    fetchMessages(null, true);
   }, [fetchMessages]);
 
   useEffect(() => {
@@ -250,7 +318,7 @@ export function useMessages(accountIds: string[], hiddenChatIds?: Set<string>) {
   // Convert hiddenChatIds Set to a stable string for memoization
   const hiddenChatIdsKey = hiddenChatIds ? Array.from(hiddenChatIds).sort().join(',') : '';
 
-  // Memoize filtered messages to avoid re-renders when data hasn't changed
+  // Memoize filtered messages - these only recompute when messages actually change
   const unreadMessages = useMemo(() => {
     return messages.filter(m => {
       const isHidden = hiddenChatIds && hiddenChatIds.has(m.chatId);
@@ -273,6 +341,7 @@ export function useMessages(accountIds: string[], hiddenChatIds?: Set<string>) {
     hasMore,
     loadMore,
     refetch,
+    poll,
     isFromCache,
     avatars,
     chatInfo,

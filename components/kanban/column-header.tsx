@@ -1,6 +1,6 @@
 'use client';
 
-import { Inbox, Edit, Send, Archive, Brain, Sparkles, Square, LucideIcon } from 'lucide-react';
+import { Inbox, Edit, Send, Archive, Brain, Sparkles, Square, LucideIcon, EyeOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ColumnId } from '@/lib/types';
 
@@ -15,6 +15,7 @@ interface ColumnHeaderProps {
   isSendingAll?: boolean;
   sendingProgress?: { current: number; total: number };
   onCancelSending?: () => void;
+  onToggleArchived?: () => void;
 }
 
 const columnConfig: Record<ColumnId, { title: string; icon: LucideIcon }> = {
@@ -51,6 +52,7 @@ export function ColumnHeader({
   isSendingAll,
   sendingProgress,
   onCancelSending,
+  onToggleArchived,
 }: ColumnHeaderProps) {
   const config = columnConfig[columnId];
 
@@ -105,6 +107,18 @@ export function ColumnHeader({
             Send All
           </Button>
         )
+      )}
+      {columnId === 'archived' && onToggleArchived && (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-6 px-2 text-xs"
+          onClick={onToggleArchived}
+          title="Hide archived column"
+        >
+          <EyeOff className="h-3 w-3 mr-1" strokeWidth={2} />
+          Hide
+        </Button>
       )}
     </div>
   );

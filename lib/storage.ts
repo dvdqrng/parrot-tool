@@ -20,7 +20,7 @@ import { StorageManager, MapStorageManager, SetStorageManager, TimestampedStorag
 
 // Create storage manager instances
 const draftsManager = new StorageManager<Draft[]>(STORAGE_KEYS.DRAFTS, [], 'drafts');
-const settingsManager = new StorageManager<AppSettings>(STORAGE_KEYS.SETTINGS, { selectedAccountIds: [] }, 'settings');
+const settingsManager = new StorageManager<AppSettings>(STORAGE_KEYS.SETTINGS, { selectedAccountIds: [], showArchivedColumn: true }, 'settings');
 const messagesManager = new TimestampedStorageManager<BeeperMessage[]>(STORAGE_KEYS.MESSAGES, [], 'messages');
 const accountsManager = new TimestampedStorageManager<BeeperAccount[]>(STORAGE_KEYS.ACCOUNTS, [], 'accounts');
 const avatarsManager = new MapStorageManager<string, string>(STORAGE_KEYS.AVATARS, 'avatars');

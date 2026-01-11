@@ -19,6 +19,7 @@ import { LoadingState } from '@/components/dashboard/loading-state';
 import { BottomNavigation } from '@/components/dashboard/bottom-navigation';
 import type { Contact } from '@/app/api/beeper/contacts/route';
 import { useSettingsContext } from '@/contexts/settings-context';
+import { useAuth } from '@/contexts/auth-context';
 import { useMessages } from '@/hooks/use-messages';
 import { useArchived } from '@/hooks/use-archived';
 import { useDrafts } from '@/hooks/use-drafts';
@@ -34,6 +35,7 @@ import { toast } from 'sonner';
 
 export default function Home() {
   const { settings, isLoaded: settingsLoaded, updateSettings } = useSettingsContext();
+  const { subscription } = useAuth();
 
   // Hidden chats state - load on mount
   const [hiddenChats, setHiddenChats] = useState<Set<string>>(() => {
@@ -53,6 +55,7 @@ export default function Home() {
     hasMore,
     loadMore,
     refetch,
+    poll,
     avatars,
     chatInfo,
   } = useMessages(settings.selectedAccountIds, hiddenChats);
@@ -81,17 +84,18 @@ export default function Home() {
     }
   }, [unreadMessages, processNewMessages]);
 
-  // Auto-poll for new messages every 10 seconds
+  // Auto-poll for new messages every 10 seconds (silent background poll)
   useEffect(() => {
     const interval = setInterval(() => {
-      refetch();
+      poll();
     }, 10000); // Poll every 10 seconds
 
     return () => clearInterval(interval);
-  }, [refetch]);
+  }, [poll]);
 
   // Filter out optimistically archived chats and messages that have drafts
-  const draftChatIds = new Set(drafts.map(d => d.chatId));
+  // Memoize the Set to avoid recreating it on every render
+  const draftChatIds = useMemo(() => new Set(drafts.map(d => d.chatId)), [drafts]);
 
   // Collect autopilot chats from ALL message sources (unread + sent)
   // The autopilot column should show chats with active autopilot regardless of their other state
@@ -668,6 +672,7 @@ export default function Home() {
                 sentMessages={filteredSentMessages}
                 archivedMessages={archivedMessages}
                 showArchivedColumn={settings.showArchivedColumn}
+                onToggleArchived={() => updateSettings({ showArchivedColumn: !settings.showArchivedColumn })}
                 avatars={avatars}
                 chatInfo={chatInfo}
                 onCardClick={handleCardClick}
@@ -694,6 +699,15 @@ export default function Home() {
 
         {/* Floating bottom bar with contacts overlay */}
         <div className="fixed bottom-6 left-[320px] -translate-x-1/2 z-10 flex flex-col items-center">
+          {/* Trial indicator */}
+          {subscription?.status === 'trialing' && subscription.daysRemaining !== null && (
+            <Link href="/settings/account" className="mb-2">
+              <div className="px-3 py-1.5 bg-amber-500/10 border border-amber-500/20 rounded-full text-xs text-amber-600 dark:text-amber-400 hover:bg-amber-500/20 transition-colors">
+                {subscription.daysRemaining} {subscription.daysRemaining === 1 ? 'day' : 'days'} left in trial
+              </div>
+            </Link>
+          )}
+
           {/* Contacts overlay - positioned above bottom bar */}
           <ContactsDialog
             open={contactsDialogOpen}
@@ -703,11 +717,9 @@ export default function Home() {
 
           {/* Bottom nav */}
           <BottomNavigation
-            isLoading={isLoading}
-            showArchivedColumn={settings.showArchivedColumn ?? false}
             onNewContact={() => setContactsDialogOpen(true)}
-            onRefresh={refetch}
-            onToggleArchived={() => updateSettings({ showArchivedColumn: !settings.showArchivedColumn })}
+            groupBy={settings.kanbanGroupBy ?? 'status'}
+            onGroupByChange={(groupBy) => updateSettings({ kanbanGroupBy: groupBy })}
           />
         </div>
       </div>

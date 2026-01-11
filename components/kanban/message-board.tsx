@@ -91,13 +91,19 @@ interface ChatInfo {
   title?: string;
 }
 
-// Cache key for memoized cards - includes all fields that affect card rendering
-function getCardCacheKey(
-  message: BeeperMessage,
-  avatarUrl?: string,
-  chatInfo?: ChatInfo
-): string {
-  return `${message.id}|${message.timestamp}|${message.text}|${message.unreadCount}|${avatarUrl || ''}|${chatInfo?.title || ''}|${chatInfo?.isGroup || false}`;
+// Create a stable key for a message that changes only when display-relevant fields change
+function getMessageKey(message: BeeperMessage): string {
+  return `${message.id}|${message.timestamp}|${message.text}|${message.unreadCount}|${message.isRead}`;
+}
+
+// Create a stable key for a list of messages
+function getMessagesKey(messages: BeeperMessage[]): string {
+  return messages.map(m => getMessageKey(m)).join(';;');
+}
+
+// Create a stable key for drafts
+function getDraftsKey(drafts: Draft[]): string {
+  return drafts.map(d => `${d.id}|${d.updatedAt}|${d.draftText}`).join(';;');
 }
 
 interface MessageBoardProps {
@@ -107,6 +113,7 @@ interface MessageBoardProps {
   sentMessages: BeeperMessage[];
   archivedMessages?: BeeperMessage[];
   showArchivedColumn?: boolean;
+  onToggleArchived?: () => void;
   avatars?: Record<string, string>;
   chatInfo?: Record<string, ChatInfo>;
   onCardClick: (card: KanbanCard) => void;
@@ -177,7 +184,8 @@ export function MessageBoard({
   drafts,
   sentMessages,
   archivedMessages = [],
-  showArchivedColumn = false,
+  showArchivedColumn = true,
+  onToggleArchived,
   avatars,
   chatInfo,
   onCardClick,
@@ -198,44 +206,76 @@ export function MessageBoard({
   sendingProgress,
   onCancelSending,
 }: MessageBoardProps) {
-  // Cache for memoized cards - persists across renders
-  const cardCacheRef = useRef<Map<string, KanbanCard>>(new Map());
+  // Store previous column arrays to reuse when content hasn't changed
+  const prevColumnsRef = useRef<KanbanColumns>({
+    unread: [],
+    autopilot: [],
+    drafts: [],
+    sent: [],
+    archived: [],
+  });
 
-  // Memoized function to get or create a card, reusing cached cards when possible
-  const getOrCreateCard = useCallback((
-    message: BeeperMessage,
-    messageAvatars?: Record<string, string>,
-    messageChatInfo?: Record<string, ChatInfo>
-  ): KanbanCard => {
-    const info = messageChatInfo?.[message.chatId];
-    const avatarUrl = info?.isGroup ? undefined : (messageAvatars?.[message.chatId] || message.senderAvatarUrl);
-    const cacheKey = getCardCacheKey(message, avatarUrl, info);
+  // Store previous keys to detect changes
+  const prevKeysRef = useRef({
+    unread: '',
+    autopilot: '',
+    drafts: '',
+    sent: '',
+    archived: '',
+  });
 
-    const cached = cardCacheRef.current.get(cacheKey);
-    if (cached) {
-      return cached;
+  // Compute stable keys for each column's data
+  const currentKeys = useMemo(() => ({
+    unread: getMessagesKey(unreadMessages),
+    autopilot: getMessagesKey(autopilotMessages),
+    drafts: getDraftsKey(drafts),
+    sent: getMessagesKey(sentMessages.slice(0, 20)),
+    archived: getMessagesKey(archivedMessages.slice(0, 20)),
+  }), [unreadMessages, autopilotMessages, drafts, sentMessages, archivedMessages]);
+
+  // Only rebuild column arrays when their content actually changes
+  const columns: KanbanColumns = useMemo(() => {
+    // Check if ANY column changed
+    const unreadChanged = currentKeys.unread !== prevKeysRef.current.unread;
+    const autopilotChanged = currentKeys.autopilot !== prevKeysRef.current.autopilot;
+    const draftsChanged = currentKeys.drafts !== prevKeysRef.current.drafts;
+    const sentChanged = currentKeys.sent !== prevKeysRef.current.sent;
+    const archivedChanged = currentKeys.archived !== prevKeysRef.current.archived;
+
+    // If nothing changed, return the exact same object reference
+    if (!unreadChanged && !autopilotChanged && !draftsChanged && !sentChanged && !archivedChanged) {
+      return prevColumnsRef.current;
     }
 
-    const card = messageToCard(message, messageAvatars, messageChatInfo);
-    cardCacheRef.current.set(cacheKey, card);
+    // Build new columns object, reusing unchanged column arrays
+    const newColumns: KanbanColumns = {
+      unread: unreadChanged
+        ? unreadMessages.map(m => messageToCard(m, avatars, chatInfo))
+        : prevColumnsRef.current.unread,
+      autopilot: autopilotChanged
+        ? autopilotMessages.map(m => messageToCard(m, avatars, chatInfo))
+        : prevColumnsRef.current.autopilot,
+      drafts: draftsChanged
+        ? drafts.map(draftToCard)
+        : prevColumnsRef.current.drafts,
+      sent: sentChanged
+        ? sentMessages.slice(0, 20).map(m => messageToCard(m, avatars, chatInfo))
+        : prevColumnsRef.current.sent,
+      archived: archivedChanged
+        ? archivedMessages.slice(0, 20).map(m => messageToCard(m, avatars, chatInfo))
+        : prevColumnsRef.current.archived,
+    };
 
-    // Limit cache size to prevent memory leaks
-    if (cardCacheRef.current.size > 1000) {
-      const firstKey = cardCacheRef.current.keys().next().value;
-      if (firstKey) cardCacheRef.current.delete(firstKey);
-    }
+    // Update the keys for changed columns
+    if (unreadChanged) prevKeysRef.current.unread = currentKeys.unread;
+    if (autopilotChanged) prevKeysRef.current.autopilot = currentKeys.autopilot;
+    if (draftsChanged) prevKeysRef.current.drafts = currentKeys.drafts;
+    if (sentChanged) prevKeysRef.current.sent = currentKeys.sent;
+    if (archivedChanged) prevKeysRef.current.archived = currentKeys.archived;
 
-    return card;
-  }, []);
-
-  // Convert data to kanban format - uses memoized card creation
-  const columns: KanbanColumns = useMemo(() => ({
-    unread: unreadMessages.map(m => getOrCreateCard(m, avatars, chatInfo)),
-    autopilot: autopilotMessages.map(m => getOrCreateCard(m, avatars, chatInfo)),
-    drafts: drafts.map(draftToCard),
-    sent: sentMessages.slice(0, 20).map(m => getOrCreateCard(m, avatars, chatInfo)),
-    archived: archivedMessages.slice(0, 20).map(m => getOrCreateCard(m, avatars, chatInfo)),
-  }), [unreadMessages, autopilotMessages, drafts, sentMessages, archivedMessages, avatars, chatInfo, getOrCreateCard]);
+    prevColumnsRef.current = newColumns;
+    return newColumns;
+  }, [currentKeys, unreadMessages, autopilotMessages, drafts, sentMessages, archivedMessages, avatars, chatInfo]);
 
   // Determine which columns to show
   const visibleColumns: ColumnId[] = useMemo(() => {
@@ -335,6 +375,7 @@ export function MessageBoard({
                   isSendingAll={columnId === 'drafts' ? isSendingAllDrafts : undefined}
                   sendingProgress={columnId === 'drafts' ? sendingProgress : undefined}
                   onCancelSending={columnId === 'drafts' ? onCancelSending : undefined}
+                  onToggleArchived={columnId === 'archived' ? onToggleArchived : undefined}
                 />
             <div className="relative flex-1 h-0 min-h-0">
               <ScrollArea className="h-full">

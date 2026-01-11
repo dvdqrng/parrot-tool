@@ -7,7 +7,7 @@ import { loadSettings, saveSettings } from '@/lib/storage';
 // Get initial settings synchronously to avoid flash of empty state
 function getInitialSettings(): AppSettings {
   if (typeof window === 'undefined') {
-    return { selectedAccountIds: [] };
+    return { selectedAccountIds: [], showArchivedColumn: true };
   }
   return loadSettings();
 }

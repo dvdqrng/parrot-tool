@@ -2,11 +2,17 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { ArrowLeft, Key, MessageSquare, Layers, EyeOff, Database, Brain, Users, LucideIcon } from 'lucide-react';
+import { ArrowLeft, Key, MessageSquare, Layers, EyeOff, Database, Brain, Users, User, LucideIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
 const navItems: { title: string; href: string; icon: LucideIcon; description: string }[] = [
+  {
+    title: 'Account',
+    href: '/settings/account',
+    icon: User,
+    description: 'Account & subscription',
+  },
   {
     title: 'API Keys',
     href: '/settings/api-keys',
