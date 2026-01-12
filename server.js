@@ -31,24 +31,44 @@ if (isDev) {
     });
 } else {
     // In production, run the Next.js standalone server
-    // The standalone output is in .next/standalone with the full project path
-    // When packaged in asar, we can require it directly without fs.existsSync
-    const standaloneServerPath = path.join(__dirname, '.next', 'standalone', 'Projects', 'beeper-kanban', 'server.js');
+    // The standalone output structure varies based on where the build runs:
+    // - CI builds: .next/standalone/server.js (flat)
+    // - Local builds: .next/standalone/Projects/beeper-kanban/server.js (nested)
+    // We try both paths to support both scenarios
+
+    const possiblePaths = [
+        // CI build path (flat structure)
+        path.join(__dirname, '.next', 'standalone', 'server.js'),
+        // Local build path (nested structure with project name)
+        path.join(__dirname, '.next', 'standalone', 'Projects', 'beeper-kanban', 'server.js'),
+    ];
+
+    let standaloneServerPath = null;
+    for (const p of possiblePaths) {
+        try {
+            require.resolve(p);
+            standaloneServerPath = p;
+            break;
+        } catch {
+            // Path doesn't exist, try next
+        }
+    }
+
+    if (!standaloneServerPath) {
+        console.error('Failed to find standalone server. Tried paths:', possiblePaths);
+        process.exit(1);
+    }
 
     try {
-        console.log('Starting Next.js standalone server...');
+        console.log('Starting Next.js standalone server from:', standaloneServerPath);
 
         // Patch process.chdir to avoid ENOTDIR error when running inside asar
-        // Next.js standalone server tries to chdir to the .next directory which works on filesystem
-        // but fails when inside an asar archive.
         const originalChdir = process.chdir;
         process.chdir = function (dir) {
             console.log(`[Shim] Preventing chdir to: ${dir}`);
-            // Do nothing, effectively staying in the app root (or wherever we are)
         };
 
-        // Also patch process.cwd to return the directory where standalone server thinks it is
-        // This ensures relative paths (like ./.next) resolve correctly
+        // Patch process.cwd to return the standalone directory
         const originalCwd = process.cwd;
         const projectDir = path.dirname(standaloneServerPath);
         process.cwd = function () {
@@ -58,7 +78,6 @@ if (isDev) {
         try {
             require(standaloneServerPath);
         } finally {
-            // Restore original chdir/cwd just in case (though we likely crash if we exit)
             process.chdir = originalChdir;
             process.cwd = originalCwd;
         }
