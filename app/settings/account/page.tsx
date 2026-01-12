@@ -1,13 +1,18 @@
 'use client'
 
+import { useState } from 'react'
 import { useAuth } from '@/contexts/auth-context'
+import { useUpdateCheck } from '@/hooks/use-update-check'
 import { getStripeCheckoutUrl, getStripePortalUrl } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Loader2, Download, CheckCircle } from 'lucide-react'
 
 export default function AccountPage() {
   const { user, subscription, signOut } = useAuth()
+  const { updateAvailable, isChecking, checkNow, currentVersion } = useUpdateCheck()
+  const [lastCheckResult, setLastCheckResult] = useState<'none' | 'up-to-date' | 'update-available'>('none')
 
   const handleManageSubscription = () => {
     const portalUrl = getStripePortalUrl()
@@ -123,6 +128,74 @@ export default function AccountPage() {
               </Button>
             )}
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Updates</CardTitle>
+          <CardDescription>Check for app updates</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-muted-foreground">Current version</span>
+            <span className="text-sm font-mono">{currentVersion}</span>
+          </div>
+
+          {updateAvailable && (
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">Latest version</span>
+              <Badge variant="default" className="gap-1">
+                <Download className="h-3 w-3" />
+                {updateAvailable.version}
+              </Badge>
+            </div>
+          )}
+
+          {lastCheckResult === 'up-to-date' && !updateAvailable && (
+            <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400">
+              <CheckCircle className="h-4 w-4" />
+              You're on the latest version
+            </div>
+          )}
+
+          <div className="pt-2 space-y-2">
+            <Button
+              onClick={async () => {
+                await checkNow()
+                setLastCheckResult(updateAvailable ? 'update-available' : 'up-to-date')
+              }}
+              variant="outline"
+              className="w-full"
+              disabled={isChecking}
+            >
+              {isChecking ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Checking...
+                </>
+              ) : (
+                'Check for updates'
+              )}
+            </Button>
+
+            {updateAvailable && (
+              <Button
+                onClick={() => window.open(updateAvailable.downloadUrl, '_blank')}
+                className="w-full"
+              >
+                <Download className="h-4 w-4 mr-2" />
+                Download v{updateAvailable.version}
+              </Button>
+            )}
+          </div>
+
+          {updateAvailable?.releaseNotes && (
+            <div className="pt-4 border-t">
+              <p className="text-xs text-muted-foreground mb-2">Release notes:</p>
+              <p className="text-sm whitespace-pre-wrap">{updateAvailable.releaseNotes}</p>
+            </div>
+          )}
         </CardContent>
       </Card>
 
