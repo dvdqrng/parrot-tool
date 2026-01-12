@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { checkForUpdates, type AppVersion, type Platform } from '@/lib/supabase'
+import { checkForUpdates, getLatestVersion, type AppVersion, type Platform } from '@/lib/supabase'
 
 const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION || '0.1.0'
 
@@ -14,6 +14,7 @@ function getPlatform(): Platform {
 
 interface UseUpdateCheckResult {
   updateAvailable: AppVersion | null
+  latestVersion: AppVersion | null
   isChecking: boolean
   checkNow: () => Promise<void>
   dismissUpdate: () => void
@@ -22,6 +23,7 @@ interface UseUpdateCheckResult {
 
 export function useUpdateCheck(): UseUpdateCheckResult {
   const [updateAvailable, setUpdateAvailable] = useState<AppVersion | null>(null)
+  const [latestVersion, setLatestVersion] = useState<AppVersion | null>(null)
   const [isChecking, setIsChecking] = useState(false)
   const [dismissed, setDismissed] = useState(false)
 
@@ -29,10 +31,17 @@ export function useUpdateCheck(): UseUpdateCheckResult {
     setIsChecking(true)
     try {
       const platform = getPlatform()
-      const update = await checkForUpdates(APP_VERSION, platform)
 
+      // Always fetch latest version info
+      const latest = await getLatestVersion(platform)
+      setLatestVersion(latest)
+
+      // Check if it's newer than current
+      const update = await checkForUpdates(APP_VERSION, platform)
       if (update && !dismissed) {
         setUpdateAvailable(update)
+      } else {
+        setUpdateAvailable(null)
       }
     } catch (error) {
       console.error('Failed to check for updates:', error)
@@ -57,6 +66,7 @@ export function useUpdateCheck(): UseUpdateCheckResult {
 
   return {
     updateAvailable: dismissed ? null : updateAvailable,
+    latestVersion,
     isChecking,
     checkNow,
     dismissUpdate,

@@ -2,6 +2,7 @@ export type Platform = 'mac' | 'win' | 'linux'
 
 export type AppVersion = {
   version: string
+  tag: string
   platform: Platform
   downloadUrl: string
   releaseNotes: string | null
@@ -63,6 +64,7 @@ export async function checkForUpdates(currentVersion: string, platform: Platform
 
     return {
       version: latestVersion,
+      tag: release.tag_name,
       platform,
       downloadUrl: asset.browser_download_url,
       releaseNotes: release.body,
@@ -112,6 +114,7 @@ export async function getLatestVersion(platform: Platform): Promise<AppVersion |
 
     return {
       version,
+      tag: release.tag_name,
       platform,
       downloadUrl: asset.browser_download_url,
       releaseNotes: release.body,

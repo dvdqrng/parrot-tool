@@ -11,7 +11,7 @@ import { Loader2, Download, CheckCircle } from 'lucide-react'
 
 export default function AccountPage() {
   const { user, subscription, signOut } = useAuth()
-  const { updateAvailable, isChecking, checkNow, currentVersion } = useUpdateCheck()
+  const { updateAvailable, latestVersion, isChecking, checkNow, currentVersion } = useUpdateCheck()
   const [lastCheckResult, setLastCheckResult] = useState<'none' | 'up-to-date' | 'update-available'>('none')
 
   const handleManageSubscription = () => {
@@ -142,17 +142,19 @@ export default function AccountPage() {
             <span className="text-sm font-mono">{currentVersion}</span>
           </div>
 
-          {updateAvailable && (
+          {latestVersion && (
             <div className="flex items-center justify-between">
-              <span className="text-sm text-muted-foreground">Latest version</span>
-              <Badge variant="default" className="gap-1">
-                <Download className="h-3 w-3" />
-                {updateAvailable.version}
-              </Badge>
+              <span className="text-sm text-muted-foreground">Latest release</span>
+              <span className="text-sm font-mono">{latestVersion.tag}</span>
             </div>
           )}
 
-          {lastCheckResult === 'up-to-date' && !updateAvailable && (
+          {updateAvailable ? (
+            <div className="flex items-center gap-2 text-sm text-amber-600 dark:text-amber-400">
+              <Download className="h-4 w-4" />
+              Update available
+            </div>
+          ) : lastCheckResult === 'up-to-date' && latestVersion && (
             <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400">
               <CheckCircle className="h-4 w-4" />
               You're on the latest version
@@ -185,7 +187,7 @@ export default function AccountPage() {
                 className="w-full"
               >
                 <Download className="h-4 w-4 mr-2" />
-                Download v{updateAvailable.version}
+                Download {updateAvailable.tag}
               </Button>
             )}
           </div>
