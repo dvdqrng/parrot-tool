@@ -49,7 +49,15 @@
       "Bash(supabase link:*)",
       "Bash(supabase login:*)",
       "Bash(supabase functions deploy:*)",
-      "Bash(supabase secrets set:*)"
+      "Bash(supabase secrets set:*)",
+      "Bash(sips -g pixelWidth -g pixelHeight:*)",
+      "Bash(sips:*)",
+      "Bash(/Applications/Parrot.app/Contents/MacOS/Parrot:*)",
+      "Bash(codesign:*)",
+      "Bash(xattr:*)",
+      "Bash(hdiutil attach:*)",
+      "Bash(log show:*)",
+      "Bash(npx asar:*)"
     ]
   }
 }
