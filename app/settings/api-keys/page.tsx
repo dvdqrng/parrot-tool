@@ -222,7 +222,7 @@ export default function ApiKeysPage() {
             Beeper Access Token
           </CardTitle>
           <CardDescription>
-            Get this from Beeper Desktop: Settings → Developers → Access Token
+            In Beeper Desktop: Settings → Developer → Approved Connections → Add new connection
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

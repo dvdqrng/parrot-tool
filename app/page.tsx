@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { MessageBoard } from '@/components/kanban/message-board';
+import { OnboardingChecklist } from '@/components/onboarding/onboarding-checklist';
 import { MessageDetail } from '@/components/message-detail';
 import { DraftComposer } from '@/components/draft-composer';
 import { MessagePanel } from '@/components/message-panel';
@@ -34,7 +35,7 @@ import { getBeeperHeaders, getAIHeaders, getEffectiveAiProvider } from '@/lib/ap
 import { toast } from 'sonner';
 
 export default function Home() {
-  const { settings, isLoaded: settingsLoaded, updateSettings } = useSettingsContext();
+  const { settings, isLoaded: settingsLoaded, updateSettings, toggleAccount, selectAllAccounts, deselectAllAccounts } = useSettingsContext();
   const { subscription } = useAuth();
 
   // Hidden chats state - load on mount
@@ -632,23 +633,18 @@ export default function Home() {
     );
   }
 
-  // Show prompt to configure settings if no accounts selected
-  if (settings.selectedAccountIds.length === 0) {
+  // Show onboarding if setup is incomplete
+  const isOnboardingComplete = !!settings.beeperAccessToken && settings.selectedAccountIds.length > 0;
+
+  if (!isOnboardingComplete) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-4 p-8">
-        <div className="text-center">
-          <h1 className="text-xs font-medium">Welcome to Parrot</h1>
-          <p className="mt-2 text-xs text-muted-foreground">
-            Configure your platforms to get started
-          </p>
-        </div>
-        <Link href="/settings">
-          <Button size="lg">
-            <Settings className="h-4 w-4 mr-2" strokeWidth={2} />
-            Configure Platforms
-          </Button>
-        </Link>
-      </div>
+      <OnboardingChecklist
+        settings={settings}
+        updateSettings={updateSettings}
+        toggleAccount={toggleAccount}
+        selectAllAccounts={selectAllAccounts}
+        deselectAllAccounts={deselectAllAccounts}
+      />
     );
   }
 
