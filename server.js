@@ -31,19 +31,13 @@ if (isDev) {
     });
 } else {
     // In production, run the Next.js standalone server
-    // When packaged with electron-builder, the .next/standalone is unpacked to app.asar.unpacked
-    // We need to look for the server in the unpacked directory
-
-    // Get the unpacked directory path (replaces .asar with .asar.unpacked)
-    const unpackedDir = __dirname.replace('app.asar', 'app.asar.unpacked');
+    // With asar disabled, files are directly in the app directory
+    // The structure varies between CI (flat) and local (nested) builds
 
     const possiblePaths = [
-        // Unpacked CI build path (flat structure)
-        path.join(unpackedDir, '.next', 'standalone', 'server.js'),
-        // Unpacked local build path (nested structure)
-        path.join(unpackedDir, '.next', 'standalone', 'Projects', 'beeper-kanban', 'server.js'),
-        // Fallback: non-asar paths (for development/testing)
+        // CI build path (flat structure)
         path.join(__dirname, '.next', 'standalone', 'server.js'),
+        // Local build path (nested structure with project name)
         path.join(__dirname, '.next', 'standalone', 'Projects', 'beeper-kanban', 'server.js'),
     ];
 
