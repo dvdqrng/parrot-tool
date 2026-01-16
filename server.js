@@ -58,30 +58,36 @@ if (isDev) {
     }
 
     try {
-        console.log('Starting Next.js standalone server from:', standaloneServerPath);
+        console.log('[Server] Starting Next.js standalone server from:', standaloneServerPath);
 
         // Patch process.chdir to avoid ENOTDIR error when running inside asar
         const originalChdir = process.chdir;
         process.chdir = function (dir) {
-            console.log(`[Shim] Preventing chdir to: ${dir}`);
+            console.log(`[Server] Preventing chdir to: ${dir}`);
         };
 
         // Patch process.cwd to return the standalone directory
         const originalCwd = process.cwd;
         const projectDir = path.dirname(standaloneServerPath);
+        console.log('[Server] Setting cwd to:', projectDir);
         process.cwd = function () {
             return projectDir;
         };
 
-        try {
-            require(standaloneServerPath);
-        } finally {
+        // Don't restore the patches - keep them for the lifetime of the server
+        // The server needs these patches to function correctly
+        console.log('[Server] Loading standalone server module...');
+        require(standaloneServerPath);
+        console.log('[Server] Standalone server module loaded');
+
+        // Restore patches when process exits
+        process.on('exit', () => {
             process.chdir = originalChdir;
             process.cwd = originalCwd;
-        }
+        });
     } catch (err) {
-        console.error('Failed to start standalone server:', err);
-        console.error('Server path:', standaloneServerPath);
+        console.error('[Server] Failed to start standalone server:', err);
+        console.error('[Server] Server path:', standaloneServerPath);
         process.exit(1);
     }
 }

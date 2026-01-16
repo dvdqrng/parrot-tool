@@ -1,8 +1,10 @@
 const { app, BrowserWindow, Menu, shell, nativeTheme } = require('electron');
 const path = require('path');
+const http = require('http');
 
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
-const port = process.env.PORT || 3000;
+// Use a unique port to avoid conflicts with other local servers
+const port = process.env.PORT || 31415;
 
 let mainWindow;
 let nextServer;
@@ -139,10 +141,51 @@ function createMenu() {
   Menu.setApplicationMenu(menu);
 }
 
+function waitForServer(maxAttempts = 30, interval = 500) {
+  return new Promise((resolve, reject) => {
+    let attempts = 0;
+
+    const checkServer = () => {
+      attempts++;
+
+      const req = http.get(`http://localhost:${port}`, (res) => {
+        // Verify this is our Next.js server by checking the X-Powered-By header
+        const poweredBy = res.headers['x-powered-by'];
+        if (poweredBy && poweredBy.includes('Next.js')) {
+          resolve();
+        } else {
+          if (attempts >= maxAttempts) {
+            reject(new Error(`Server on port ${port} is not Parrot/Next.js`));
+          } else {
+            setTimeout(checkServer, interval);
+          }
+        }
+      });
+
+      req.on('error', (err) => {
+        if (attempts >= maxAttempts) {
+          reject(new Error(`Server not ready after ${maxAttempts} attempts`));
+        } else {
+          setTimeout(checkServer, interval);
+        }
+      });
+
+      req.setTimeout(1000, () => {
+        req.destroy();
+        if (attempts >= maxAttempts) {
+          reject(new Error(`Server timeout after ${maxAttempts} attempts`));
+        } else {
+          setTimeout(checkServer, interval);
+        }
+      });
+    };
+
+    checkServer();
+  });
+}
+
 function startNextServer() {
   return new Promise((resolve, reject) => {
-    console.log('Starting Next.js server...');
-
     // Set environment variables for the server
     process.env.NODE_ENV = isDev ? 'development' : 'production';
     process.env.PORT = port.toString();
@@ -153,9 +196,10 @@ function startNextServer() {
       const serverPath = path.join(__dirname, 'server.js');
       require(serverPath);
 
-      // Give the server time to start
-      const startupTime = isDev ? 8000 : 4000;
-      setTimeout(resolve, startupTime);
+      // Wait for the server to actually be ready instead of using a fixed timeout
+      waitForServer()
+        .then(resolve)
+        .catch(reject);
     } catch (err) {
       console.error('Failed to start Next.js server:', err);
       reject(err);

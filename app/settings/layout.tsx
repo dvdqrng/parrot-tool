@@ -68,7 +68,7 @@ export default function SettingsLayout({
     <div className="min-h-screen bg-background">
       <div className="flex">
         {/* Sidebar */}
-        <aside className="sticky top-0 h-screen w-64 border-r bg-muted/30 p-4">
+        <aside className="sticky top-0 h-screen w-64 border-r bg-muted/30 p-4 pt-10">
           <div className="flex flex-col h-full">
             {/* Header */}
             <div className="flex items-center gap-3 mb-6">

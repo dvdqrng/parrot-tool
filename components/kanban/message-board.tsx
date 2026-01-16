@@ -458,7 +458,7 @@ export function MessageBoard({
                 />
             <div className="relative flex-1 h-0 min-h-0">
               <ScrollArea className="h-full">
-                <div className="flex flex-col gap-2 p-4 pb-20">
+                <div className="flex flex-col gap-2 px-4 pt-0 pb-20">
                   {(columns[columnId] || []).length === 0 ? (
                     <div className="rounded-lg border-2 border-dashed border-muted p-4 text-center text-sm text-muted-foreground">
                       {/* Status mode empty states */}

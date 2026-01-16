@@ -10,11 +10,23 @@
     "electron.js",
     "preload.js",
     "server.js",
-    ".next/standalone/**/*",
     "package.json",
+    {
+      "from": ".next/standalone",
+      "to": ".next/standalone",
+      "filter": ["**/*"]
+    },
+    {
+      "from": ".next/static",
+      "to": ".next/standalone/Projects/beeper-kanban/.next/static"
+    },
+    {
+      "from": "public",
+      "to": ".next/standalone/Projects/beeper-kanban/public"
+    },
     "!node_modules"
   ],
-  "asar": false,
+  "asar": true,
   "extraMetadata": {
     "main": "electron.js"
   },
