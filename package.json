@@ -29,7 +29,7 @@
     "lint": "eslint",
     "electron:dev": "ELECTRON_RUN_AS_NODE= NODE_ENV=development electron electron.js",
     "electron:build": "npm run build && npm run build:copy-static && electron-builder",
-    "build:copy-static": "cp -r .next/static .next/standalone/Projects/beeper-kanban/.next/ && cp -r public .next/standalone/Projects/beeper-kanban/",
+    "build:copy-static": "echo 'Static files already included in standalone build'",
     "electron:build:mac": "./build-mac.sh",
     "electron:build:win": "npm run build && npm run build:copy-static-win && electron-builder --win",
     "build:copy-static-win": "xcopy .next\\static .next\\standalone\\.next\\static /E /I /Y && xcopy public .next\\standalone\\public /E /I /Y",
