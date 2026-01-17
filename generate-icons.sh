@@ -1,17 +1,10 @@
 #!/bin/bash
 
-# Script to generate app icons from a source PNG (macOS version)
-# Electron apps need icons with rounded corners BAKED IN
-# macOS does NOT auto-apply squircle mask to Electron apps like native apps
+# Script to generate macOS app icons with proper squircle shape
+# Creates icons with rounded corners baked in for Electron apps
 
-SOURCE="build/icon-source.png"
 DEST="build"
 TEMP_DIR="$DEST/temp_icon"
-
-if [ ! -f "$SOURCE" ]; then
-    echo "Source file $SOURCE not found!"
-    exit 1
-fi
 
 # Check if ImageMagick is installed
 if ! command -v magick &> /dev/null; then
@@ -20,54 +13,63 @@ if ! command -v magick &> /dev/null; then
     exit 1
 fi
 
-echo "Generating macOS-style icons with baked-in rounded corners..."
+echo "Generating macOS-style icons with rounded corners..."
 mkdir -p "$TEMP_DIR"
 mkdir -p "$DEST/icon.iconset"
 
-# Function to create a macOS-style icon with rounded corners baked in
-# The corner radius for macOS Big Sur+ is approximately 22.37% of the icon size
-create_macos_icon() {
-    local size=$1
-    local output=$2
+# Create the base icon at 1024x1024 with "Parrot" text on white background with rounded corners
+create_base_icon() {
+    local size=1024
     # macOS squircle corner radius is ~22.37% of icon size
     local radius=$(printf "%.0f" $(echo "$size * 0.2237" | bc))
 
-    # Create the rounded rectangle mask (squircle approximation)
+    # Create white rounded rectangle background
     magick -size ${size}x${size} xc:none \
         -fill white \
         -draw "roundrectangle 0,0,$((size-1)),$((size-1)),$radius,$radius" \
-        "$TEMP_DIR/mask_${size}.png"
+        "$TEMP_DIR/background.png"
 
-    # Resize source to fill canvas, then apply rounded mask
-    magick "$SOURCE" \
-        -resize ${size}x${size}^ \
+    # Add "Parrot" text centered on the rounded background
+    magick "$TEMP_DIR/background.png" \
         -gravity center \
-        -extent ${size}x${size} \
-        -background white \
-        -alpha remove -alpha off \
-        \( "$TEMP_DIR/mask_${size}.png" -alpha extract \) \
-        -compose CopyOpacity -composite \
+        -font "Times-Bold" \
+        -pointsize 180 \
+        -fill black \
+        -annotate +0+0 "Parrot" \
+        "$TEMP_DIR/base_icon.png"
+}
+
+# Function to create icon at specific size from base
+create_sized_icon() {
+    local size=$1
+    local output=$2
+
+    magick "$TEMP_DIR/base_icon.png" \
+        -resize ${size}x${size} \
         -define png:color-type=6 \
         "$output"
 }
 
-# Generate all required icon sizes with rounded corners
-create_macos_icon 16 "$DEST/icon.iconset/icon_16x16.png"
-create_macos_icon 32 "$DEST/icon.iconset/icon_16x16@2x.png"
-create_macos_icon 32 "$DEST/icon.iconset/icon_32x32.png"
-create_macos_icon 64 "$DEST/icon.iconset/icon_32x32@2x.png"
-create_macos_icon 128 "$DEST/icon.iconset/icon_128x128.png"
-create_macos_icon 256 "$DEST/icon.iconset/icon_128x128@2x.png"
-create_macos_icon 256 "$DEST/icon.iconset/icon_256x256.png"
-create_macos_icon 512 "$DEST/icon.iconset/icon_256x256@2x.png"
-create_macos_icon 512 "$DEST/icon.iconset/icon_512x512.png"
-create_macos_icon 1024 "$DEST/icon.iconset/icon_512x512@2x.png"
+# Create the base icon first
+create_base_icon
+
+# Generate all required icon sizes
+create_sized_icon 16 "$DEST/icon.iconset/icon_16x16.png"
+create_sized_icon 32 "$DEST/icon.iconset/icon_16x16@2x.png"
+create_sized_icon 32 "$DEST/icon.iconset/icon_32x32.png"
+create_sized_icon 64 "$DEST/icon.iconset/icon_32x32@2x.png"
+create_sized_icon 128 "$DEST/icon.iconset/icon_128x128.png"
+create_sized_icon 256 "$DEST/icon.iconset/icon_128x128@2x.png"
+create_sized_icon 256 "$DEST/icon.iconset/icon_256x256.png"
+create_sized_icon 512 "$DEST/icon.iconset/icon_256x256@2x.png"
+create_sized_icon 512 "$DEST/icon.iconset/icon_512x512.png"
+create_sized_icon 1024 "$DEST/icon.iconset/icon_512x512@2x.png"
 
 # Create the .icns file
 iconutil -c icns "$DEST/icon.iconset"
 
-# Also create icon.png for other uses
-create_macos_icon 1024 "$DEST/icon.png"
+# Copy the 1024 icon as icon.png
+cp "$TEMP_DIR/base_icon.png" "$DEST/icon.png"
 
 # Cleanup
 rm -rf "$DEST/icon.iconset"
