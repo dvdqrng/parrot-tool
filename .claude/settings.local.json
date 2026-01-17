@@ -103,7 +103,12 @@
       "Bash(env -u ELECTRON_RUN_AS_NODE dist/mac-arm64/Parrot.app/Contents/MacOS/Parrot:*)",
       "Bash(npm run build:copy-static:*)",
       "Bash(kill:*)",
-      "Bash(xxd:*)"
+      "Bash(xxd:*)",
+      "Bash(export APPLE_ID=\"mail@davidquiring.co\")",
+      "Bash(export APPLE_APP_SPECIFIC_PASSWORD=\"vlwi-dgfv-yjtd-mblt\")",
+      "Bash(export APPLE_TEAM_ID=\"B5SD826C5K\")",
+      "Bash(security find-identity:*)",
+      "Bash(security delete-certificate:*)"
     ]
   }
 }
