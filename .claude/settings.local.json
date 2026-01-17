@@ -108,7 +108,8 @@
       "Bash(export APPLE_APP_SPECIFIC_PASSWORD=\"vlwi-dgfv-yjtd-mblt\")",
       "Bash(export APPLE_TEAM_ID=\"B5SD826C5K\")",
       "Bash(security find-identity:*)",
-      "Bash(security delete-certificate:*)"
+      "Bash(security delete-certificate:*)",
+      "Bash(spctl -a -vvv -t install:*)"
     ]
   }
 }
