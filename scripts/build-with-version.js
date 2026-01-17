@@ -1,6 +1,4 @@
 const { execSync } = require("child_process");
-const fs = require("fs");
-const path = require("path");
 
 // Get version components
 const pkg = require("../package.json");
@@ -16,10 +14,13 @@ const fullVersion = `${baseVersion}-${timestamp}-${gitHash}`;
 
 console.log(`Building version: ${fullVersion}`);
 
+// Build artifact name pattern - electron-builder template variables
+const artifactName = '${productName}-${os}-${arch}-' + fullVersion + '.${ext}';
+
 // Run electron-builder with the custom version in artifact name
 const args = process.argv.slice(2).join(" ");
 execSync(
-  `electron-builder ${args} -c.artifactName="\${productName}-\${os}-\${arch}-${fullVersion}.\${ext}"`,
+  `electron-builder ${args} -c.artifactName="${artifactName}"`,
   {
     stdio: "inherit",
     env: {
