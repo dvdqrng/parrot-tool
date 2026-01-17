@@ -1,9 +1,8 @@
 #!/bin/bash
 
 # Script to generate app icons from a source PNG (macOS version)
-# macOS icons require:
-# 1. Content sized to ~80% of canvas with padding
-# 2. Rounded corners (squircle shape)
+# Electron apps need icons with rounded corners BAKED IN
+# macOS does NOT auto-apply squircle mask to Electron apps like native apps
 
 SOURCE="build/icon-source.png"
 DEST="build"
@@ -21,38 +20,38 @@ if ! command -v magick &> /dev/null; then
     exit 1
 fi
 
-echo "Generating macOS-style icons with rounded corners..."
+echo "Generating macOS-style icons with baked-in rounded corners..."
 mkdir -p "$TEMP_DIR"
 mkdir -p "$DEST/icon.iconset"
 
-# Function to create a macOS-style icon at a given size
-# macOS icons use a "squircle" - a superellipse with continuous curvature
-# The corner radius is approximately 22.37% of the icon size
+# Function to create a macOS-style icon with rounded corners baked in
+# The corner radius for macOS Big Sur+ is approximately 22.37% of the icon size
 create_macos_icon() {
     local size=$1
     local output=$2
-    local radius=$(echo "$size * 0.2237" | bc)
-    local content_size=$(echo "$size * 0.80" | bc | cut -d. -f1)
-    local padding=$(echo "($size - $content_size) / 2" | bc | cut -d. -f1)
+    # macOS squircle corner radius is ~22.37% of icon size
+    local radius=$(printf "%.0f" $(echo "$size * 0.2237" | bc))
 
-    # Create rounded rectangle mask for macOS squircle shape
+    # Create the rounded rectangle mask (squircle approximation)
     magick -size ${size}x${size} xc:none \
         -fill white \
         -draw "roundrectangle 0,0,$((size-1)),$((size-1)),$radius,$radius" \
         "$TEMP_DIR/mask_${size}.png"
 
-    # Resize source, add white background, apply padding, then apply rounded mask
+    # Resize source to fill canvas, then apply rounded mask
     magick "$SOURCE" \
-        -resize ${content_size}x${content_size} \
-        -background white \
+        -resize ${size}x${size}^ \
         -gravity center \
         -extent ${size}x${size} \
-        "$TEMP_DIR/mask_${size}.png" \
-        -compose DstIn -composite \
+        -background white \
+        -alpha remove -alpha off \
+        \( "$TEMP_DIR/mask_${size}.png" -alpha extract \) \
+        -compose CopyOpacity -composite \
+        -define png:color-type=6 \
         "$output"
 }
 
-# Generate all required icon sizes
+# Generate all required icon sizes with rounded corners
 create_macos_icon 16 "$DEST/icon.iconset/icon_16x16.png"
 create_macos_icon 32 "$DEST/icon.iconset/icon_16x16@2x.png"
 create_macos_icon 32 "$DEST/icon.iconset/icon_32x32.png"
@@ -67,17 +66,11 @@ create_macos_icon 1024 "$DEST/icon.iconset/icon_512x512@2x.png"
 # Create the .icns file
 iconutil -c icns "$DEST/icon.iconset"
 
-# Also create icon.png for other uses (1024x1024 with rounded corners)
+# Also create icon.png for other uses
 create_macos_icon 1024 "$DEST/icon.png"
 
 # Cleanup
 rm -rf "$DEST/icon.iconset"
 rm -rf "$TEMP_DIR"
 
-echo "Note: Windows .ico and high-res Linux .png are also needed."
-echo "Linux icon: Already copied to build/icon.png"
-echo "Creating a resized 256x256 icon for Windows (as a basic .ico fallback if possible, or just .png)..."
-# Simple sips doesn't make .ico, so we might need the user to use an online tool or ImageMagick for .ico
-# But we have the source now!
-
-echo "Conversion complete (macOS .icns generated with proper rounded corners)."
+echo "Conversion complete (macOS .icns generated with rounded corners)."
