@@ -5,6 +5,28 @@
 
 echo "🚀 Starting robust macOS build process..."
 
+# 0. Code Signing & Notarization Configuration
+export CSC_NAME="The Email Co. Inc. (B5SD826C5K)"
+export APPLE_TEAM_ID="B5SD826C5K"
+
+# Check for required notarization credentials
+if [ -z "$APPLE_ID" ]; then
+    echo "❌ Error: APPLE_ID environment variable is not set"
+    echo "   Set it with: export APPLE_ID='your-apple-id@email.com'"
+    exit 1
+fi
+
+if [ -z "$APPLE_APP_SPECIFIC_PASSWORD" ]; then
+    echo "❌ Error: APPLE_APP_SPECIFIC_PASSWORD environment variable is not set"
+    echo "   Create one at: https://appleid.apple.com → Sign-In and Security → App-Specific Passwords"
+    echo "   Set it with: export APPLE_APP_SPECIFIC_PASSWORD='xxxx-xxxx-xxxx-xxxx'"
+    exit 1
+fi
+
+echo "✅ Code signing identity: $CSC_NAME"
+echo "✅ Apple Team ID: $APPLE_TEAM_ID"
+echo "✅ Apple ID: $APPLE_ID"
+
 # 1. Unlock Keychain
 # This is often the cause of "Above command failed" during signing
 echo "🔐 Checking keychain status..."

@@ -113,7 +113,9 @@
       "Bash(stapler validate:*)",
       "Bash(spctl -a -vvv -t open --context context:primary-signature:*)",
       "Bash(xcrun notarytool submit dist/Parrot-0.1.0-arm64.dmg --apple-id \"mail@davidquiring.co\" --password \"vlwi-dgfv-yjtd-mblt\" --team-id \"B5SD826C5K\" --wait)",
-      "Bash(xcrun stapler:*)"
+      "Bash(xcrun stapler:*)",
+      "Bash(spctl:*)",
+      "Bash(APPLE_ID='mail@davidquiring.co' APPLE_APP_SPECIFIC_PASSWORD='vlwi-dgfv-yjtd-mblt' ./build-mac.sh:*)"
     ]
   }
 }

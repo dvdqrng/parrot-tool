@@ -1,0 +1,136 @@
+{
+  "appId": "app.parrot.desktop",
+  "productName": "Parrot",
+  "copyright": "Copyright © 2025",
+  "directories": {
+    "output": "dist",
+    "buildResources": "build"
+  },
+  "files": [
+    "electron.js",
+    "preload.js",
+    "server.js",
+    "package.json",
+    {
+      "from": ".next/standalone",
+      "to": ".next/standalone",
+      "filter": [
+        "**/*"
+      ]
+    },
+    {
+      "from": ".next/static",
+      "to": ".next/standalone/Projects/beeper-kanban/.next/static"
+    },
+    {
+      "from": "public",
+      "to": ".next/standalone/Projects/beeper-kanban/public"
+    },
+    "!node_modules"
+  ],
+  "asar": true,
+  "extraMetadata": {
+    "main": "electron.js"
+  },
+  "mac": {
+    "category": "public.app-category.productivity",
+    "target": [
+      {
+        "target": "dmg",
+        "arch": [
+          "x64",
+          "arm64"
+        ]
+      },
+      {
+        "target": "zip",
+        "arch": [
+          "x64",
+          "arm64"
+        ]
+      }
+    ],
+    "icon": "build/icon.icns",
+    "hardenedRuntime": true,
+    "gatekeeperAssess": false,
+    "entitlements": "build/entitlements.mac.plist",
+    "entitlementsInherit": "build/entitlements.mac.plist",
+    "notarize": true
+  },
+  "dmg": {
+    "sign": true,
+    "title": "Parrot Installer",
+    "icon": "build/icon.icns",
+    "background": null,
+    "contents": [
+      {
+        "x": 130,
+        "y": 220
+      },
+      {
+        "x": 410,
+        "y": 220,
+        "type": "link",
+        "path": "/Applications"
+      }
+    ]
+  },
+  "win": {
+    "target": [
+      {
+        "target": "nsis",
+        "arch": [
+          "x64",
+          "arm64"
+        ]
+      },
+      {
+        "target": "portable",
+        "arch": [
+          "x64"
+        ]
+      }
+    ],
+    "icon": "build/icon.ico"
+  },
+  "nsis": {
+    "oneClick": false,
+    "perMachine": false,
+    "allowToChangeInstallationDirectory": true,
+    "deleteAppDataOnUninstall": false,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true
+  },
+  "linux": {
+    "target": [
+      {
+        "target": "AppImage",
+        "arch": [
+          "x64",
+          "arm64"
+        ]
+      },
+      {
+        "target": "deb",
+        "arch": [
+          "x64",
+          "arm64"
+        ]
+      },
+      {
+        "target": "rpm",
+        "arch": [
+          "x64"
+        ]
+      }
+    ],
+    "icon": "build/icon.png",
+    "category": "Office",
+    "maintainer": "your-email@example.com"
+  },
+  "appImage": {
+    "license": null
+  },
+  "afterAllArtifactBuild": "./scripts/notarize-dmg.js",
+  "artifactName": "${productName}-${os}-${arch}-0.1.0-20260117100959-c96a95e.${ext}"
+}
