@@ -120,7 +120,32 @@
       "Bash(gh secret set:*)",
       "Bash(gh secret:*)",
       "Bash(\"dist/mac-arm64/Parrot.app/Contents/MacOS/Parrot\")",
-      "Bash(gh run list:*)"
+      "Bash(gh run list:*)",
+      "Bash(echo:*)",
+      "Bash(pgrep:*)",
+      "Bash(/Users/davidquiring/Projects/beeper-kanban/dist/mac-arm64/Parrot.app/Contents/MacOS/Parrot)",
+      "Bash(ELECTRON_ENABLE_STACK_DUMPING=1 /Users/davidquiring/Projects/beeper-kanban/dist/mac-arm64/Parrot.app/Contents/MacOS/Parrot:*)",
+      "Bash(NODE_ENV=production PORT=31415 node:*)",
+      "Bash(CSC_IDENTITY_AUTO_DISCOVERY=false npx electron-builder:*)",
+      "Bash(lldb:*)",
+      "Bash(/Users/davidquiring/Projects/beeper-kanban/dist/mac-arm64/Parrot.app/Contents/Frameworks/Electron Framework.framework/Versions/A/Helpers/Electron Helper.app/Contents/MacOS/Electron Helper)",
+      "Bash(\"/Users/davidquiring/Projects/beeper-kanban/dist/mac-arm64/Parrot.app/Contents/Frameworks/Parrot Helper.app/Contents/MacOS/Parrot Helper\" --version)",
+      "Bash(dist/mac-arm64/parrot.app/Contents/MacOS/parrot:*)",
+      "Bash(ELECTRON_ENABLE_LOGGING=1 ELECTRON_ENABLE_STACK_DUMPING=1 \"/Users/davidquiring/Projects/beeper-kanban/dist/mac-arm64/Parrot.app/Contents/MacOS/Parrot\":*)",
+      "Bash(NODE_ENV=development npx electron:*)",
+      "Bash(\"node_modules/electron/dist/Electron.app/Contents/MacOS/Electron\" --version)",
+      "Bash(npm cache clean:*)",
+      "Bash(otool:*)",
+      "Bash(\"node_modules/electron/dist/Electron.app/Contents/MacOS/Electron\" .)",
+      "Bash(\"node_modules/electron/dist/Electron.app/Contents/MacOS/Electron\" --inspect .)",
+      "Bash(\"node_modules/.bin/electron\" .)",
+      "Bash(\"/tmp/electron-backup/dist/Electron.app/Contents/MacOS/Electron\" .)",
+      "Bash(\"node_modules/electron/dist/Electron.app/Contents/MacOS/Electron\" /tmp/)",
+      "Bash(npx electron .)",
+      "Bash(node --version:*)",
+      "Bash(env)",
+      "Bash(unset ELECTRON_RUN_AS_NODE)",
+      "Bash(APPLE_ID=\"mail@davidquiring.co\" APPLE_APP_SPECIFIC_PASSWORD=\"vlwi-dgfv-yjtd-mblt\" APPLE_TEAM_ID=\"B5SD826C5K\" node scripts/build-with-version.js:*)"
     ]
   }
 }
