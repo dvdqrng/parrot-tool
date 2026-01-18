@@ -50,7 +50,7 @@ if (process.platform === "darwin") {
 
 // Run electron-builder with temp config
 const additionalArgs = process.argv.slice(2).join(" ");
-const fullCommand = `electron-builder ${platformArgs} ${additionalArgs} --config electron-builder.temp.json`.trim();
+const fullCommand = `npx electron-builder ${platformArgs} ${additionalArgs} --config electron-builder.temp.json`.trim();
 console.log(`Running: ${fullCommand}`);
 
 try {

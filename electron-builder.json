@@ -7,6 +7,10 @@
     "buildResources": "build"
   },
   "files": [
+    "!dist",
+    "!dist/**/*",
+    "!node_modules",
+    "!node_modules/**/*",
     "electron.js",
     "preload.js",
     "server.js",
@@ -23,10 +27,11 @@
     {
       "from": "public",
       "to": ".next/standalone/Projects/beeper-kanban/public"
-    },
-    "!node_modules"
+    }
   ],
-  "asar": true,
+  "asar": false,
+  "npmRebuild": false,
+  "buildDependenciesFromSource": false,
   "extraMetadata": {
     "main": "electron.js"
   },

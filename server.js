@@ -35,10 +35,10 @@ if (isDev) {
     // The structure varies between CI (flat) and local (nested) builds
 
     const possiblePaths = [
-        // CI build path (flat structure)
-        path.join(__dirname, '.next', 'standalone', 'server.js'),
-        // Local build path (nested structure with project name)
+        // Local build path (nested structure based on project directory)
         path.join(__dirname, '.next', 'standalone', 'Projects', 'beeper-kanban', 'server.js'),
+        // CI build path (flat structure - when built from repo root)
+        path.join(__dirname, '.next', 'standalone', 'server.js'),
     ];
 
     let standaloneServerPath = null;

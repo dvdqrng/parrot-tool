@@ -1,8 +1,13 @@
 const { app, BrowserWindow, Menu, shell, nativeTheme } = require('electron');
 const path = require('path');
 const http = require('http');
+const fs = require('fs');
 
-const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
+// Check if we're in development mode
+// In packaged apps, check for the .next folder to determine if we should start the server
+const hasNextBuild = fs.existsSync(path.join(__dirname, '.next'));
+const isDev = process.env.NODE_ENV === 'development' && !hasNextBuild;
+
 // Use a unique port to avoid conflicts with other local servers
 const port = process.env.PORT || 31415;
 
@@ -187,7 +192,7 @@ function waitForServer(maxAttempts = 30, interval = 500) {
 function startNextServer() {
   return new Promise((resolve, reject) => {
     // Set environment variables for the server
-    process.env.NODE_ENV = isDev ? 'development' : 'production';
+    process.env.NODE_ENV = 'production';
     process.env.PORT = port.toString();
 
     try {
@@ -245,4 +250,8 @@ app.on('before-quit', () => {
 // Handle process errors gracefully
 process.on('uncaughtException', (err) => {
   console.error('Uncaught exception:', err);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled rejection:', reason);
 });
