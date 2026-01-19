@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - main
+    tags:
+      - 'v*'
 
 jobs:
   release:
@@ -30,12 +32,17 @@ jobs:
       - name: Get version info
         id: version
         run: |
-          VERSION=$(node -p "require('./package.json').version")
-          SHORT_SHA=$(git rev-parse --short HEAD)
-          TIMESTAMP=$(date +%Y%m%d%H%M%S)
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "tag=v${VERSION}-${TIMESTAMP}-${SHORT_SHA}" >> $GITHUB_OUTPUT
-          echo "name=v${VERSION} (${SHORT_SHA})" >> $GITHUB_OUTPUT
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            TAG="${GITHUB_REF#refs/tags/}"
+            echo "tag=$TAG" >> $GITHUB_OUTPUT
+            echo "name=$TAG" >> $GITHUB_OUTPUT
+          else
+            VERSION=$(node -p "require('./package.json').version")
+            SHORT_SHA=$(git rev-parse --short HEAD)
+            TIMESTAMP=$(date +%Y%m%d%H%M%S)
+            echo "tag=v${VERSION}-${TIMESTAMP}-${SHORT_SHA}" >> $GITHUB_OUTPUT
+            echo "name=v${VERSION} (${SHORT_SHA})" >> $GITHUB_OUTPUT
+          fi
 
       - name: Build Electron app (macOS)
         run: npm run electron:build
