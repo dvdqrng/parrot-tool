@@ -30,8 +30,16 @@
       "to": ".next/standalone/Projects/beeper-kanban/.next/static"
     },
     {
+      "from": ".next/static",
+      "to": ".next/standalone/.next/static"
+    },
+    {
       "from": "public",
       "to": ".next/standalone/Projects/beeper-kanban/public"
+    },
+    {
+      "from": "public",
+      "to": ".next/standalone/public"
     }
   ],
   "asar": false,
