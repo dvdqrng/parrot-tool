@@ -867,13 +867,15 @@ export function createCrmContact(
   chatId: string,
   platform: string,
   accountId: string,
-  avatarUrl?: string
+  avatarUrl?: string,
+  isGroup?: boolean
 ): CrmContactProfile {
   const now = new Date().toISOString();
   const contact: CrmContactProfile = {
     id: generateId(),
     displayName,
     avatarUrl,
+    isGroup,
     platformLinks: [{
       platform,
       chatId,
@@ -883,7 +885,6 @@ export function createCrmContact(
       addedAt: now,
     }],
     tags: [],
-    notes: '',
     createdAt: now,
     updatedAt: now,
   };
@@ -982,22 +983,15 @@ export function mergeCrmContacts(targetContactId: string, sourceContactId: strin
   // Merge tags (unique)
   const mergedTags = [...new Set([...target.tags, ...source.tags])];
 
-  // Merge notes
-  const mergedNotes = target.notes && source.notes
-    ? `${target.notes}\n\n---\nMerged from ${source.displayName}:\n${source.notes}`
-    : target.notes || source.notes;
-
   const updated: CrmContactProfile = {
     ...target,
     platformLinks: [...target.platformLinks, ...newLinks],
     tags: mergedTags,
-    notes: mergedNotes,
     // Keep target's primary info, but fill in blanks from source
     email: target.email || source.email,
     phone: target.phone || source.phone,
     company: target.company || source.company,
     role: target.role || source.role,
-    location: target.location || source.location,
     updatedAt: new Date().toISOString(),
   };
 
@@ -1084,30 +1078,14 @@ export function updateContactInteractionStats(
     avgResponseTimeMinutes = Math.round(avgMs / (1000 * 60));
   }
 
-  // Calculate message frequency (messages per day)
-  let messageFrequencyPerDay: number | undefined;
-  if (firstTimestamp && lastTimestamp) {
-    const daysDiff = Math.max(1,
-      (new Date(lastTimestamp).getTime() - new Date(firstTimestamp).getTime()) / (1000 * 60 * 60 * 24)
-    );
-    messageFrequencyPerDay = Math.round((messages.length / daysDiff) * 10) / 10;
-  }
-
   // Update contact with new stats
   const updates: Partial<CrmContactProfile> = {
     totalMessageCount: messages.length,
     messagesSent,
     messagesReceived,
-    lastConversationInitiator,
     avgResponseTimeMinutes,
-    messageFrequencyPerDay,
-    lastInboundAt,
-    lastOutboundAt,
   };
 
-  if (firstTimestamp) {
-    updates.firstInteractionAt = firstTimestamp;
-  }
   if (lastTimestamp) {
     updates.lastInteractionAt = lastTimestamp;
   }
@@ -1188,13 +1166,12 @@ export function searchCrmContacts(query: string): CrmContactProfile[] {
 
   return Object.values(contacts).filter(contact => {
     const matchesName = contact.displayName.toLowerCase().includes(lowerQuery);
-    const matchesNickname = contact.nickname?.toLowerCase().includes(lowerQuery);
     const matchesCompany = contact.company?.toLowerCase().includes(lowerQuery);
-    const matchesNotes = contact.notes.toLowerCase().includes(lowerQuery);
+    const matchesEmail = contact.email?.toLowerCase().includes(lowerQuery);
     const matchesPlatformName = contact.platformLinks.some(
       link => link.displayName?.toLowerCase().includes(lowerQuery)
     );
 
-    return matchesName || matchesNickname || matchesCompany || matchesNotes || matchesPlatformName;
+    return matchesName || matchesCompany || matchesEmail || matchesPlatformName;
   });
 }

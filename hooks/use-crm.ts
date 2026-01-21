@@ -16,7 +16,6 @@ import {
   updateCrmTag,
   deleteCrmTag,
   searchCrmContacts,
-  getContactsByTag,
   updateContactInteractionStats,
 } from '@/lib/storage';
 
@@ -60,9 +59,10 @@ export function useCrm() {
     chatId: string,
     platform: string,
     accountId: string,
-    avatarUrl?: string
+    avatarUrl?: string,
+    isGroup?: boolean
   ): CrmContactProfile => {
-    const contact = createCrmContact(displayName, chatId, platform, accountId, avatarUrl);
+    const contact = createCrmContact(displayName, chatId, platform, accountId, avatarUrl, isGroup);
     setContacts(loadCrmContacts());
     return contact;
   }, []);
@@ -172,23 +172,19 @@ export function useCrm() {
     return searchCrmContacts(query);
   }, []);
 
-  // Get contacts by tag
-  const getByTag = useCallback((tagId: string): CrmContactProfile[] => {
-    return getContactsByTag(tagId);
-  }, []);
-
   // Get or create contact for a chat
   const getOrCreateContactForChat = useCallback((
     chatId: string,
     displayName: string,
     platform: string,
     accountId: string,
-    avatarUrl?: string
+    avatarUrl?: string,
+    isGroup?: boolean
   ): CrmContactProfile => {
     const existing = getCrmContactByChatId(chatId);
     if (existing) return existing;
 
-    return createContactFromChat(displayName, chatId, platform, accountId, avatarUrl);
+    return createContactFromChat(displayName, chatId, platform, accountId, avatarUrl, isGroup);
   }, [createContactFromChat]);
 
   // Update interaction stats for a contact
@@ -229,7 +225,6 @@ export function useCrm() {
 
     // Search
     search,
-    getByTag,
 
     // Refresh
     refresh,

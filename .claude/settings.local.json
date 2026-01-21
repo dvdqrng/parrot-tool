@@ -145,7 +145,18 @@
       "Bash(node --version:*)",
       "Bash(env)",
       "Bash(unset ELECTRON_RUN_AS_NODE)",
-      "Bash(APPLE_ID=\"mail@davidquiring.co\" APPLE_APP_SPECIFIC_PASSWORD=\"vlwi-dgfv-yjtd-mblt\" APPLE_TEAM_ID=\"B5SD826C5K\" node scripts/build-with-version.js:*)"
+      "Bash(APPLE_ID=\"mail@davidquiring.co\" APPLE_APP_SPECIFIC_PASSWORD=\"vlwi-dgfv-yjtd-mblt\" APPLE_TEAM_ID=\"B5SD826C5K\" node scripts/build-with-version.js:*)",
+      "Bash(git tag:*)",
+      "Bash(gh release view:*)",
+      "Bash(gh run view:*)",
+      "Bash(gh release list:*)",
+      "Bash(\"/Volumes/Parrot Installer 17/Parrot.app/Contents/MacOS/Parrot\")",
+      "Bash(\"/Volumes/Parrot Installer 19/Parrot.app/Contents/MacOS/Parrot\")",
+      "Bash(\"/Volumes/Parrot Installer 19/Parrot.app/Contents/MacOS/Parrot\" --enable-logging)",
+      "Bash(ELECTRON_ENABLE_LOGGING=1 \"/Volumes/Parrot Installer 19/Parrot.app/Contents/MacOS/Parrot\":*)",
+      "Bash(# Check if NEXT_PUBLIC env vars are baked into the build grep -r \"\"NEXT_PUBLIC_SUPABASE\"\" \"\"/Volumes/Parrot Installer 19/Parrot.app/Contents/Resources/app/.next/standalone/.next/static\"\")",
+      "Bash(gh workflow run:*)",
+      "Bash(gh release download:*)"
     ]
   }
 }

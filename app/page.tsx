@@ -17,7 +17,10 @@ import { useCrm } from '@/hooks/use-crm';
 import { HandoffSummaryCard } from '@/components/autopilot/handoff-summary-card';
 import { ErrorState } from '@/components/dashboard/error-state';
 import { LoadingState } from '@/components/dashboard/loading-state';
-import { BottomNavigation } from '@/components/dashboard/bottom-navigation';
+import { BottomNavigation, MainView } from '@/components/dashboard/bottom-navigation';
+import { ContactsView } from '@/components/contacts-view';
+import { FilterDialog } from '@/components/filter-dialog';
+import { GroupByDialog } from '@/components/group-by-dialog';
 import type { Contact } from '@/app/api/beeper/contacts/route';
 import { useSettingsContext } from '@/contexts/settings-context';
 import { useAuth } from '@/contexts/auth-context';
@@ -211,8 +214,20 @@ export default function Home() {
   const [senderName, setSenderName] = useState('');
   const [draftTextFromAi, setDraftTextFromAi] = useState<string | undefined>(undefined);
 
+  // View state - toggle between kanban and contacts
+  const [currentView, setCurrentView] = useState<MainView>('kanban');
+
   // Contacts dialog state
   const [contactsDialogOpen, setContactsDialogOpen] = useState(false);
+
+  // Filter dialog state
+  const [filterDialogOpen, setFilterDialogOpen] = useState(false);
+  const [selectedTagFilters, setSelectedTagFilters] = useState<Set<string>>(new Set());
+  const [selectedTypeFilters, setSelectedTypeFilters] = useState<Set<'person' | 'group'>>(new Set());
+  const [selectedChannelFilters, setSelectedChannelFilters] = useState<Set<string>>(new Set());
+
+  // Group by dialog state
+  const [groupByDialogOpen, setGroupByDialogOpen] = useState(false);
 
   // Get the current chat ID from selected card (for per-thread AI chat)
   const currentChatId = selectedCard?.message?.chatId || selectedCard?.draft?.chatId || null;
@@ -226,17 +241,104 @@ export default function Home() {
     getContactForChat,
     getOrCreateContactForChat,
     updateContact: updateCrmContact,
+    deleteContact: deleteCrmContact,
     createTag: createCrmTag,
+    deleteTag: deleteCrmTag,
     addTagToContact,
     removeTagFromContact,
     linkChatToContact,
     unlinkChatFromContact,
     mergeContacts: mergeCrmContacts,
     updateInteractionStats,
+    search: searchCrmContacts,
   } = useCrm();
+
+  // Auto-create contacts for all messages when they load
+  useEffect(() => {
+    // Only auto-create contacts if we have chatInfo populated (ensures isGroup is available)
+    if (!isLoading && (unreadMessages.length > 0 || sentMessages.length > 0) && Object.keys(chatInfo).length > 0) {
+      const allMessages = [...unreadMessages, ...sentMessages];
+
+      // Group messages by chatId for stats calculation
+      const messagesByChatId = new Map<string, BeeperMessage[]>();
+      allMessages.forEach(msg => {
+        if (!messagesByChatId.has(msg.chatId)) {
+          messagesByChatId.set(msg.chatId, []);
+        }
+        messagesByChatId.get(msg.chatId)!.push(msg);
+      });
+
+      // Create contacts for unique chats and update their stats
+      messagesByChatId.forEach((messages, chatId) => {
+        const firstMsg = messages[0];
+        // Extract platform from chatId (format: "platform:roomId")
+        const platform = firstMsg.platform || chatId.split(':')[0] || 'unknown';
+        // Get chat name and avatar from chatInfo if available
+        const chat = chatInfo[chatId];
+        const displayName = chat?.title || firstMsg.chatName || firstMsg.senderName;
+        const avatarUrl = avatars[chatId] || firstMsg.senderAvatarUrl;
+        // chatInfo is the authoritative source for isGroup
+        const isGroup = chat?.isGroup;
+
+        const contact = getOrCreateContactForChat(chatId, displayName, platform, firstMsg.accountId, avatarUrl, isGroup);
+
+        // Update existing contact if isGroup is defined but contact doesn't have it set
+        if (isGroup !== undefined && contact.isGroup !== isGroup) {
+          updateCrmContact(contact.id, { isGroup });
+        }
+
+        // Update interaction stats with all messages from this chat
+        const statsMessages = messages.map(msg => ({
+          timestamp: msg.timestamp,
+          isFromMe: msg.isFromMe,
+        }));
+        updateInteractionStats(contact.id, statsMessages);
+      });
+    }
+  }, [unreadMessages, sentMessages, isLoading, getOrCreateContactForChat, chatInfo, avatars, updateCrmContact, updateInteractionStats]);
 
   // Get the current contact profile for the selected card
   const currentContact = currentChatId ? getContactForChat(currentChatId) : null;
+
+  // Filter helper - check if message passes filter
+  const messagePassesFilter = useCallback((message: BeeperMessage) => {
+    const contact = getContactForChat(message.chatId);
+    if (!contact) return true; // Show messages without contacts
+
+    // Type filter
+    if (selectedTypeFilters.size > 0) {
+      const messageType = contact.isGroup ? 'group' : 'person';
+      if (!selectedTypeFilters.has(messageType)) return false;
+    }
+
+    // Tag filter
+    if (selectedTagFilters.size > 0) {
+      if (!contact.tags.some(tag => selectedTagFilters.has(tag))) return false;
+    }
+
+    // Channel/platform filter
+    if (selectedChannelFilters.size > 0) {
+      if (!contact.platformLinks.some(link => selectedChannelFilters.has(link.platform))) return false;
+    }
+
+    return true;
+  }, [getContactForChat, selectedTagFilters, selectedTypeFilters, selectedChannelFilters]);
+
+  // Apply filters to messages
+  const displayedUnreadMessages = useMemo(() =>
+    filteredUnreadMessages.filter(messagePassesFilter),
+    [filteredUnreadMessages, messagePassesFilter]
+  );
+
+  const displayedAutopilotMessages = useMemo(() =>
+    autopilotMessages.filter(messagePassesFilter),
+    [autopilotMessages, messagePassesFilter]
+  );
+
+  const displayedSentMessages = useMemo(() =>
+    filteredSentMessages.filter(messagePassesFilter),
+    [filteredSentMessages, messagePassesFilter]
+  );
 
   // Handle card click - open panel for both messages and drafts
   const handleCardClick = useCallback((card: KanbanCard) => {
@@ -623,6 +725,60 @@ export default function Home() {
     }
   }, [selectedCard, sendMessage, deleteDraft]);
 
+  // Get available channels from contacts
+  const availableChannels = useMemo(() => {
+    const channels = new Set<string>();
+    Object.values(crmContacts).forEach(contact => {
+      contact.platformLinks.forEach(link => {
+        channels.add(link.platform);
+      });
+    });
+    return Array.from(channels).sort();
+  }, [crmContacts]);
+
+  // Filter toggle handlers
+  const toggleTagFilter = useCallback((tagId: string) => {
+    setSelectedTagFilters(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(tagId)) {
+        newSet.delete(tagId);
+      } else {
+        newSet.add(tagId);
+      }
+      return newSet;
+    });
+  }, []);
+
+  const toggleTypeFilter = useCallback((type: 'person' | 'group') => {
+    setSelectedTypeFilters(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(type)) {
+        newSet.delete(type);
+      } else {
+        newSet.add(type);
+      }
+      return newSet;
+    });
+  }, []);
+
+  const toggleChannelFilter = useCallback((channel: string) => {
+    setSelectedChannelFilters(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(channel)) {
+        newSet.delete(channel);
+      } else {
+        newSet.add(channel);
+      }
+      return newSet;
+    });
+  }, []);
+
+  const clearAllFilters = useCallback(() => {
+    setSelectedTagFilters(new Set());
+    setSelectedTypeFilters(new Set());
+    setSelectedChannelFilters(new Set());
+  }, []);
+
 
   // Show loading while settings are being loaded
   if (!settingsLoaded) {
@@ -655,40 +811,57 @@ export default function Home() {
       {/* Main content area */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <main className="flex-1 overflow-hidden pt-10 pl-6">
-          {error ? (
-            <ErrorState error={error} onRetry={refetch} />
-          ) : isLoading && unreadMessages.length === 0 && sentMessages.length === 0 ? (
-            <LoadingState />
+          {currentView === 'kanban' ? (
+            error ? (
+              <ErrorState error={error} onRetry={refetch} />
+            ) : isLoading && unreadMessages.length === 0 && sentMessages.length === 0 ? (
+              <LoadingState />
+            ) : (
+              <div className="h-full overflow-x-auto">
+                <MessageBoard
+                  groupBy={settings.kanbanGroupBy ?? 'status'}
+                  unreadMessages={displayedUnreadMessages}
+                  autopilotMessages={displayedAutopilotMessages}
+                  drafts={drafts}
+                  sentMessages={displayedSentMessages}
+                  archivedMessages={archivedMessages}
+                  showArchivedColumn={settings.showArchivedColumn}
+                  onToggleArchived={() => updateSettings({ showArchivedColumn: !settings.showArchivedColumn })}
+                  avatars={avatars}
+                  chatInfo={chatInfo}
+                  onCardClick={handleCardClick}
+                  onMoveToColumn={handleMoveToColumn}
+                  onArchive={handleArchive}
+                  onUnarchive={handleUnarchive}
+                  onHide={handleHide}
+                  onDeleteDraft={handleDeleteDraftFromCard}
+                  hasMore={hasMore}
+                  isLoadingMore={isLoadingMore}
+                  onLoadMore={loadMore}
+                  onGenerateAllDrafts={handleGenerateAllDrafts}
+                  isGeneratingDrafts={isGeneratingDrafts}
+                  generatingProgress={generatingProgress ?? undefined}
+                  onCancelGeneration={cancelGeneration}
+                  onSendAllDrafts={handleSendAllDrafts}
+                  isSendingAllDrafts={isSendingAllDrafts}
+                  sendingProgress={sendingProgress ?? undefined}
+                  onCancelSending={cancelSending}
+                />
+              </div>
+            )
           ) : (
-            <div className="h-full overflow-x-auto">
-              <MessageBoard
-                groupBy={settings.kanbanGroupBy ?? 'status'}
-                unreadMessages={filteredUnreadMessages}
-                autopilotMessages={autopilotMessages}
-                drafts={drafts}
-                sentMessages={filteredSentMessages}
-                archivedMessages={archivedMessages}
-                showArchivedColumn={settings.showArchivedColumn}
-                onToggleArchived={() => updateSettings({ showArchivedColumn: !settings.showArchivedColumn })}
-                avatars={avatars}
-                chatInfo={chatInfo}
-                onCardClick={handleCardClick}
-                onMoveToColumn={handleMoveToColumn}
-                onArchive={handleArchive}
-                onUnarchive={handleUnarchive}
-                onHide={handleHide}
-                onDeleteDraft={handleDeleteDraftFromCard}
-                hasMore={hasMore}
-                isLoadingMore={isLoadingMore}
-                onLoadMore={loadMore}
-                onGenerateAllDrafts={handleGenerateAllDrafts}
-                isGeneratingDrafts={isGeneratingDrafts}
-                generatingProgress={generatingProgress ?? undefined}
-                onCancelGeneration={cancelGeneration}
-                onSendAllDrafts={handleSendAllDrafts}
-                isSendingAllDrafts={isSendingAllDrafts}
-                sendingProgress={sendingProgress ?? undefined}
-                onCancelSending={cancelSending}
+            <div className="h-full pr-6">
+              <ContactsView
+                contacts={crmContacts}
+                tags={crmTags}
+                deleteContact={deleteCrmContact}
+                createTag={createCrmTag}
+                deleteTag={deleteCrmTag}
+                addTagToContact={addTagToContact}
+                removeTagFromContact={removeTagFromContact}
+                search={searchCrmContacts}
+                updateContact={updateCrmContact}
+                showHeader={false}
               />
             </div>
           )}
@@ -712,14 +885,55 @@ export default function Home() {
             onSelectContact={handleContactSelect}
           />
 
-          {/* Bottom nav */}
-          <BottomNavigation
-            onNewContact={() => setContactsDialogOpen(true)}
+          {/* Filter Dialog - positioned above bottom bar */}
+          <FilterDialog
+            open={filterDialogOpen}
+            onOpenChange={setFilterDialogOpen}
+            tags={crmTags}
+            availableChannels={availableChannels}
+            selectedTagFilters={selectedTagFilters}
+            selectedTypeFilters={selectedTypeFilters}
+            selectedChannelFilters={selectedChannelFilters}
+            onToggleTag={toggleTagFilter}
+            onToggleType={toggleTypeFilter}
+            onToggleChannel={toggleChannelFilter}
+            onClearAll={clearAllFilters}
+          />
+
+          {/* Group By Dialog - positioned above bottom bar */}
+          <GroupByDialog
+            open={groupByDialogOpen}
+            onOpenChange={setGroupByDialogOpen}
             groupBy={settings.kanbanGroupBy ?? 'status'}
             onGroupByChange={(groupBy) => updateSettings({ kanbanGroupBy: groupBy })}
           />
+
+          {/* Bottom nav */}
+          <BottomNavigation
+            onNewContact={() => {
+              setFilterDialogOpen(false);
+              setGroupByDialogOpen(false);
+              setContactsDialogOpen(true);
+            }}
+            groupBy={settings.kanbanGroupBy ?? 'status'}
+            onGroupByChange={(groupBy) => updateSettings({ kanbanGroupBy: groupBy })}
+            currentView={currentView}
+            onViewChange={setCurrentView}
+            onFilterClick={() => {
+              setContactsDialogOpen(false);
+              setGroupByDialogOpen(false);
+              setFilterDialogOpen(true);
+            }}
+            onGroupByClick={() => {
+              setContactsDialogOpen(false);
+              setFilterDialogOpen(false);
+              setGroupByDialogOpen(true);
+            }}
+            hasActiveFilters={selectedTagFilters.size > 0 || selectedTypeFilters.size > 0 || selectedChannelFilters.size > 0}
+          />
         </div>
       </div>
+
 
       {/* Floating panels - fixed position on right side */}
       <div className={`fixed top-4 right-4 bottom-4 flex gap-4 transition-all duration-300 ease-in-out z-20 ${isPanelOpen ? 'pointer-events-auto' : 'pointer-events-none'}`}>

@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -28,15 +27,12 @@ import {
   Building2,
   Mail,
   Phone,
-  MapPin,
   Briefcase,
   Tag,
   Link2,
   Save,
-  Users,
-  Merge,
   MessageSquare,
-  Calendar,
+  Clock,
   ArrowUpRight,
   ArrowDownLeft,
 } from 'lucide-react';
@@ -73,15 +69,10 @@ export function ContactProfilePanel({
 }: ContactProfilePanelProps) {
   // Local form state
   const [displayName, setDisplayName] = useState('');
-  const [nickname, setNickname] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [company, setCompany] = useState('');
   const [role, setRole] = useState('');
-  const [location, setLocation] = useState('');
-  const [notes, setNotes] = useState('');
-  const [relationship, setRelationship] = useState<CrmContactProfile['relationship']>();
-  const [importance, setImportance] = useState<CrmContactProfile['importance']>();
   const [newTagName, setNewTagName] = useState('');
   const [isDirty, setIsDirty] = useState(false);
   const [isMergeDialogOpen, setIsMergeDialogOpen] = useState(false);
@@ -90,15 +81,10 @@ export function ContactProfilePanel({
   useEffect(() => {
     if (contact) {
       setDisplayName(contact.displayName);
-      setNickname(contact.nickname || '');
       setEmail(contact.email || '');
       setPhone(contact.phone || '');
       setCompany(contact.company || '');
       setRole(contact.role || '');
-      setLocation(contact.location || '');
-      setNotes(contact.notes);
-      setRelationship(contact.relationship);
-      setImportance(contact.importance);
       setIsDirty(false);
     }
   }, [contact]);
@@ -116,18 +102,13 @@ export function ContactProfilePanel({
 
     onSave(contact.id, {
       displayName,
-      nickname: nickname || undefined,
       email: email || undefined,
       phone: phone || undefined,
       company: company || undefined,
       role: role || undefined,
-      location: location || undefined,
-      notes,
-      relationship,
-      importance,
     });
     setIsDirty(false);
-  }, [contact, displayName, nickname, email, phone, company, role, location, notes, relationship, importance, onSave]);
+  }, [contact, displayName, email, phone, company, role, onSave]);
 
   const handleAddTag = useCallback((tagId: string) => {
     if (!contact) return;
@@ -181,9 +162,6 @@ export function ContactProfilePanel({
             </Avatar>
             <div className="flex flex-col min-w-0">
               <span className="text-sm font-medium truncate">{contact.displayName}</span>
-              {contact.nickname && (
-                <span className="text-xs text-muted-foreground truncate">"{contact.nickname}"</span>
-              )}
             </div>
           </div>
           <Button variant="ghost" size="icon" onClick={onClose}>
@@ -208,17 +186,6 @@ export function ContactProfilePanel({
                     value={displayName}
                     onChange={handleFieldChange(setDisplayName)}
                     placeholder="Display name"
-                    className="h-8 text-sm"
-                  />
-                </div>
-
-                <div>
-                  <Label htmlFor="nickname" className="text-xs">Nickname</Label>
-                  <Input
-                    id="nickname"
-                    value={nickname}
-                    onChange={handleFieldChange(setNickname)}
-                    placeholder="Optional nickname"
                     className="h-8 text-sm"
                   />
                 </div>
@@ -256,16 +223,6 @@ export function ContactProfilePanel({
                     className="h-8 text-sm"
                   />
                 </div>
-
-                <div className="flex items-center gap-2">
-                  <MapPin className="h-4 w-4 text-muted-foreground shrink-0" />
-                  <Input
-                    value={location}
-                    onChange={handleFieldChange(setLocation)}
-                    placeholder="Location"
-                    className="h-8 text-sm"
-                  />
-                </div>
               </div>
             </div>
 
@@ -297,60 +254,6 @@ export function ContactProfilePanel({
                     placeholder="Role / Title"
                     className="h-8 text-sm"
                   />
-                </div>
-              </div>
-            </div>
-
-            <Separator />
-
-            {/* Relationship & Importance */}
-            <div className="space-y-3">
-              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
-                <Users className="h-3 w-3" />
-                Relationship
-              </h3>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <Label className="text-xs">Type</Label>
-                  <Select
-                    value={relationship || ''}
-                    onValueChange={(v) => {
-                      setRelationship(v as CrmContactProfile['relationship']);
-                      setIsDirty(true);
-                    }}
-                  >
-                    <SelectTrigger className="h-8 text-sm">
-                      <SelectValue placeholder="Select..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="personal">Personal</SelectItem>
-                      <SelectItem value="professional">Professional</SelectItem>
-                      <SelectItem value="family">Family</SelectItem>
-                      <SelectItem value="acquaintance">Acquaintance</SelectItem>
-                      <SelectItem value="other">Other</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div>
-                  <Label className="text-xs">Priority</Label>
-                  <Select
-                    value={importance || ''}
-                    onValueChange={(v) => {
-                      setImportance(v as CrmContactProfile['importance']);
-                      setIsDirty(true);
-                    }}
-                  >
-                    <SelectTrigger className="h-8 text-sm">
-                      <SelectValue placeholder="Select..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="high">High</SelectItem>
-                      <SelectItem value="medium">Medium</SelectItem>
-                      <SelectItem value="low">Low</SelectItem>
-                    </SelectContent>
-                  </Select>
                 </div>
               </div>
             </div>
@@ -394,18 +297,18 @@ export function ContactProfilePanel({
                     )}
                   </div>
 
-                  {/* Timeline */}
+                  {/* Response time and last contacted */}
                   <div className="space-y-1">
-                    {contact.firstInteractionAt && (
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <Calendar className="h-3 w-3" />
-                        <span>First message: {new Date(contact.firstInteractionAt).toLocaleDateString()}</span>
-                      </div>
-                    )}
                     {contact.lastInteractionAt && (
                       <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <Calendar className="h-3 w-3" />
-                        <span>Last message: {new Date(contact.lastInteractionAt).toLocaleDateString()}</span>
+                        <MessageSquare className="h-3 w-3" />
+                        <span>Last contacted: {new Date(contact.lastInteractionAt).toLocaleDateString()}</span>
+                      </div>
+                    )}
+                    {contact.avgResponseTimeMinutes !== undefined && contact.avgResponseTimeMinutes > 0 && (
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <Clock className="h-3 w-3" />
+                        <span>Avg response: {contact.avgResponseTimeMinutes < 60 ? `${contact.avgResponseTimeMinutes}m` : `${Math.round(contact.avgResponseTimeMinutes / 60)}h`}</span>
                       </div>
                     )}
                   </div>
@@ -556,21 +459,6 @@ export function ContactProfilePanel({
                   Link another platform
                 </Button>
               )}
-            </div>
-
-            <Separator />
-
-            {/* Notes */}
-            <div className="space-y-3">
-              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                Notes
-              </h3>
-              <Textarea
-                value={notes}
-                onChange={handleFieldChange(setNotes)}
-                placeholder="Add notes about this contact..."
-                className="min-h-[100px] text-sm resize-none"
-              />
             </div>
           </div>
         </ScrollArea>

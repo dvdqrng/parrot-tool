@@ -378,7 +378,7 @@ export interface CrmTag {
 }
 
 /**
- * Contact profile - metadata and notes about a contact
+ * Contact profile - metadata about a contact
  * Links to one or more platform chats
  */
 export interface CrmContactProfile {
@@ -386,15 +386,14 @@ export interface CrmContactProfile {
 
   // Display info (can override platform defaults)
   displayName: string;     // User-defined name
-  nickname?: string;       // Optional nickname
   avatarUrl?: string;      // User-defined avatar (or from platform)
+  isGroup?: boolean;       // Is this a group chat or person
 
   // Contact details
   email?: string;
   phone?: string;
   company?: string;
   role?: string;
-  location?: string;
 
   // Platform links - connects this contact to platform chats
   platformLinks: CrmPlatformLink[];
@@ -402,26 +401,12 @@ export interface CrmContactProfile {
   // Organization
   tags: string[];          // Tag IDs
 
-  // Notes
-  notes: string;           // Free-form notes
-
-  // Relationship tracking
-  relationship?: 'personal' | 'professional' | 'family' | 'acquaintance' | 'other';
-  importance?: 'high' | 'medium' | 'low';
-
-  // Interaction metrics (computed)
+  // Interaction metrics (computed, read-only)
   lastInteractionAt?: string;
-  firstInteractionAt?: string;
   totalMessageCount?: number;
   messagesSent?: number;        // Messages sent by me to this contact
   messagesReceived?: number;    // Messages received from this contact
-
-  // Phase 4: Enhanced interaction tracking
-  lastConversationInitiator?: 'me' | 'them'; // Who started the most recent conversation
   avgResponseTimeMinutes?: number;           // Average time to respond in minutes
-  messageFrequencyPerDay?: number;           // Average messages per day
-  lastInboundAt?: string;                    // Last message received from them
-  lastOutboundAt?: string;                   // Last message sent by me
 
   // Timestamps
   createdAt: string;
