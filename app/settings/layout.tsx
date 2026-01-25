@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { ArrowLeft, Key, MessageSquare, Layers, EyeOff, Database, Brain, Users, User, LucideIcon } from 'lucide-react';
+import { ArrowLeft, Key, MessageSquare, Layers, EyeOff, Database, Brain, User, LucideIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useSettingsContext } from '@/contexts/settings-context';
@@ -48,12 +48,6 @@ const navItems: NavItem[] = [
     href: '/settings/platforms',
     icon: Layers,
     description: 'Connected messaging platforms',
-  },
-  {
-    title: 'Contacts',
-    href: '/settings/contacts',
-    icon: Users,
-    description: 'CRM contact profiles',
   },
   {
     title: 'Hidden Chats',
