@@ -1,4 +1,5 @@
 // Ollama API client utilities
+import { logger } from './logger';
 
 export interface OllamaMessage {
   role: 'system' | 'user' | 'assistant';
@@ -45,6 +46,18 @@ export async function ollamaChat(
 ): Promise<string> {
   const url = baseUrl || DEFAULT_OLLAMA_URL;
 
+  // Qwen3 models need /no_think suffix to disable thinking mode and get actual output
+  const isQwen3 = model.toLowerCase().startsWith('qwen3');
+  const processedMessages = isQwen3
+    ? messages.map((msg, idx) => {
+        // Add /no_think to the last user message
+        if (msg.role === 'user' && idx === messages.length - 1) {
+          return { ...msg, content: msg.content + ' /no_think' };
+        }
+        return msg;
+      })
+    : messages;
+
   const response = await fetch(`${url}/api/chat`, {
     method: 'POST',
     headers: {
@@ -52,7 +65,7 @@ export async function ollamaChat(
     },
     body: JSON.stringify({
       model,
-      messages,
+      messages: processedMessages,
       stream: false,
       options: {
         num_predict: maxTokens,
@@ -67,6 +80,12 @@ export async function ollamaChat(
   }
 
   const data: OllamaChatResponse = await response.json();
+  logger.debug('[Ollama] Response:', {
+    model: data.model,
+    done: data.done,
+    contentLength: data.message?.content?.length ?? 0,
+    contentPreview: data.message?.content?.slice(0, 200) ?? '(empty)',
+  });
   return data.message.content;
 }
 

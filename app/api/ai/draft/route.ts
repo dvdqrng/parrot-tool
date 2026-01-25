@@ -292,9 +292,16 @@ ${goalDetectionSection}`;
           ? `Context from conversation:\n${conversationContext}\n\nMessage from ${senderName}:\n"${originalMessage}"\n\nSuggest a reply:`
           : `Message from ${senderName}:\n"${originalMessage}"\n\nSuggest a reply:`)
       : `Generate a proactive message to start or continue this conversation naturally.
-Work towards your goal: "${agentGoal}"
+${agentGoal ? `Work towards your goal: "${agentGoal}"` : 'Keep the conversation going naturally.'}
 
-Consider the conversation history and create an engaging, contextual message.`;
+Consider the conversation history and create an engaging, contextual message. Output ONLY the message text, nothing else.`;
+
+    logger.debug('[Draft] Request params:', {
+      hasOriginalMessage: !!originalMessage,
+      hasAgentGoal: !!agentGoal,
+      hasThreadContext: !!threadContext,
+      provider,
+    });
 
     // Helper function to extract final answer from reasoning models like DeepSeek
     const extractFinalAnswer = (text: string): string => {
@@ -367,8 +374,13 @@ Consider the conversation history and create an engaging, contextual message.`;
       openaiKey,
     });
 
+    // Log raw AI response for debugging
+    logger.debug('[Draft] Raw AI response:', { suggestedReply: suggestedReply.slice(0, 500) });
+
     // Extract final answer if model outputs reasoning (especially for Ollama/reasoning models)
     suggestedReply = extractFinalAnswer(suggestedReply);
+
+    logger.debug('[Draft] After extractFinalAnswer:', { suggestedReply: suggestedReply.slice(0, 500) });
 
     // Parse the response - extract reply and goal analysis
     let finalReply = suggestedReply.trim();
@@ -388,14 +400,19 @@ Consider the conversation history and create an engaging, contextual message.`;
       }
     }
 
+    logger.debug('[Draft] After goal extraction:', { finalReply: finalReply.slice(0, 500), goalAnalysis });
+
     // Validate that we have a meaningful reply
     const looksLikeJson = /^\s*\{[\s\S]*\}\s*$/.test(finalReply);
     const containsMetadataOnly = /^(isGoalAchieved|confidence|reasoning)/.test(finalReply);
 
     if (!finalReply || finalReply.length < 3 || looksLikeJson || containsMetadataOnly) {
       logger.error('[Draft] Invalid reply generated:', {
-        finalReply: finalReply.slice(0, 100),
-        suggestedReply: suggestedReply.slice(0, 200)
+        finalReply: finalReply.slice(0, 500),
+        suggestedReply: suggestedReply.slice(0, 500),
+        looksLikeJson,
+        containsMetadataOnly,
+        finalReplyLength: finalReply.length,
       });
       return NextResponse.json(
         { error: 'Failed to generate a valid reply. The AI returned only metadata or an empty response.' },
@@ -439,7 +456,12 @@ Consider the conversation history and create an engaging, contextual message.`;
       }
     });
   } catch (error) {
-    logger.error('Error generating draft:', error instanceof Error ? error : String(error));
+    logger.error('Error generating draft:', {
+      error,
+      message: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+      name: error instanceof Error ? error.name : undefined,
+    });
     const { error: errorMessage, status } = handleAiProviderError(error);
     return NextResponse.json({ error: errorMessage }, { status });
   }

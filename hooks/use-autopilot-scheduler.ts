@@ -171,11 +171,8 @@ export function useAutopilotScheduler(options: UseAutopilotSchedulerOptions = {}
         if (action.type === 'send-message' && action.messageText) {
           logger.scheduler('Sending message via API', { chatId: action.chatId, text: action.messageText?.slice(0, 50) });
 
-          // Simulate typing delay before sending (makes it feel more human)
-          // The Beeper API doesn't support sending typing indicators yet, but we can still wait
-          const typingDelay = calculateTypingDuration(action.messageText, AUTOPILOT.DEFAULT_TYPING_SPEED_WPM);
-          logger.scheduler('Simulating typing delay', { seconds: typingDelay });
-          await new Promise(resolve => setTimeout(resolve, typingDelay * 1000));
+          // Skip typing simulation for now - it adds delay without visible benefit
+          // (Beeper API doesn't support typing indicators anyway)
 
           const response = await fetch('/api/beeper/send', {
             method: 'POST',

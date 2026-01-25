@@ -20,7 +20,7 @@ export function TextWithLinks({ text }: TextWithLinksProps) {
               href={part}
               target="_blank"
               rel="noopener noreferrer"
-              className="underline hover:opacity-80"
+              className="underline hover:opacity-80 break-all"
               onClick={(e) => e.stopPropagation()}
             >
               {part}

@@ -110,12 +110,14 @@ export function MessagePanel({
 
     const checkPendingActions = () => {
       const pendingActions = getPendingActionsForChat(chatId);
+      const hasPending = pendingActions.length > 0;
       logger.debug('[MessagePanel] Checking pending actions:', {
         chatId,
         pendingActionsCount: pendingActions.length,
         actions: pendingActions,
       });
-      setHasPendingActions(pendingActions.length > 0);
+      // Only update state if value changed to avoid re-renders
+      setHasPendingActions(prev => prev === hasPending ? prev : hasPending);
     };
 
     checkPendingActions();
@@ -169,10 +171,10 @@ export function MessagePanel({
 
     logger.debug(`[FetchHistory] Starting fetch: limit=${limit}, isLoadMore=${isLoadMore}, chatId=${chatId}`);
 
+    // Only show loading indicator for initial load or explicit load more
+    // Don't show loading for background polling to avoid UI flicker
     if (isLoadMore) {
       setIsLoadingMore(true);
-    } else {
-      setIsLoadingHistory(true);
     }
 
     try {
@@ -202,9 +204,17 @@ export function MessagePanel({
         }));
 
         // Merge with existing messages - keep all unique messages by ID
+        // Only update state if there are actually new messages to avoid unnecessary re-renders
         setChatHistory(prev => {
           const existingIds = new Set(prev.map(m => m.id));
           const uniqueNewMessages = newMessages.filter(m => !existingIds.has(m.id));
+
+          // If no new messages, return the same array reference to prevent re-render
+          if (uniqueNewMessages.length === 0) {
+            logger.debug(`[FetchHistory] No new messages, skipping update`);
+            return prev;
+          }
+
           logger.debug(`[FetchHistory] Adding ${uniqueNewMessages.length} new unique messages (had ${prev.length})`);
           const merged = [...prev, ...uniqueNewMessages];
           // Sort by timestamp (oldest first for chat display)
@@ -239,8 +249,9 @@ export function MessagePanel({
       logger.error('Failed to fetch chat history:', error instanceof Error ? error : String(error));
       toast.error('Failed to load chat history');
     } finally {
-      setIsLoadingHistory(false);
-      setIsLoadingMore(false);
+      if (isLoadMore) {
+        setIsLoadingMore(false);
+      }
     }
   }, [chatId, message?.senderName, draft?.recipientName, onMessagesLoaded]);
 
@@ -271,18 +282,34 @@ export function MessagePanel({
       }
 
       // Then fetch recent messages from API to get any new ones (and full message data with attachments)
-      // Start with 20 messages
-      fetchHistory(20).then(() => setInitialLoadDone(true));
+      // Start with 20 messages - show loading only for initial load
+      setIsLoadingHistory(true);
+      fetchHistory(20).then(() => {
+        setIsLoadingHistory(false);
+        setInitialLoadDone(true);
+        // Ensure scroll to bottom after initial load completes
+        requestAnimationFrame(() => {
+          const viewport = scrollRef.current?.querySelector('[data-slot="scroll-area-viewport"]');
+          if (viewport) {
+            viewport.scrollTop = viewport.scrollHeight;
+          }
+        });
+      }).catch(() => {
+        setIsLoadingHistory(false);
+      });
     }
   }, [isOpen, chatId, draft?.draftText, draft?.updatedAt, message?.id, fetchHistory]);
 
   // Auto-scroll to bottom when chat history changes
   useEffect(() => {
     if (scrollRef.current && chatHistory.length > 0) {
-      const viewport = scrollRef.current.querySelector('[data-slot="scroll-area-viewport"]');
-      if (viewport) {
-        viewport.scrollTop = viewport.scrollHeight;
-      }
+      // Use requestAnimationFrame to ensure DOM has updated before scrolling
+      requestAnimationFrame(() => {
+        const viewport = scrollRef.current?.querySelector('[data-slot="scroll-area-viewport"]');
+        if (viewport) {
+          viewport.scrollTop = viewport.scrollHeight;
+        }
+      });
     }
   }, [chatHistory]);
 
@@ -607,7 +634,7 @@ export function MessagePanel({
                         )}
                         {/* Text content */}
                         {hasText && (
-                          <p className="text-xs whitespace-pre-wrap break-words">
+                          <p className="text-xs whitespace-pre-wrap break-words overflow-hidden">
                             <TextWithLinks text={msg.text} />
                           </p>
                         )}

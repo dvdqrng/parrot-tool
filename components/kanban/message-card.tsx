@@ -177,7 +177,7 @@ function MessageCardComponent({ card, onClick, onArchive, onUnarchive, onHide, o
                 {card.isGroup ? <Users className="h-4 w-4 text-muted-foreground" strokeWidth={2} /> : initials}
               </AvatarFallback>
             </Avatar>
-            <div className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-background">
+            <div className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center">
               <PlatformIcon platform={card.platform} className="h-3.5 w-3.5" />
             </div>
           </div>
@@ -239,7 +239,7 @@ function MessageCardComponent({ card, onClick, onArchive, onUnarchive, onHide, o
               {card.isGroup ? <Users className="h-4 w-4 text-muted-foreground" strokeWidth={2} /> : initials}
             </AvatarFallback>
           </Avatar>
-          <div className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-background">
+          <div className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center">
             <PlatformIcon platform={card.platform} className="h-3.5 w-3.5" />
           </div>
         </div>
@@ -307,11 +307,7 @@ function MessageCardComponent({ card, onClick, onArchive, onUnarchive, onHide, o
           </div>
           <div className="flex items-start gap-1">
             {card.mediaTypes && card.mediaTypes.length > 0 && (
-              <div className="flex items-center gap-0.5 shrink-0 mt-0.5">
-                {card.mediaTypes.slice(0, 2).map((type, i) => (
-                  <MediaIcon key={i} type={type} className="h-4 w-4 text-muted-foreground" />
-                ))}
-              </div>
+              <MediaIcon type={card.mediaTypes[0]} className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
             )}
             <p className="line-clamp-2 text-xs text-muted-foreground">{card.preview}</p>
           </div>

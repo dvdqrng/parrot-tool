@@ -46,40 +46,32 @@ function getMediaTypes(attachments?: BeeperAttachment[], text?: string): MediaTy
   return types;
 }
 
-// Get media type emoji/label for preview
+// Get media type label for preview (no emoji - icon shown separately)
 function getMediaLabel(type: MediaType): string {
   switch (type) {
-    case 'photo': return '📷 Photo';
-    case 'video': return '🎥 Video';
-    case 'audio': return '🎵 Audio';
-    case 'voice': return '🎤 Voice message';
+    case 'photo': return 'Photo';
+    case 'video': return 'Video';
+    case 'audio': return 'Audio';
+    case 'voice': return 'Voice message';
     case 'gif': return 'GIF';
-    case 'sticker': return '🏷️ Sticker';
-    case 'file': return '📎 File';
-    case 'link': return '🔗 Link';
+    case 'sticker': return 'Sticker';
+    case 'file': return 'File';
+    case 'link': return 'Link';
     default: return '';
   }
 }
 
-// Generate smart preview text that includes media indicators
+// Generate smart preview text (media icons shown separately in card)
 function generatePreview(text?: string, attachments?: BeeperAttachment[]): string {
   const mediaTypes = getMediaTypes(attachments, text);
   const hasText = text && text.trim().length > 0;
 
-  // If there's text, use it (possibly with media indicator prefix)
+  // If there's text, use it directly (icon shown separately)
   if (hasText) {
-    // If there are media attachments, prepend indicator
-    if (mediaTypes.length > 0 && !mediaTypes.every(t => t === 'link')) {
-      const mediaLabels = mediaTypes
-        .filter(t => t !== 'link')
-        .map(getMediaLabel)
-        .join(', ');
-      return `${mediaLabels}: ${text}`;
-    }
     return text;
   }
 
-  // No text - generate preview from media types
+  // No text - show media type label only
   if (mediaTypes.length > 0) {
     return mediaTypes.map(getMediaLabel).join(', ');
   }

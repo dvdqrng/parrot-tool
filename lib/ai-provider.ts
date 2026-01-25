@@ -142,7 +142,13 @@ export async function callAiProvider(options: AiProviderOptions): Promise<string
       messages: openaiMessages,
     });
 
-    return response.choices[0].message.content || '';
+    const content = response.choices[0].message.content || '';
+    logger.debug('[AI Provider] OpenAI response:', {
+      finishReason: response.choices[0].finish_reason,
+      contentLength: content.length,
+      contentPreview: content.slice(0, 100),
+    });
+    return content;
   } else {
     // Anthropic
     if (!anthropicKey) {
@@ -168,7 +174,13 @@ export async function callAiProvider(options: AiProviderOptions): Promise<string
 
     // Extract text from the response
     const textContent = response.content.find(block => block.type === 'text');
-    return textContent?.type === 'text' ? textContent.text : '';
+    const content = textContent?.type === 'text' ? textContent.text : '';
+    logger.debug('[AI Provider] Anthropic response:', {
+      stopReason: response.stop_reason,
+      contentLength: content.length,
+      contentPreview: content.slice(0, 100),
+    });
+    return content;
   }
 }
 
@@ -176,6 +188,14 @@ export async function callAiProvider(options: AiProviderOptions): Promise<string
  * Helper to handle API key errors consistently
  */
 export function handleAiProviderError(error: unknown): { error: string; status: number } {
+  // Log the full error for debugging
+  logger.error('[AI Provider] Full error details:', {
+    error,
+    message: error instanceof Error ? error.message : String(error),
+    stack: error instanceof Error ? error.stack : undefined,
+    name: error instanceof Error ? error.name : undefined,
+  });
+
   if (error instanceof Error) {
     if (error.message.includes('No AI API key configured')) {
       return {
@@ -188,10 +208,16 @@ export function handleAiProviderError(error: unknown): { error: string; status: 
         status: 503,
       };
     }
+
+    // Return the actual error message instead of generic one
+    return {
+      error: `AI provider error: ${error.message}`,
+      status: 500,
+    };
   }
 
   return {
-    error: 'Failed to get AI response',
+    error: `Failed to get AI response: ${String(error)}`,
     status: 500,
   };
 }
