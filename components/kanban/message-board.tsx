@@ -111,7 +111,7 @@ interface MessageBoardProps {
   avatars?: Record<string, string>;
   chatInfo?: Record<string, ChatInfo>;
   onCardClick: (card: KanbanCard) => void;
-  onMoveToColumn: (card: KanbanCard, fromColumn: ColumnId, toColumn: ColumnId) => void;
+  onMoveToColumn?: (card: KanbanCard, fromColumn: ColumnId, toColumn: ColumnId) => void;
   onArchive?: (card: KanbanCard) => void;
   onUnarchive?: (card: KanbanCard) => void;
   onHide?: (card: KanbanCard) => void;
@@ -127,6 +127,7 @@ interface MessageBoardProps {
   isSendingAllDrafts?: boolean;
   sendingProgress?: { current: number; total: number };
   onCancelSending?: () => void;
+  aiEnabled?: boolean;
 }
 
 // Check if a column ID is a status column
@@ -252,6 +253,7 @@ export function MessageBoard({
   isSendingAllDrafts,
   sendingProgress,
   onCancelSending,
+  aiEnabled = true,
 }: MessageBoardProps) {
   const isPlatformMode = groupBy === 'platform';
   // Store previous column arrays to reuse when content hasn't changed
@@ -343,16 +345,18 @@ export function MessageBoard({
 
     // Status mode: show fixed columns
     const cols: ColumnId[] = ['unread'];
-    // Show autopilot column if there are any autopilot messages
-    if (autopilotMessages.length > 0) {
+    // Show autopilot column if AI is enabled and there are any autopilot messages
+    if (aiEnabled && autopilotMessages.length > 0) {
       cols.push('autopilot');
     }
-    cols.push('drafts', 'sent');
+    // Always show drafts column (manual drafts work without AI)
+    cols.push('drafts');
+    cols.push('sent');
     if (showArchivedColumn) {
       cols.push('archived');
     }
     return cols;
-  }, [isPlatformMode, columns, showArchivedColumn, autopilotMessages.length]);
+  }, [isPlatformMode, columns, showArchivedColumn, autopilotMessages.length, aiEnabled]);
 
   // Track starting column for drag operations
   const dragStartColumnRef = useRef<ColumnId | null>(null);
@@ -397,7 +401,7 @@ export function MessageBoard({
     }
 
     // If we moved to a different column (specifically from unread to drafts)
-    if (targetColumn && startColumn !== targetColumn && startColumn === 'unread' && targetColumn === 'drafts') {
+    if (targetColumn && startColumn !== targetColumn && startColumn === 'unread' && targetColumn === 'drafts' && onMoveToColumn) {
       const card = columns.unread?.find(c => c.id === activeId);
       if (card) {
         onMoveToColumn(card, startColumn, targetColumn);

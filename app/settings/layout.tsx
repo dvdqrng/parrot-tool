@@ -5,8 +5,17 @@ import { usePathname } from 'next/navigation';
 import { ArrowLeft, Key, MessageSquare, Layers, EyeOff, Database, Brain, Users, User, LucideIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { useSettingsContext } from '@/contexts/settings-context';
 
-const navItems: { title: string; href: string; icon: LucideIcon; description: string }[] = [
+interface NavItem {
+  title: string;
+  href: string;
+  icon: LucideIcon;
+  description: string;
+  requiresAi?: boolean;
+}
+
+const navItems: NavItem[] = [
   {
     title: 'Account',
     href: '/settings/account',
@@ -18,18 +27,21 @@ const navItems: { title: string; href: string; icon: LucideIcon; description: st
     href: '/settings/api-keys',
     icon: Key,
     description: 'Configure API keys',
+    requiresAi: true,
   },
   {
     title: 'Tone of Voice',
     href: '/settings/tone',
     icon: MessageSquare,
     description: 'Personal communication style',
+    requiresAi: true,
   },
   {
     title: 'Autopilot',
     href: '/settings/autopilot',
     icon: Brain,
     description: 'AI agents for auto-replies',
+    requiresAi: true,
   },
   {
     title: 'Platforms',
@@ -63,6 +75,13 @@ export default function SettingsLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const { settings } = useSettingsContext();
+
+  // Check if AI features are enabled (default to true for backwards compatibility)
+  const aiEnabled = settings.aiEnabled !== false;
+
+  // Filter nav items based on AI enabled state
+  const visibleNavItems = navItems.filter(item => !item.requiresAi || aiEnabled);
 
   return (
     <div className="min-h-screen bg-background">
@@ -84,7 +103,7 @@ export default function SettingsLayout({
 
             {/* Navigation */}
             <nav className="space-y-1 flex-1">
-              {navItems.map((item) => {
+              {visibleNavItems.map((item) => {
                 const isActive = pathname === item.href;
 
                 return (

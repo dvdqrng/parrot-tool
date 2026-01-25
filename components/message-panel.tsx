@@ -46,6 +46,7 @@ interface MessagePanelProps {
   onDraftTextFromAiConsumed?: () => void;
   onMessageContextChange?: (context: string, senderName: string) => void;
   onMessagesLoaded?: (chatId: string, messages: Array<{ timestamp: string; isFromMe: boolean }>) => void;
+  aiEnabled?: boolean;
 }
 
 interface ChatMessage {
@@ -71,6 +72,7 @@ export function MessagePanel({
   onDraftTextFromAiConsumed,
   onMessageContextChange,
   onMessagesLoaded,
+  aiEnabled = true,
 }: MessagePanelProps) {
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
@@ -665,6 +667,7 @@ export function MessagePanel({
               sendSuccess={sendSuccess}
               onSend={handleSend}
               onSaveDraft={handleSaveDraft}
+              aiEnabled={aiEnabled}
             />
           </div>
         </>

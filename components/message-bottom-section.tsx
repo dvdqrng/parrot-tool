@@ -31,6 +31,8 @@ interface MessageBottomSectionProps {
   sendSuccess: boolean;
   onSend: () => void;
   onSaveDraft: () => void;
+  // AI features enabled
+  aiEnabled?: boolean;
 }
 
 interface LocalAutopilotConfig {
@@ -51,6 +53,7 @@ export function MessageBottomSection({
   sendSuccess,
   onSend,
   onSaveDraft,
+  aiEnabled = true,
 }: MessageBottomSectionProps) {
   const { configVersion, notifyConfigChange, triggerChatProcessing, generateProactiveMessage } = useAutopilot();
   const {
@@ -214,8 +217,9 @@ export function MessageBottomSection({
         onSend={onSend}
         onSaveDraft={onSaveDraft}
         onShowAutopilot={handleEnableAutopilot}
-        showAutopilotButton={!!chatId}
+        showAutopilotButton={!!chatId && aiEnabled}
         autopilotButtonHref={agents.length === 0 ? '/settings/autopilot/agents/new' : undefined}
+        aiEnabled={aiEnabled}
       />
     );
   }

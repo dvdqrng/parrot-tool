@@ -806,6 +806,9 @@ export default function Home() {
 
   const isPanelOpen = selectedCard !== null;
 
+  // Check if AI features are enabled (default to true for backwards compatibility)
+  const aiEnabled = settings.aiEnabled !== false;
+
   return (
     <div className="flex h-screen">
       {/* Main content area */}
@@ -821,7 +824,7 @@ export default function Home() {
                 <MessageBoard
                   groupBy={settings.kanbanGroupBy ?? 'status'}
                   unreadMessages={displayedUnreadMessages}
-                  autopilotMessages={displayedAutopilotMessages}
+                  autopilotMessages={aiEnabled ? displayedAutopilotMessages : []}
                   drafts={drafts}
                   sentMessages={displayedSentMessages}
                   archivedMessages={archivedMessages}
@@ -830,7 +833,7 @@ export default function Home() {
                   avatars={avatars}
                   chatInfo={chatInfo}
                   onCardClick={handleCardClick}
-                  onMoveToColumn={handleMoveToColumn}
+                  onMoveToColumn={aiEnabled ? handleMoveToColumn : undefined}
                   onArchive={handleArchive}
                   onUnarchive={handleUnarchive}
                   onHide={handleHide}
@@ -838,14 +841,15 @@ export default function Home() {
                   hasMore={hasMore}
                   isLoadingMore={isLoadingMore}
                   onLoadMore={loadMore}
-                  onGenerateAllDrafts={handleGenerateAllDrafts}
-                  isGeneratingDrafts={isGeneratingDrafts}
-                  generatingProgress={generatingProgress ?? undefined}
-                  onCancelGeneration={cancelGeneration}
-                  onSendAllDrafts={handleSendAllDrafts}
-                  isSendingAllDrafts={isSendingAllDrafts}
-                  sendingProgress={sendingProgress ?? undefined}
-                  onCancelSending={cancelSending}
+                  onGenerateAllDrafts={aiEnabled ? handleGenerateAllDrafts : undefined}
+                  isGeneratingDrafts={aiEnabled ? isGeneratingDrafts : undefined}
+                  generatingProgress={aiEnabled ? (generatingProgress ?? undefined) : undefined}
+                  onCancelGeneration={aiEnabled ? cancelGeneration : undefined}
+                  onSendAllDrafts={aiEnabled ? handleSendAllDrafts : undefined}
+                  isSendingAllDrafts={aiEnabled ? isSendingAllDrafts : undefined}
+                  sendingProgress={aiEnabled ? (sendingProgress ?? undefined) : undefined}
+                  onCancelSending={aiEnabled ? cancelSending : undefined}
+                  aiEnabled={aiEnabled}
                 />
               </div>
             )
@@ -956,28 +960,31 @@ export default function Home() {
           onClose={handleClosePanel}
           onSend={handleSendFromPanel}
           onSaveDraft={handleSaveDraftFromPanel}
-          isAiChatOpen={isAiChatOpen}
-          onToggleAiChat={handleToggleAiChat}
+          isAiChatOpen={aiEnabled ? isAiChatOpen : false}
+          onToggleAiChat={aiEnabled ? handleToggleAiChat : undefined}
           isContactProfileOpen={isContactProfileOpen}
           onToggleContactProfile={handleToggleContactProfile}
-          draftTextFromAi={draftTextFromAi}
-          onDraftTextFromAiConsumed={handleDraftTextFromAiConsumed}
-          onMessageContextChange={handleMessageContextChange}
+          draftTextFromAi={aiEnabled ? draftTextFromAi : undefined}
+          onDraftTextFromAiConsumed={aiEnabled ? handleDraftTextFromAiConsumed : undefined}
+          onMessageContextChange={aiEnabled ? handleMessageContextChange : undefined}
           onMessagesLoaded={handleMessagesLoaded}
+          aiEnabled={aiEnabled}
         />
-        <AiChatPanel
-          isOpen={isPanelOpen && isAiChatOpen}
-          onClose={() => setIsAiChatOpen(false)}
-          messageContext={messageContext}
-          senderName={senderName}
-          onUseDraft={handleUseDraftFromAi}
-          messages={aiChatMessages}
-          onMessagesChange={setAiChatMessages}
-        />
+        {aiEnabled && (
+          <AiChatPanel
+            isOpen={isPanelOpen && isAiChatOpen}
+            onClose={() => setIsAiChatOpen(false)}
+            messageContext={messageContext}
+            senderName={senderName}
+            onUseDraft={handleUseDraftFromAi}
+            messages={aiChatMessages}
+            onMessagesChange={setAiChatMessages}
+          />
+        )}
       </div>
 
-      {/* Autopilot notifications - floating in bottom left */}
-      {handoffSummaries.size > 0 && (
+      {/* Autopilot notifications - floating in bottom left (only when AI enabled) */}
+      {aiEnabled && handoffSummaries.size > 0 && (
         <div className="fixed bottom-20 left-6 z-30 w-80 space-y-3 max-h-[calc(100vh-160px)] overflow-y-auto">
           {/* Handoff summaries */}
           {Array.from(handoffSummaries.values()).map((summary) => (
@@ -998,16 +1005,18 @@ export default function Home() {
         onReply={handleReply}
       />
 
-      {/* Draft composer dialog */}
-      <DraftComposer
-        open={composerOpen}
-        onOpenChange={setComposerOpen}
-        originalMessage={composerMessage}
-        existingDraft={composerDraft}
-        onSave={handleSaveDraft}
-        onSend={handleSend}
-        onDelete={composerMode === 'edit' ? handleDeleteDraft : undefined}
-      />
+      {/* Draft composer dialog - only shown when AI is enabled */}
+      {aiEnabled && (
+        <DraftComposer
+          open={composerOpen}
+          onOpenChange={setComposerOpen}
+          originalMessage={composerMessage}
+          existingDraft={composerDraft}
+          onSave={handleSaveDraft}
+          onSend={handleSend}
+          onDelete={composerMode === 'edit' ? handleDeleteDraft : undefined}
+        />
+      )}
     </div>
   );
 }

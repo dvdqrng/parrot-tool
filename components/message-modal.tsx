@@ -41,6 +41,7 @@ interface MessageModalProps {
   card: KanbanCard | null;
   onSend?: (text: string) => Promise<void>;
   onSaveDraft?: (text: string) => void;
+  aiEnabled?: boolean;
 }
 
 // Convert file:// URLs to proxied API URLs
@@ -67,6 +68,7 @@ export function MessageModal({
   card,
   onSend,
   onSaveDraft,
+  aiEnabled = true,
 }: MessageModalProps) {
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
@@ -352,6 +354,7 @@ export function MessageModal({
           sendSuccess={false}
           onSend={handleSend}
           onSaveDraft={handleSaveDraft}
+          aiEnabled={aiEnabled}
         />
       </DialogContent>
     </Dialog>

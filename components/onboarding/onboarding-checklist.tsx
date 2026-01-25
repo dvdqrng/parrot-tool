@@ -138,21 +138,29 @@ export function OnboardingChecklist({
   // Handle AI key save
   const handleSaveAiKey = () => {
     if (aiProvider === 'anthropic') {
-      updateSettings({ aiProvider: 'anthropic', anthropicApiKey: anthropicKey || undefined });
+      updateSettings({ aiProvider: 'anthropic', anthropicApiKey: anthropicKey || undefined, aiEnabled: true });
       toast.success('Anthropic API key saved');
     } else if (aiProvider === 'openai') {
-      updateSettings({ aiProvider: 'openai', openaiApiKey: openAiKey || undefined });
+      updateSettings({ aiProvider: 'openai', openaiApiKey: openAiKey || undefined, aiEnabled: true });
       toast.success('OpenAI API key saved');
     } else {
-      updateSettings({ aiProvider: 'ollama' });
+      updateSettings({ aiProvider: 'ollama', aiEnabled: true });
       toast.success('Using Ollama (local)');
     }
   };
 
-  // Handle skip AI key
+  // Handle skip AI key (still want AI, just configure later)
   const handleSkipAiKey = () => {
     setAiStepSkipped(true);
+    updateSettings({ aiEnabled: true });
     toast.info('AI features can be configured later in Settings');
+  };
+
+  // Handle "Use without AI" - completely disable AI features
+  const handleDisableAi = () => {
+    setAiStepSkipped(true);
+    updateSettings({ aiEnabled: false });
+    toast.info('AI features disabled. You can enable them later in Settings.');
   };
 
   return (
@@ -376,14 +384,24 @@ export function OnboardingChecklist({
               </div>
             )}
 
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleSkipAiKey}
-              className="w-full text-xs text-muted-foreground"
-            >
-              Skip for now
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleSkipAiKey}
+                className="flex-1 text-xs text-muted-foreground"
+              >
+                Skip for now
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleDisableAi}
+                className="flex-1 text-xs text-muted-foreground"
+              >
+                Use without AI
+              </Button>
+            </div>
           </div>
         </OnboardingStep>
 

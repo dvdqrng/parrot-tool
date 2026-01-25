@@ -83,6 +83,8 @@ export interface AppSettings {
   aiProvider?: AiProvider;
   ollamaModel?: string;
   ollamaBaseUrl?: string;
+  // AI features enabled (defaults to true for backwards compatibility)
+  aiEnabled?: boolean;
   // UI settings
   showArchivedColumn?: boolean;
   kanbanGroupBy?: KanbanGroupBy;

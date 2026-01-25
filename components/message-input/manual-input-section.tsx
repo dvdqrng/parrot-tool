@@ -18,6 +18,7 @@ interface ManualInputSectionProps {
   onShowAutopilot?: () => void;
   showAutopilotButton: boolean;
   autopilotButtonHref?: string;
+  aiEnabled?: boolean;
 }
 
 export function ManualInputSection({
@@ -32,6 +33,7 @@ export function ManualInputSection({
   onShowAutopilot,
   showAutopilotButton,
   autopilotButtonHref,
+  aiEnabled = true,
 }: ManualInputSectionProps) {
   return (
     <div className="space-y-3">
@@ -53,8 +55,8 @@ export function ManualInputSection({
 
       {/* Action Buttons */}
       <div className="flex gap-2">
-        {/* Autopilot Toggle Button */}
-        {showAutopilotButton && (
+        {/* Autopilot Toggle Button - only shown when AI is enabled */}
+        {aiEnabled && showAutopilotButton && (
           autopilotButtonHref ? (
             <Button variant="ghost" size="icon" asChild title="Create Agent">
               <a href={autopilotButtonHref}>
@@ -73,19 +75,22 @@ export function ManualInputSection({
           )
         )}
 
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={onGenerateAI}
-          disabled={isGenerating}
-          title="AI Draft"
-        >
-          {isGenerating ? (
-            <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2} />
-          ) : (
-            <ListStart className="h-4 w-4 rotate-180" strokeWidth={2} />
-          )}
-        </Button>
+        {/* AI Draft Button - only shown when AI is enabled */}
+        {aiEnabled && (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onGenerateAI}
+            disabled={isGenerating}
+            title="AI Draft"
+          >
+            {isGenerating ? (
+              <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2} />
+            ) : (
+              <ListStart className="h-4 w-4 rotate-180" strokeWidth={2} />
+            )}
+          </Button>
+        )}
 
         <Button
           variant="ghost"
