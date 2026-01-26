@@ -1,7 +1,16 @@
-const { app, BrowserWindow, Menu, shell, nativeTheme } = require('electron');
+const { app, BrowserWindow, Menu, shell, nativeTheme, ipcMain } = require('electron');
+const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const http = require('http');
 const fs = require('fs');
+
+// Configure auto-updater logging
+autoUpdater.logger = require('electron-log');
+autoUpdater.logger.transports.file.level = 'info';
+
+// Auto-updater settings
+autoUpdater.autoDownload = true;
+autoUpdater.autoInstallOnAppQuit = true;
 
 // Check if we're in development mode
 // In packaged apps, check for the .next folder to determine if we should start the server
@@ -222,6 +231,14 @@ app.whenReady().then(async () => {
     }
 
     createWindow();
+
+    // Check for updates after window is ready (only in production)
+    if (!isDev) {
+      // Delay update check to not slow down startup
+      setTimeout(() => {
+        autoUpdater.checkForUpdatesAndNotify();
+      }, 3000);
+    }
   } catch (err) {
     console.error('Failed to start application:', err);
     app.quit();
@@ -254,4 +271,57 @@ process.on('uncaughtException', (err) => {
 
 process.on('unhandledRejection', (reason, promise) => {
   console.error('Unhandled rejection:', reason);
+});
+
+// =============================================================================
+// Auto-Updater
+// =============================================================================
+
+autoUpdater.on('checking-for-update', () => {
+  sendUpdateStatus('checking');
+});
+
+autoUpdater.on('update-available', (info) => {
+  sendUpdateStatus('available', info.version);
+});
+
+autoUpdater.on('update-not-available', () => {
+  sendUpdateStatus('up-to-date');
+});
+
+autoUpdater.on('download-progress', (progress) => {
+  sendUpdateStatus('downloading', null, progress.percent);
+});
+
+autoUpdater.on('update-downloaded', (info) => {
+  sendUpdateStatus('ready', info.version);
+});
+
+autoUpdater.on('error', (err) => {
+  sendUpdateStatus('error', null, null, err.message);
+});
+
+function sendUpdateStatus(status, version = null, percent = null, error = null) {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('update-status', { status, version, percent, error });
+  }
+}
+
+// IPC handlers
+ipcMain.handle('get-app-version', () => app.getVersion());
+
+ipcMain.handle('check-for-updates', async () => {
+  if (isDev) {
+    return { status: 'dev-mode' };
+  }
+  try {
+    await autoUpdater.checkForUpdates();
+    return { status: 'checking' };
+  } catch (err) {
+    return { status: 'error', error: err.message };
+  }
+});
+
+ipcMain.handle('install-update', () => {
+  autoUpdater.quitAndInstall();
 });

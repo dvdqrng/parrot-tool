@@ -6,7 +6,6 @@ import { AuthProvider } from "@/contexts/auth-context";
 import { ThemeProvider } from "@/components/theme-provider";
 import { AuthGuard } from "@/components/auth";
 import { Toaster } from "@/components/ui/sonner";
-import { UpdateNotification } from "@/components/update-notification";
 
 export const metadata: Metadata = {
   title: "Parrot",
@@ -46,7 +45,6 @@ export default function RootLayout({
                 <AutopilotProvider>
                   {children}
                   <Toaster />
-                  <UpdateNotification />
                 </AutopilotProvider>
               </SettingsProvider>
             </AuthGuard>

@@ -1,21 +1,54 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useAuth } from '@/contexts/auth-context'
 import { useSettingsContext } from '@/contexts/settings-context'
-import { useUpdateCheck } from '@/hooks/use-update-check'
 import { getStripeCheckoutUrl, getStripePortalUrl } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
-import { Loader2, Download, CheckCircle, Sparkles } from 'lucide-react'
+import { Loader2, Download, CheckCircle, Sparkles, RefreshCw } from 'lucide-react'
 
 export default function AccountPage() {
   const { user, subscription, signOut } = useAuth()
   const { settings, updateSettings } = useSettingsContext()
-  const { updateAvailable, latestVersion, isChecking, checkNow, currentVersion } = useUpdateCheck()
-  const [lastCheckResult, setLastCheckResult] = useState<'none' | 'up-to-date' | 'update-available'>('none')
+
+  // Electron auto-updater state
+  const [isElectron, setIsElectron] = useState(false)
+  const [appVersion, setAppVersion] = useState<string | null>(null)
+  const [updateStatus, setUpdateStatus] = useState<string | null>(null)
+  const [updateVersion, setUpdateVersion] = useState<string | null>(null)
+  const [isChecking, setIsChecking] = useState(false)
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.electron) {
+      setIsElectron(true)
+      window.electron.getAppVersion().then(setAppVersion)
+
+      const unsubscribe = window.electron.onUpdateStatus((status) => {
+        setUpdateStatus(status.status)
+        if (status.version) setUpdateVersion(status.version)
+        if (status.status !== 'checking') setIsChecking(false)
+      })
+
+      return unsubscribe
+    }
+  }, [])
+
+  const handleCheckForUpdates = async () => {
+    if (window.electron) {
+      setIsChecking(true)
+      setUpdateStatus(null)
+      await window.electron.checkForUpdates()
+    }
+  }
+
+  const handleInstallUpdate = () => {
+    if (window.electron) {
+      window.electron.installUpdate()
+    }
+  }
 
   // AI features enabled (default to true for backwards compatibility)
   const aiEnabled = settings.aiEnabled !== false
@@ -168,75 +201,88 @@ export default function AccountPage() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Updates</CardTitle>
-          <CardDescription>Check for app updates</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-muted-foreground">Current version</span>
-            <span className="text-sm font-mono">{currentVersion}</span>
-          </div>
-
-          {latestVersion && (
+      {/* Updates card - only show in Electron */}
+      {isElectron && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Updates</CardTitle>
+            <CardDescription>Check for app updates</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
             <div className="flex items-center justify-between">
-              <span className="text-sm text-muted-foreground">Latest release</span>
-              <span className="text-sm font-mono">{latestVersion.tag}</span>
+              <span className="text-sm text-muted-foreground">Current version</span>
+              <span className="text-sm font-mono">{appVersion}</span>
             </div>
-          )}
 
-          {updateAvailable ? (
-            <div className="flex items-center gap-2 text-sm text-amber-600 dark:text-amber-400">
-              <Download className="h-4 w-4" />
-              Update available
-            </div>
-          ) : lastCheckResult === 'up-to-date' && latestVersion && (
-            <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400">
-              <CheckCircle className="h-4 w-4" />
-              You're on the latest version
-            </div>
-          )}
-
-          <div className="pt-2 space-y-2">
-            <Button
-              onClick={async () => {
-                await checkNow()
-                setLastCheckResult(updateAvailable ? 'update-available' : 'up-to-date')
-              }}
-              variant="outline"
-              className="w-full"
-              disabled={isChecking}
-            >
-              {isChecking ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Checking...
-                </>
-              ) : (
-                'Check for updates'
-              )}
-            </Button>
-
-            {updateAvailable && (
-              <Button
-                onClick={() => window.open(updateAvailable.downloadUrl, '_blank')}
-                className="w-full"
-              >
-                <Download className="h-4 w-4 mr-2" />
-                Download {updateAvailable.tag}
-              </Button>
+            {updateStatus === 'up-to-date' && (
+              <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400">
+                <CheckCircle className="h-4 w-4" />
+                You&apos;re on the latest version
+              </div>
             )}
-          </div>
 
-          {updateAvailable?.releaseNotes && (
-            <div className="pt-4 border-t">
-              <p className="text-xs text-muted-foreground mb-2">Release notes:</p>
-              <p className="text-sm whitespace-pre-wrap">{updateAvailable.releaseNotes}</p>
+            {updateStatus === 'available' && updateVersion && (
+              <div className="flex items-center gap-2 text-sm text-amber-600 dark:text-amber-400">
+                <Download className="h-4 w-4" />
+                Downloading v{updateVersion}...
+              </div>
+            )}
+
+            {updateStatus === 'downloading' && (
+              <div className="flex items-center gap-2 text-sm text-blue-600 dark:text-blue-400">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Downloading update...
+              </div>
+            )}
+
+            {updateStatus === 'ready' && updateVersion && (
+              <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400">
+                <CheckCircle className="h-4 w-4" />
+                v{updateVersion} ready to install
+              </div>
+            )}
+
+            {updateStatus === 'error' && (
+              <div className="flex items-center gap-2 text-sm text-red-600 dark:text-red-400">
+                Error checking for updates
+              </div>
+            )}
+
+            <div className="pt-2 space-y-2">
+              {updateStatus === 'ready' && updateVersion ? (
+                <Button onClick={handleInstallUpdate} className="w-full">
+                  <Download className="h-4 w-4 mr-2" />
+                  Install v{updateVersion} & Restart
+                </Button>
+              ) : (
+                <Button
+                  onClick={handleCheckForUpdates}
+                  variant="outline"
+                  className="w-full"
+                  disabled={isChecking || updateStatus === 'downloading' || updateStatus === 'available'}
+                >
+                  {isChecking ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Checking...
+                    </>
+                  ) : updateStatus === 'downloading' || updateStatus === 'available' ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Downloading...
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Check for updates
+                    </>
+                  )}
+                </Button>
+              )}
             </div>
-          )}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>

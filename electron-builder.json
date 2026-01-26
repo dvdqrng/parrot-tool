@@ -2,6 +2,11 @@
   "appId": "app.parrot.desktop",
   "productName": "Parrot",
   "copyright": "Copyright © 2025",
+  "publish": {
+    "provider": "github",
+    "owner": "dvdqrng",
+    "repo": "beeper-kanban"
+  },
   "directories": {
     "output": "dist",
     "buildResources": "build"

@@ -16,9 +16,3 @@ export {
   getStripePortalUrl,
 } from './subscription'
 export type { Subscription, SubscriptionStatus } from './subscription'
-
-export {
-  checkForUpdates,
-  getLatestVersion,
-} from './updates'
-export type { AppVersion, Platform } from './updates'
