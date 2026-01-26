@@ -44,8 +44,8 @@ jobs:
             echo "name=v${VERSION} (${SHORT_SHA})" >> $GITHUB_OUTPUT
           fi
 
-      - name: Build Electron app (macOS)
-        run: npm run electron:build
+      - name: Build and Publish Electron app (macOS)
+        run: npm run electron:build -- --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_LINK: ${{ secrets.CSC_LINK }}
@@ -55,13 +55,3 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
-
-      - name: Create Release
-        run: |
-          gh release create "${{ steps.version.outputs.tag }}" \
-            --title "${{ steps.version.outputs.name }}" \
-            --generate-notes \
-            --latest \
-            dist/*.dmg
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
