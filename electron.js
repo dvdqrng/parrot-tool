@@ -1,12 +1,7 @@
-const { app, BrowserWindow, Menu, shell, nativeTheme, ipcMain } = require('electron');
-const { autoUpdater } = require('electron-updater');
+const { app, BrowserWindow, Menu, shell, nativeTheme } = require('electron');
 const path = require('path');
 const http = require('http');
 const fs = require('fs');
-
-// Configure auto-updater
-autoUpdater.autoDownload = true;
-autoUpdater.autoInstallOnAppQuit = true;
 
 // Check if we're in development mode
 // In packaged apps, check for the .next folder to determine if we should start the server
@@ -227,11 +222,6 @@ app.whenReady().then(async () => {
     }
 
     createWindow();
-
-    // Check for updates after window is ready (only in production)
-    if (!isDev) {
-      autoUpdater.checkForUpdatesAndNotify();
-    }
   } catch (err) {
     console.error('Failed to start application:', err);
     app.quit();
@@ -264,65 +254,4 @@ process.on('uncaughtException', (err) => {
 
 process.on('unhandledRejection', (reason, promise) => {
   console.error('Unhandled rejection:', reason);
-});
-
-// Auto-updater events
-autoUpdater.on('checking-for-update', () => {
-  console.log('Checking for update...');
-  if (mainWindow) {
-    mainWindow.webContents.send('update-status', { status: 'checking' });
-  }
-});
-
-autoUpdater.on('update-available', (info) => {
-  console.log('Update available:', info.version);
-  if (mainWindow) {
-    mainWindow.webContents.send('update-status', { status: 'available', version: info.version });
-  }
-});
-
-autoUpdater.on('update-not-available', () => {
-  console.log('Update not available - app is up to date');
-  if (mainWindow) {
-    mainWindow.webContents.send('update-status', { status: 'not-available' });
-  }
-});
-
-autoUpdater.on('download-progress', (progress) => {
-  console.log(`Download progress: ${progress.percent.toFixed(1)}%`);
-  if (mainWindow) {
-    mainWindow.webContents.send('update-status', { status: 'downloading', percent: progress.percent });
-  }
-});
-
-autoUpdater.on('update-downloaded', (info) => {
-  console.log('Update downloaded:', info.version);
-  if (mainWindow) {
-    mainWindow.webContents.send('update-status', { status: 'downloaded', version: info.version });
-  }
-});
-
-autoUpdater.on('error', (err) => {
-  console.error('Auto-updater error:', err);
-  if (mainWindow) {
-    mainWindow.webContents.send('update-status', { status: 'error', message: err.message });
-  }
-});
-
-// IPC handlers for manual update actions
-ipcMain.handle('check-for-updates', async () => {
-  try {
-    const result = await autoUpdater.checkForUpdates();
-    return { success: true, version: result?.updateInfo?.version };
-  } catch (err) {
-    return { success: false, error: err.message };
-  }
-});
-
-ipcMain.handle('install-update', () => {
-  autoUpdater.quitAndInstall();
-});
-
-ipcMain.handle('get-app-version', () => {
-  return app.getVersion();
 });

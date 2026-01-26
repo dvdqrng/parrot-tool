@@ -29,24 +29,23 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Set version for release
+      - name: Get version info
+        id: version
         run: |
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
-            # Use tag version (strip 'v' prefix)
-            VERSION="${GITHUB_REF#refs/tags/v}"
+            TAG="${GITHUB_REF#refs/tags/}"
+            echo "tag=$TAG" >> $GITHUB_OUTPUT
+            echo "name=$TAG" >> $GITHUB_OUTPUT
           else
-            # Generate unique version for each push to main
-            BASE_VERSION=$(node -p "require('./package.json').version")
+            VERSION=$(node -p "require('./package.json').version")
             SHORT_SHA=$(git rev-parse --short HEAD)
             TIMESTAMP=$(date +%Y%m%d%H%M%S)
-            VERSION="${BASE_VERSION}-${TIMESTAMP}.${SHORT_SHA}"
+            echo "tag=v${VERSION}-${TIMESTAMP}-${SHORT_SHA}" >> $GITHUB_OUTPUT
+            echo "name=v${VERSION} (${SHORT_SHA})" >> $GITHUB_OUTPUT
           fi
-          # Update package.json with the new version
-          npm version "$VERSION" --no-git-tag-version --allow-same-version
-          echo "Building version: $VERSION"
 
-      - name: Build and Publish Electron app (macOS)
-        run: npm run electron:build -- --publish always
+      - name: Build Electron app (macOS)
+        run: npm run electron:build
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_LINK: ${{ secrets.CSC_LINK }}
@@ -56,3 +55,13 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+
+      - name: Create Release
+        run: |
+          gh release create "${{ steps.version.outputs.tag }}" \
+            --title "${{ steps.version.outputs.name }}" \
+            --generate-notes \
+            --latest \
+            dist/*.dmg
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
