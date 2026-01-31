@@ -20,7 +20,7 @@ import {
 } from '@/lib/storage';
 import { useAiPipeline } from '@/hooks/use-ai-pipeline';
 import { logger } from '@/lib/logger';
-import { Loader2, ChevronUp, Users, X, MessagesSquare, RefreshCw, User } from 'lucide-react';
+import { Loader2, ChevronUp, Users, X, MessagesSquare, User } from 'lucide-react';
 import { MessageBottomSection } from '@/components/message-bottom-section';
 import { MediaAttachments } from '@/components/message-panel/media-attachments';
 import { TextWithLinks } from '@/components/message-panel/text-with-links';
@@ -80,7 +80,6 @@ export function MessagePanel({
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [sendSuccess, setSendSuccess] = useState(false);
-  const [isRefreshingContext, setIsRefreshingContext] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [initialLoadDone, setInitialLoadDone] = useState(false);
 
@@ -348,45 +347,6 @@ export function MessagePanel({
     fetchHistory(newLimit, true);
   }, [chatId, fetchHistory]);
 
-  // Manually refresh thread context with more messages (last 24 hours)
-  const handleRefreshContext = useCallback(async () => {
-    if (!chatId) return;
-
-    setIsRefreshingContext(true);
-    try {
-      const settings = loadSettings();
-      const headers: HeadersInit = {};
-      if (settings.beeperAccessToken) {
-        headers['x-beeper-token'] = settings.beeperAccessToken;
-      }
-
-      // Fetch messages from last 24 hours to build comprehensive context
-      const response = await fetch(
-        `/api/beeper/chats?chatId=${encodeURIComponent(chatId)}&sinceHours=24`,
-        { headers }
-      );
-      const result = await response.json();
-
-      if (result.data) {
-        const senderName = message?.senderName || draft?.recipientName || 'Unknown';
-        const contextMessages: ThreadContextMessage[] = result.data.map((m: BeeperMessage) => ({
-          id: m.id,
-          text: m.text,
-          isFromMe: m.isFromMe,
-          senderName: m.senderName,
-          timestamp: m.timestamp,
-        }));
-        updateThreadContextWithNewMessages(chatId, senderName, contextMessages);
-        toast.success(`Thread context updated with ${result.data.length} messages from last 24h`);
-      }
-    } catch (error) {
-      logger.error('Failed to refresh context:', error instanceof Error ? error : String(error));
-      toast.error('Failed to refresh thread context');
-    } finally {
-      setIsRefreshingContext(false);
-    }
-  }, [chatId, message, draft]);
-
   // Generate AI suggestion
   const generateAISuggestion = useCallback(async () => {
     if (!message && !draft || !chatId) return;
@@ -504,19 +464,6 @@ export function MessagePanel({
               </div>
             </div>
             <div className="flex items-center gap-1 shrink-0">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={handleRefreshContext}
-                disabled={isRefreshingContext}
-                title="Refresh AI context"
-              >
-                {isRefreshingContext ? (
-                  <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2} />
-                ) : (
-                  <RefreshCw className="h-4 w-4" strokeWidth={2} />
-                )}
-              </Button>
               {onToggleContactProfile && (
                 <Button
                   variant={isContactProfileOpen ? 'secondary' : 'ghost'}
