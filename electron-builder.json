@@ -5,7 +5,7 @@
   "publish": {
     "provider": "github",
     "owner": "dvdqrng",
-    "repo": "beeper-kanban"
+    "repo": "parrot-tool"
   },
   "directories": {
     "output": "dist",
