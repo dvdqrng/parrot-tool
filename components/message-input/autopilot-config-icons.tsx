@@ -14,7 +14,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
-import { User, Hand, Zap, Clock } from 'lucide-react';
+import { User, Eye, Lightbulb, Hand, Zap, Clock } from 'lucide-react';
 import { AutopilotMode, AutopilotAgent } from '@/lib/types';
 
 interface AutopilotConfigIconsProps {
@@ -43,7 +43,13 @@ export function AutopilotConfigIcons({
   const selectedAgent = agents.find(a => a.id === selectedAgentId);
 
   const getModeLabel = () => {
-    return selectedMode === 'manual-approval' ? 'Manual Approval' : 'Self-Driving';
+    switch (selectedMode) {
+      case 'observer': return 'Observer';
+      case 'suggest': return 'Suggest';
+      case 'manual-approval': return 'Manual Approval';
+      case 'self-driving': return 'Self-Driving';
+      default: return selectedMode;
+    }
   };
 
   const getDurationLabel = () => {
@@ -81,7 +87,11 @@ export function AutopilotConfigIcons({
       {/* Mode Selector */}
       <DropdownMenu>
         <DropdownMenuTrigger className="flex items-center gap-1.5 text-xs font-normal text-foreground hover:text-foreground/70 transition-colors cursor-pointer overflow-hidden max-w-28">
-          {selectedMode === 'manual-approval' ? (
+          {selectedMode === 'observer' ? (
+            <Eye className="h-3 w-3 flex-shrink-0" />
+          ) : selectedMode === 'suggest' ? (
+            <Lightbulb className="h-3 w-3 flex-shrink-0" />
+          ) : selectedMode === 'manual-approval' ? (
             <Hand className="h-3 w-3 flex-shrink-0" />
           ) : (
             <Zap className="h-3 w-3 flex-shrink-0" />
@@ -89,6 +99,12 @@ export function AutopilotConfigIcons({
           <span className="truncate">{getModeLabel()}</span>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start">
+          <DropdownMenuItem onClick={() => onModeChange('observer')}>
+            Observer
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => onModeChange('suggest')}>
+            Suggest
+          </DropdownMenuItem>
           <DropdownMenuItem onClick={() => onModeChange('manual-approval')}>
             Manual Approval
           </DropdownMenuItem>

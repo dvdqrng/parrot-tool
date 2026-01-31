@@ -33,8 +33,10 @@ import { useBatchSend } from '@/hooks/use-batch-send';
 import { useSendMessage } from '@/hooks/use-send-message';
 import { useAutopilot } from '@/contexts/autopilot-context';
 import { KanbanCard, ColumnId, BeeperMessage, Draft } from '@/lib/types';
-import { loadHiddenChats, addHiddenChat, loadWritingStylePatterns, loadToneSettings, getChatAutopilotConfig } from '@/lib/storage';
-import { getBeeperHeaders, getAIHeaders, getEffectiveAiProvider } from '@/lib/api-headers';
+import { useAiPipeline } from '@/hooks/use-ai-pipeline';
+import { useHistoryLoader } from '@/hooks/use-history-loader';
+import { loadHiddenChats, addHiddenChat, getChatAutopilotConfig } from '@/lib/storage';
+import { getBeeperHeaders } from '@/lib/api-headers';
 import { toast } from 'sonner';
 
 export default function Home() {
@@ -75,11 +77,16 @@ export default function Home() {
   // Autopilot integration
   const { processNewMessages, handoffSummaries, dismissHandoff, configVersion } = useAutopilot();
 
+  // Background history loader: fetches full chat history for agent-enabled chats
+  useHistoryLoader(configVersion);
+
   // Send message hook
   const { sendMessage } = useSendMessage({
     autoRefresh: true,
     refetch,
   });
+
+  const { generateDraft: pipelineGenerateDraft } = useAiPipeline();
 
   // Process new messages through autopilot when they arrive
   useEffect(() => {
@@ -379,47 +386,22 @@ export default function Home() {
       const toastId = toast.loading('Generating draft...');
 
       try {
-        const headers = getAIHeaders(settings);
+        const result = await pipelineGenerateDraft(message.chatId, message.text, message.senderName);
 
-        const toneSettings = loadToneSettings();
-        const writingStyle = loadWritingStylePatterns();
-
-        const response = await fetch('/api/ai/draft', {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({
-            originalMessage: message.text,
-            senderName: message.senderName,
-            toneSettings,
-            writingStyle: writingStyle.sampleMessages.length > 0 ? writingStyle : undefined,
-            provider: getEffectiveAiProvider(settings),
-            ollamaModel: settings.ollamaModel,
-            ollamaBaseUrl: settings.ollamaBaseUrl,
-          }),
-        });
-
-        const result = await response.json();
-
-        if (result.data?.suggestedReply) {
-          // Update the optimistic draft with AI-generated text
-          updateDraft(optimisticDraft.id, { draftText: result.data.suggestedReply });
+        if (result.text) {
+          updateDraft(optimisticDraft.id, { draftText: result.text });
           toast.success('Draft created', { id: toastId });
-        } else if (result.error) {
-          // Keep the draft but show error
-          updateDraft(optimisticDraft.id, { draftText: '' });
-          toast.error(result.error, { id: toastId });
         } else {
           updateDraft(optimisticDraft.id, { draftText: '' });
           toast.error('Failed to generate draft', { id: toastId });
         }
       } catch (error) {
         logger.error('Failed to generate draft:', error instanceof Error ? error : String(error));
-        // Keep the draft but clear placeholder
         updateDraft(optimisticDraft.id, { draftText: '' });
         toast.error('Failed to generate draft', { id: toastId });
       }
     }
-  }, [settings.anthropicApiKey, settings.aiProvider, settings.ollamaModel, settings.ollamaBaseUrl, avatars, chatInfo, createDraft, updateDraft]);
+  }, [pipelineGenerateDraft, avatars, chatInfo, createDraft, updateDraft]);
 
   // Handle archive chat
   const handleArchive = useCallback(async (card: KanbanCard) => {
@@ -974,6 +956,7 @@ export default function Home() {
           <AiChatPanel
             isOpen={isPanelOpen && isAiChatOpen}
             onClose={() => setIsAiChatOpen(false)}
+            chatId={currentChatId}
             messageContext={messageContext}
             senderName={senderName}
             onUseDraft={handleUseDraftFromAi}

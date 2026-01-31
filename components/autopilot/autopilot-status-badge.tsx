@@ -1,6 +1,6 @@
 'use client';
 
-import { Brain, Pause, AlertCircle, CheckCircle, LucideIcon } from 'lucide-react';
+import { Brain, Eye, Lightbulb, Pause, AlertCircle, CheckCircle, LucideIcon } from 'lucide-react';
 import {
   Tooltip,
   TooltipContent,
@@ -31,6 +31,26 @@ export function AutopilotStatusBadge({
   if (status === 'inactive') return null;
 
   const getStatusConfig = (): { icon: LucideIcon; color: string; bg: string; label: string } => {
+    // Observer mode: subtle muted style
+    if (mode === 'observer' && status === 'active') {
+      return {
+        icon: Eye,
+        color: 'text-muted-foreground',
+        bg: 'bg-muted',
+        label: 'Observing',
+      };
+    }
+
+    // Suggest mode: warm style
+    if (mode === 'suggest' && status === 'active') {
+      return {
+        icon: Lightbulb,
+        color: 'text-amber-500',
+        bg: 'bg-amber-500/10',
+        label: 'Suggesting',
+      };
+    }
+
     switch (status) {
       case 'active':
         return {
@@ -104,7 +124,7 @@ export function AutopilotStatusBadge({
             )}
             {mode && (
               <div className="text-muted-foreground">
-                Mode: {mode === 'self-driving' ? 'Self-Driving' : 'Manual Approval'}
+                Mode: {mode === 'observer' ? 'Observer' : mode === 'suggest' ? 'Suggest' : mode === 'self-driving' ? 'Self-Driving' : 'Manual Approval'}
               </div>
             )}
             {timeStr && mode === 'self-driving' && (

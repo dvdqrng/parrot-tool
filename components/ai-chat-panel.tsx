@@ -6,8 +6,7 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Loader2, X, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { loadSettings } from '@/lib/storage';
-import { getAIHeaders, getEffectiveAiProvider } from '@/lib/api-headers';
+import { useAiPipeline } from '@/hooks/use-ai-pipeline';
 import { toast } from 'sonner';
 import { AiChatMessage, SpeechRecognition, SpeechRecognitionEvent, SpeechRecognitionErrorEvent } from './ai-chat-panel/types';
 import { EmptyState } from './ai-chat-panel/empty-state';
@@ -19,6 +18,7 @@ import { InputArea } from './ai-chat-panel/input-area';
 interface AiChatPanelProps {
   isOpen: boolean;
   onClose: () => void;
+  chatId: string | null;
   messageContext: string;
   senderName: string;
   onUseDraft?: (draft: string) => void;
@@ -29,6 +29,7 @@ interface AiChatPanelProps {
 export function AiChatPanel({
   isOpen,
   onClose,
+  chatId,
   messageContext,
   senderName,
   onUseDraft,
@@ -71,8 +72,10 @@ export function AiChatPanel({
     onMessagesChange([]);
   }, [onMessagesChange]);
 
+  const { sendChatMessage } = useAiPipeline();
+
   const sendMessage = useCallback(async () => {
-    if (!inputText.trim() || isLoading) return;
+    if (!inputText.trim() || isLoading || !chatId) return;
 
     const userMessage: AiChatMessage = {
       id: `user-${Date.now()}`,
@@ -86,43 +89,17 @@ export function AiChatPanel({
     setIsLoading(true);
 
     try {
-      const settings = loadSettings();
-      const headers: HeadersInit = { 'Content-Type': 'application/json' };
-      if (settings.anthropicApiKey && settings.aiProvider === 'anthropic') {
-        headers['x-anthropic-key'] = settings.anthropicApiKey;
-      } else if (settings.openaiApiKey && settings.aiProvider === 'openai') {
-        headers['x-openai-key'] = settings.openaiApiKey;
-      }
-
-      const response = await fetch('/api/ai/chat', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          messageContext,
-          senderName,
-          chatHistory: updatedMessages.map(m => ({
-            role: m.role,
-            content: m.content,
-          })),
-          userMessage: userMessage.content,
-          // Provider settings
-          provider: getEffectiveAiProvider(settings),
-          ollamaModel: settings.ollamaModel,
-          ollamaBaseUrl: settings.ollamaBaseUrl,
-        }),
-      });
-
-      const result = await response.json();
-
-      if (result.error) {
-        toast.error(result.error);
-        return;
-      }
+      const responseText = await sendChatMessage(
+        chatId,
+        senderName,
+        userMessage.content,
+        updatedMessages.map(m => ({ role: m.role, content: m.content })),
+      );
 
       const assistantMessage: AiChatMessage = {
         id: `assistant-${Date.now()}`,
         role: 'assistant',
-        content: result.data.response,
+        content: responseText,
       };
 
       onMessagesChange([...updatedMessages, assistantMessage]);
@@ -132,7 +109,7 @@ export function AiChatPanel({
     } finally {
       setIsLoading(false);
     }
-  }, [inputText, isLoading, messageContext, senderName, messages, onMessagesChange]);
+  }, [inputText, isLoading, chatId, senderName, messages, onMessagesChange, sendChatMessage]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {

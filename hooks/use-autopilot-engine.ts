@@ -4,27 +4,19 @@ import { useRef, useCallback, useEffect } from 'react';
 import {
   BeeperMessage,
   AutopilotAgent,
-  ChatAutopilotConfig,
-  AutopilotActivityEntry,
   ConversationHandoffSummary,
 } from '@/lib/types';
 import { logger } from '@/lib/logger';
 import {
-  loadAutopilotAgents,
   getAutopilotAgentById,
   getChatAutopilotConfig,
   saveChatAutopilotConfig,
   addAutopilotActivityEntry,
-  loadToneSettings,
-  loadWritingStylePatterns,
-  getThreadContext,
-  formatThreadContextForPrompt,
-  loadSettings,
   generateId,
   saveHandoffSummary,
   getCachedMessageById,
+  appendAiChatMessage,
 } from '@/lib/storage';
-import { getEffectiveAiProvider } from '@/lib/api-headers';
 import {
   useAutopilotScheduler,
   calculateReplyDelay,
@@ -32,6 +24,7 @@ import {
   calculateMultiMessageDelay,
 } from './use-autopilot-scheduler';
 import { AUTOPILOT } from '@/lib/ai-constants';
+import { useAiPipeline } from '@/hooks/use-ai-pipeline';
 
 interface UseAutopilotEngineOptions {
   onMessageScheduled?: (chatId: string, scheduledFor: Date) => void;
@@ -85,6 +78,8 @@ export function useAutopilotEngine(options: UseAutopilotEngineOptions = {}) {
 
   const processedMessagesRef = useRef<Set<string>>(new Set());
 
+  const { generateDraft, generateSummary, extractKnowledge } = useAiPipeline();
+
   // Start the scheduler on mount - use refs to avoid dependency issues
   const schedulerRef = useRef(scheduler);
   schedulerRef.current = scheduler;
@@ -126,6 +121,12 @@ export function useAutopilotEngine(options: UseAutopilotEngineOptions = {}) {
     logger.engine('Chat config', { chatId, config: config ? { enabled: config.enabled, status: config.status, agentId: config.agentId } : null });
     if (!config || !config.enabled || config.status !== 'active') {
       logger.engine('Autopilot not active for chat, skipping', { chatId });
+      return;
+    }
+
+    // Observer mode: agent only reads/learns, no draft generation
+    if (config.mode === 'observer') {
+      logger.engine('Observer mode - skipping draft generation', { chatId });
       return;
     }
 
@@ -223,61 +224,27 @@ export function useAutopilotEngine(options: UseAutopilotEngineOptions = {}) {
       return;
     }
 
-    // Get context and settings
-    const settings = loadSettings();
-    const toneSettings = loadToneSettings();
-    const writingStyle = loadWritingStylePatterns();
-    const threadContext = getThreadContext(chatId);
-    const threadContextStr = formatThreadContextForPrompt(threadContext);
-
     // Check for emoji-only response
     const shouldSendEmojiOnly = agent.behavior.emojiOnlyResponseEnabled &&
       Math.random() * 100 < (agent.behavior.emojiOnlyResponseChance ?? 10);
 
     // Check for conversation closing suggestion
-    const shouldSuggestClosing = agent.behavior.conversationClosingEnabled &&
+    const shouldSuggestClosing = !!(agent.behavior.conversationClosingEnabled &&
       config.lastActivityAt &&
-      (Date.now() - new Date(config.lastActivityAt).getTime()) > (agent.behavior.closingTriggerIdleMinutes ?? 30) * 60 * 1000;
+      (Date.now() - new Date(config.lastActivityAt).getTime()) > (agent.behavior.closingTriggerIdleMinutes ?? 30) * 60 * 1000);
 
     try {
-      logger.engine('Generating draft via API...', { shouldSendEmojiOnly, shouldSuggestClosing });
-      // Generate draft via API
-      const response = await fetch('/api/ai/draft', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-anthropic-key': settings.anthropicApiKey || '',
-          'x-openai-key': settings.openaiApiKey || '',
-        },
-        body: JSON.stringify({
-          originalMessage: text,
-          senderName,
-          threadContext: threadContextStr,
-          agentSystemPrompt: agent.systemPrompt,
-          agentGoal: agent.goal,
-          toneSettings,
-          writingStyle,
-          detectGoalCompletion: true,
-          provider: getEffectiveAiProvider(settings),
-          ollamaModel: settings.ollamaModel,
-          ollamaBaseUrl: settings.ollamaBaseUrl,
-          // Human-like behaviors
-          emojiOnlyResponse: shouldSendEmojiOnly,
-          suggestClosing: shouldSuggestClosing,
-          messagesInConversation: config.messagesHandled,
-        }),
+      logger.engine('Generating draft via pipeline...', { shouldSendEmojiOnly, shouldSuggestClosing });
+
+      const result = await generateDraft(chatId, text, senderName, {
+        agentId: agent.id,
+        emojiOnlyResponse: shouldSendEmojiOnly,
+        suggestClosing: shouldSuggestClosing,
+        messagesInConversation: config.messagesHandled,
+        detectGoalCompletion: true,
       });
 
-      if (!response.ok) {
-        const error = await response.json();
-        logger.engine('API error', error);
-        throw new Error(error.error || 'Failed to generate draft');
-      }
-
-      const result = await response.json();
-      logger.engine('API response', result);
-      const { data } = result;
-      const { suggestedReply, suggestedMessages, goalAnalysis } = data;
+      const { text: suggestedReply, suggestedMessages, goalAnalysis } = result;
 
       // Log draft generation
       addAutopilotActivityEntry({
@@ -288,6 +255,13 @@ export function useAutopilotEngine(options: UseAutopilotEngineOptions = {}) {
         timestamp: new Date().toISOString(),
         draftText: suggestedReply,
       });
+
+      // Trigger knowledge extraction every 5 messages (background, non-blocking)
+      if (config.messagesHandled > 0 && config.messagesHandled % 5 === 0) {
+        extractKnowledge(chatId, senderName).catch(err => {
+          logger.debug('[Autopilot] Knowledge extraction failed (non-critical):', err);
+        });
+      }
 
       // Check goal completion
       if (goalAnalysis?.isGoalAchieved && goalAnalysis.confidence >= 70) {
@@ -312,7 +286,7 @@ export function useAutopilotEngine(options: UseAutopilotEngineOptions = {}) {
           return; // Don't send the reply
         } else if (goalBehavior === 'handoff') {
           // Generate handoff summary and disable
-          await generateHandoffSummary(chatId, agent, senderName, threadContextStr, settings);
+          await handleHandoffSummary(chatId, agent, senderName);
           saveChatAutopilotConfig({
             ...config,
             enabled: false,
@@ -325,7 +299,22 @@ export function useAutopilotEngine(options: UseAutopilotEngineOptions = {}) {
 
       // Handle based on mode
       logger.engine('Handling mode', { mode: config.mode, suggestedReply: suggestedReply?.slice(0, 50) });
-      if (config.mode === 'manual-approval') {
+      if (config.mode === 'suggest') {
+        // Suggest mode: inject the draft into the AI chat panel as an assistant message
+        // Include context about which message triggered the suggestion
+        logger.engine('Suggest mode - adding suggestion to AI chat panel');
+        if (suggestedReply) {
+          const truncatedMsg = text && text.length > 80 ? text.slice(0, 80) + '…' : text;
+          const context = truncatedMsg
+            ? `${senderName} wrote: "${truncatedMsg}"\n\nSuggested reply:\n\n`
+            : '';
+          appendAiChatMessage(chatId, {
+            id: `suggestion-${Date.now()}`,
+            role: 'assistant',
+            content: `${context}<draft>${suggestedReply}</draft>`,
+          });
+        }
+      } else if (config.mode === 'manual-approval') {
         logger.engine('Manual approval mode - scheduling draft for approval');
         // Schedule the message far in the future (24 hours) so it appears as pending
         // User approval will reschedule it to send immediately
@@ -394,41 +383,26 @@ export function useAutopilotEngine(options: UseAutopilotEngineOptions = {}) {
 
       onError?.(chatId, errorMessage);
     }
-  }, [scheduler, onMessageScheduled, onError]);
+  }, [scheduler, generateDraft, extractKnowledge, onMessageScheduled, onError]);
 
-  // Generate a handoff summary
-  const generateHandoffSummary = async (
+  // Generate a handoff summary via the pipeline
+  const handleHandoffSummary = useCallback(async (
     chatId: string,
     agent: AutopilotAgent,
     senderName: string,
-    threadContext: string,
-    settings: ReturnType<typeof loadSettings>
   ) => {
     try {
-      const response = await fetch('/api/ai/conversation-summary', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-anthropic-key': settings.anthropicApiKey || '',
-          'x-openai-key': settings.openaiApiKey || '',
-        },
-        body: JSON.stringify({
-          threadContext,
-          agentGoal: agent.goal,
-          senderName,
-          provider: getEffectiveAiProvider(settings),
-          ollamaModel: settings.ollamaModel,
-          ollamaBaseUrl: settings.ollamaBaseUrl,
-        }),
-      });
+      const result = await generateSummary(chatId, senderName, agent.id);
 
-      if (response.ok) {
-        const { data } = await response.json();
+      if (result.summary) {
         const summary: ConversationHandoffSummary = {
           chatId,
           agentId: agent.id,
           generatedAt: new Date().toISOString(),
-          ...data,
+          summary: result.summary,
+          keyPoints: result.keyPoints || [],
+          suggestedNextSteps: result.suggestedNextSteps || [],
+          goalStatus: result.goalStatus || 'unclear',
         };
         saveHandoffSummary(summary);
 
@@ -438,7 +412,7 @@ export function useAutopilotEngine(options: UseAutopilotEngineOptions = {}) {
           agentId: agent.id,
           type: 'handoff-triggered',
           timestamp: new Date().toISOString(),
-          metadata: { summary: data.summary },
+          metadata: { summary: result.summary },
         });
 
         onGoalCompleted?.(chatId, summary);
@@ -446,7 +420,7 @@ export function useAutopilotEngine(options: UseAutopilotEngineOptions = {}) {
     } catch (error) {
       logger.error('Failed to generate handoff summary:', error instanceof Error ? error : String(error));
     }
-  };
+  }, [generateSummary, onGoalCompleted]);
 
   // Generate a proactive initial message (not in response to an incoming message)
   const generateProactiveMessage = useCallback(async (chatId: string) => {
@@ -469,48 +443,16 @@ export function useAutopilotEngine(options: UseAutopilotEngineOptions = {}) {
       return;
     }
 
-    // Get context and settings
-    const settings = loadSettings();
-    const toneSettings = loadToneSettings();
-    const writingStyle = loadWritingStylePatterns();
-    const threadContext = getThreadContext(chatId);
-    const threadContextStr = formatThreadContextForPrompt(threadContext);
-
     try {
-      logger.engine('Generating proactive draft via API...');
-      // Generate draft via API (with empty original message for proactive mode)
-      const response = await fetch('/api/ai/draft', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-anthropic-key': settings.anthropicApiKey || '',
-          'x-openai-key': settings.openaiApiKey || '',
-        },
-        body: JSON.stringify({
-          originalMessage: '', // Empty for proactive message
-          senderName: 'Chat',
-          threadContext: threadContextStr,
-          agentSystemPrompt: agent.systemPrompt + '\n\nGenerate a proactive message to start or continue the conversation. Be natural and contextual based on the conversation history.',
-          agentGoal: agent.goal,
-          toneSettings,
-          writingStyle,
-          detectGoalCompletion: false, // Don't check goal on initial message
-          provider: getEffectiveAiProvider(settings),
-          ollamaModel: settings.ollamaModel,
-          ollamaBaseUrl: settings.ollamaBaseUrl,
-        }),
+      logger.engine('Generating proactive draft via pipeline...');
+
+      // Use empty original message for proactive mode - pipeline handles intent routing
+      const result = await generateDraft(chatId, '', 'Chat', {
+        agentId: agent.id,
+        detectGoalCompletion: false,
       });
 
-      if (!response.ok) {
-        const error = await response.json();
-        logger.engine('API error', error);
-        throw new Error(error.error || 'Failed to generate draft');
-      }
-
-      const result = await response.json();
-      logger.engine('API response', result);
-      const { data } = result;
-      const { suggestedReply, suggestedMessages } = data;
+      const { text: suggestedReply, suggestedMessages } = result;
 
       // Log draft generation
       addAutopilotActivityEntry({
@@ -524,7 +466,17 @@ export function useAutopilotEngine(options: UseAutopilotEngineOptions = {}) {
 
       // Handle based on mode
       logger.engine('Handling mode', { mode: config.mode, suggestedReply: suggestedReply?.slice(0, 50) });
-      if (config.mode === 'manual-approval') {
+      if (config.mode === 'suggest') {
+        // Suggest mode: inject the draft into the AI chat panel as an assistant message
+        logger.engine('Suggest mode - adding suggestion to AI chat panel');
+        if (suggestedReply) {
+          appendAiChatMessage(chatId, {
+            id: `suggestion-${Date.now()}`,
+            role: 'assistant',
+            content: `Based on the conversation so far, here's a proactive suggestion:\n\n<draft>${suggestedReply}</draft>`,
+          });
+        }
+      } else if (config.mode === 'manual-approval') {
         logger.engine('Manual approval mode - scheduling draft for approval');
         // Schedule the message far in the future (24 hours) so it appears as pending
         const PENDING_APPROVAL_DELAY = AUTOPILOT.PENDING_APPROVAL_DELAY;
@@ -585,7 +537,7 @@ export function useAutopilotEngine(options: UseAutopilotEngineOptions = {}) {
 
       onError?.(chatId, errorMessage);
     }
-  }, [scheduler, onMessageScheduled, onError]);
+  }, [scheduler, generateDraft, onMessageScheduled, onError]);
 
   // Manually approve and send a draft
   const approveAndSend = useCallback(async (

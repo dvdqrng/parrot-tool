@@ -12,10 +12,14 @@ import {
   ConversationHandoffSummary,
   CrmContactProfile,
   CrmTag,
+  ChatKnowledge,
+  ChatFact,
+  HistoryLoadProgress,
+  DEFAULT_AGENT_BEHAVIOR,
 } from './types';
 import { emitActivityAdded, emitActionScheduled, emitConfigChanged } from './autopilot-events';
 import { logger } from './logger';
-import { STORAGE_KEYS } from './constants';
+import { STORAGE_KEYS, DEFAULT_OBSERVER_AGENT_ID } from './constants';
 import { StorageManager, MapStorageManager, SetStorageManager, TimestampedStorageManager } from './storage-manager';
 
 // Create storage manager instances
@@ -445,6 +449,19 @@ export function saveAiChatForThread(chatId: string, messages: AiChatMessage[]): 
   aiChatHistoryManager.merge({ [chatId]: messages });
 }
 
+/**
+ * Append a single message to a thread's AI chat and notify listeners.
+ * Used by the autopilot engine (suggest mode) to inject suggestions.
+ */
+export function appendAiChatMessage(chatId: string, message: AiChatMessage): void {
+  const existing = getAiChatForThread(chatId);
+  saveAiChatForThread(chatId, [...existing, message]);
+  // Notify hooks that the AI chat for this thread changed
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('ai-chat-updated', { detail: { chatId } }));
+  }
+}
+
 // Thread context storage using MapStorageManager
 export function loadThreadContextStore(): ThreadContextStore {
   return threadContextManager.load();
@@ -482,9 +499,12 @@ export function updateThreadContextWithNewMessages(
   const messagesToAdd = newMessages.filter(m => !existingIds.has(m.id));
   const allMessages = [...(existing?.messages || []), ...messagesToAdd];
 
-  // Sort by timestamp - keep all messages (no limit) so user sees all loaded history
+  // Sort by timestamp and cap at 100 messages to keep localStorage bounded
+  // The knowledge system (Phase 5) will capture important facts from older messages
+  const MAX_THREAD_CONTEXT_MESSAGES = 100;
   const sortedMessages = allMessages
-    .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+    .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+    .slice(-MAX_THREAD_CONTEXT_MESSAGES);
 
   saveThreadContext(chatId, senderName, sortedMessages);
 
@@ -631,6 +651,30 @@ export function getAutopilotAgentById(id: string): AutopilotAgent | undefined {
 
 export function addAutopilotAgent(agent: AutopilotAgent): AutopilotAgent[] {
   return autopilotAgentsManager.update(current => [...current, agent]);
+}
+
+/**
+ * Ensure the default observer agent exists. Creates it if missing.
+ * Returns the agent ID.
+ */
+export function ensureDefaultObserverAgent(): string {
+  const existing = getAutopilotAgentById(DEFAULT_OBSERVER_AGENT_ID);
+  if (existing) return DEFAULT_OBSERVER_AGENT_ID;
+
+  const now = new Date().toISOString();
+  const agent: AutopilotAgent = {
+    id: DEFAULT_OBSERVER_AGENT_ID,
+    name: 'Observer',
+    description: 'Default agent that reads conversations and builds knowledge',
+    goal: 'Observe and learn from conversations',
+    systemPrompt: 'You are an observer agent. Your role is to read and understand conversations.',
+    behavior: DEFAULT_AGENT_BEHAVIOR,
+    goalCompletionBehavior: 'maintenance',
+    createdAt: now,
+    updatedAt: now,
+  };
+  addAutopilotAgent(agent);
+  return DEFAULT_OBSERVER_AGENT_ID;
 }
 
 export function updateAutopilotAgent(id: string, updates: Partial<AutopilotAgent>): AutopilotAgent[] {
@@ -1174,4 +1218,169 @@ export function searchCrmContacts(query: string): CrmContactProfile[] {
 
     return matchesName || matchesCompany || matchesEmail || matchesPlatformName;
   });
+}
+
+// ============================================
+// CHAT KNOWLEDGE STORAGE
+// ============================================
+
+const MAX_FACTS_PER_CHAT = 50;
+
+function loadAllKnowledge(): Record<string, ChatKnowledge> {
+  if (typeof window === 'undefined') return {};
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.CHAT_KNOWLEDGE);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveAllKnowledge(knowledge: Record<string, ChatKnowledge>): void {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(STORAGE_KEYS.CHAT_KNOWLEDGE, JSON.stringify(knowledge));
+}
+
+export function getChatKnowledge(chatId: string): ChatKnowledge | null {
+  const all = loadAllKnowledge();
+  return all[chatId] || null;
+}
+
+export function saveChatKnowledge(knowledge: ChatKnowledge): void {
+  const all = loadAllKnowledge();
+  all[knowledge.chatId] = knowledge;
+  saveAllKnowledge(all);
+}
+
+/**
+ * Merge new facts into existing knowledge for a chat.
+ * Deduplicates by content similarity, updates confidence/mentions for existing facts,
+ * and prunes to MAX_FACTS_PER_CHAT by removing lowest confidence facts.
+ */
+export function mergeChatFacts(
+  chatId: string,
+  newFacts: ChatFact[],
+  metadata?: {
+    conversationTone?: string;
+    primaryLanguage?: string;
+    topicHistory?: string[];
+    relationshipType?: string;
+  }
+): ChatKnowledge {
+  const existing = getChatKnowledge(chatId);
+  const now = new Date().toISOString();
+
+  const knowledge: ChatKnowledge = existing || {
+    chatId,
+    facts: [],
+    topicHistory: [],
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  // Merge facts
+  for (const newFact of newFacts) {
+    const existingIdx = knowledge.facts.findIndex(
+      f => f.category === newFact.category &&
+           f.content.toLowerCase() === newFact.content.toLowerCase()
+    );
+
+    if (existingIdx >= 0) {
+      // Update existing fact - boost confidence and mentions
+      const existing = knowledge.facts[existingIdx];
+      knowledge.facts[existingIdx] = {
+        ...existing,
+        confidence: Math.min(100, Math.max(existing.confidence, newFact.confidence) + 5),
+        mentions: existing.mentions + 1,
+        lastObserved: now,
+      };
+    } else {
+      // Add new fact
+      knowledge.facts.push({
+        ...newFact,
+        firstObserved: now,
+        lastObserved: now,
+        mentions: 1,
+      });
+    }
+  }
+
+  // Prune to max facts - sort by confidence (desc), keep top N
+  if (knowledge.facts.length > MAX_FACTS_PER_CHAT) {
+    knowledge.facts.sort((a, b) => b.confidence - a.confidence);
+    knowledge.facts = knowledge.facts.slice(0, MAX_FACTS_PER_CHAT);
+  }
+
+  // Update metadata if provided
+  if (metadata) {
+    if (metadata.conversationTone) knowledge.conversationTone = metadata.conversationTone;
+    if (metadata.primaryLanguage) knowledge.primaryLanguage = metadata.primaryLanguage;
+    if (metadata.relationshipType) knowledge.relationshipType = metadata.relationshipType;
+    if (metadata.topicHistory) {
+      // Merge topic history, keeping unique entries, max 20
+      const topics = new Set([...knowledge.topicHistory, ...metadata.topicHistory]);
+      knowledge.topicHistory = Array.from(topics).slice(-20);
+    }
+  }
+
+  knowledge.updatedAt = now;
+  saveChatKnowledge(knowledge);
+  return knowledge;
+}
+
+/**
+ * Format knowledge into a string for inclusion in AI prompts.
+ */
+export function formatKnowledgeForPrompt(knowledge: ChatKnowledge | null): string {
+  if (!knowledge || knowledge.facts.length === 0) return '';
+
+  const lines: string[] = [];
+
+  if (knowledge.conversationTone) {
+    lines.push(`Conversation tone: ${knowledge.conversationTone}`);
+  }
+  if (knowledge.primaryLanguage) {
+    lines.push(`Primary language: ${knowledge.primaryLanguage}`);
+  }
+  if (knowledge.relationshipType) {
+    lines.push(`Relationship: ${knowledge.relationshipType}`);
+  }
+
+  // Group facts by category
+  const byCategory = new Map<string, ChatFact[]>();
+  for (const fact of knowledge.facts) {
+    const existing = byCategory.get(fact.category) || [];
+    existing.push(fact);
+    byCategory.set(fact.category, existing);
+  }
+
+  for (const [category, facts] of byCategory) {
+    lines.push(`\n${category.charAt(0).toUpperCase() + category.slice(1)}:`);
+    for (const fact of facts.sort((a, b) => b.confidence - a.confidence)) {
+      lines.push(`- ${fact.content} (confidence: ${fact.confidence}%)`);
+    }
+  }
+
+  if (knowledge.topicHistory.length > 0) {
+    lines.push(`\nRecent topics: ${knowledge.topicHistory.slice(-5).join(', ')}`);
+  }
+
+  return lines.join('\n');
+}
+
+// ============================================
+// HISTORY LOAD PROGRESS
+// ============================================
+
+const historyLoadProgressManager = new MapStorageManager<string, HistoryLoadProgress>(
+  STORAGE_KEYS.HISTORY_LOAD_PROGRESS,
+  'historyLoadProgress'
+);
+
+export function getHistoryLoadProgress(chatId: string): HistoryLoadProgress | null {
+  return historyLoadProgressManager.get(chatId) || null;
+}
+
+export function saveHistoryLoadProgress(progress: HistoryLoadProgress): void {
+  historyLoadProgressManager.set(progress.chatId, progress);
 }

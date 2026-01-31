@@ -166,6 +166,8 @@ export function useChatAutopilot(chatId: string | null, options?: UseChatAutopil
     const updated: ChatAutopilotConfig = {
       ...config,
       mode,
+      // Auto-resume when switching modes while paused
+      status: config.status === 'paused' ? 'active' : config.status,
       selfDrivingDurationMinutes: durationMinutes,
       selfDrivingStartedAt: mode === 'self-driving' ? now : undefined,
       selfDrivingExpiresAt: expiresAt,

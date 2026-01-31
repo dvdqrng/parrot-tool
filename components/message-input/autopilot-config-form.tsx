@@ -66,6 +66,8 @@ export function AutopilotConfigForm({
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
+            <SelectItem value="observer">Observer</SelectItem>
+            <SelectItem value="suggest">Suggest</SelectItem>
             <SelectItem value="manual-approval">Manual Approval</SelectItem>
             <SelectItem value="self-driving">Self-Driving</SelectItem>
           </SelectContent>

@@ -12,6 +12,8 @@ import {
   AlertTriangle,
   Clock,
   Settings,
+  BookOpen,
+  CheckCircle,
   LucideIcon,
 } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -64,6 +66,11 @@ export function AutopilotActivityLog({ chatId }: AutopilotActivityLogProps) {
       case 'mode-changed':
       case 'agent-changed':
         return Settings;
+      case 'history-loading':
+      case 'knowledge-updated':
+        return BookOpen;
+      case 'history-complete':
+        return CheckCircle;
       default:
         return MessageCircle;
     }
@@ -87,6 +94,11 @@ export function AutopilotActivityLog({ chatId }: AutopilotActivityLogProps) {
         return 'text-green-500';
       case 'time-expired':
         return 'text-orange-500';
+      case 'history-loading':
+      case 'knowledge-updated':
+        return 'text-muted-foreground';
+      case 'history-complete':
+        return 'text-green-500';
       default:
         return 'text-muted-foreground';
     }
@@ -120,6 +132,16 @@ export function AutopilotActivityLog({ chatId }: AutopilotActivityLogProps) {
         return 'Agent changed';
       case 'handoff-triggered':
         return 'Handoff triggered';
+      case 'history-loading': {
+        const count = activity.metadata?.messagesProcessed;
+        return count ? `Loading history... ${count} messages` : 'Loading history...';
+      }
+      case 'history-complete': {
+        const total = activity.metadata?.messagesProcessed;
+        return total ? `History complete (${total} messages)` : 'History fully loaded';
+      }
+      case 'knowledge-updated':
+        return 'Knowledge updated';
       default:
         return activity.type;
     }

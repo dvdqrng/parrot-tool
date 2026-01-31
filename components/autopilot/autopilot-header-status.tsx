@@ -64,7 +64,7 @@ export function AutopilotHeaderStatus({ chatId }: AutopilotHeaderStatusProps) {
           <div className="flex flex-col min-w-0">
             <span className="text-xs font-medium truncate">{agent?.name || 'Unknown Agent'}</span>
             <span className="text-xs text-muted-foreground truncate">
-              {config.mode === 'manual-approval' ? 'Manual Approval' : 'Self-Driving'}
+              {config.mode === 'observer' ? 'Observer' : config.mode === 'suggest' ? 'Suggest' : config.mode === 'manual-approval' ? 'Manual Approval' : 'Self-Driving'}
             </span>
           </div>
         </div>

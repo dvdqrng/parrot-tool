@@ -39,6 +39,8 @@ export async function GET(request: NextRequest) {
   const limit = parseInt(searchParams.get('limit') || '20', 10);
   const sinceHours = parseFloat(searchParams.get('sinceHours') || '0');
   const minMessages = parseInt(searchParams.get('minMessages') || '0', 10);
+  // For deep history loading: skip the first N messages (already processed)
+  const skip = parseInt(searchParams.get('skip') || '0', 10);
 
   try {
     const beeperToken = request.headers.get('x-beeper-token') || undefined;
@@ -47,14 +49,24 @@ export async function GET(request: NextRequest) {
     // If chatId is provided, get messages for that chat
     if (chatId) {
       const messages: BeeperMessage[] = [];
+      let skipped = 0;
 
       // Calculate cutoff time if sinceHours is specified
       const cutoffTime = sinceHours > 0
         ? new Date(Date.now() - sinceHours * 60 * 60 * 1000)
         : null;
 
+      // When skip is used (deep history loading), raise the safety cap
+      const safetyLimit = skip > 0 ? skip + limit : 200;
+
       // Iterate until we have enough messages or hit the time cutoff
       for await (const msg of client.messages.list(chatId)) {
+        // Skip already-processed messages (newest first, so skip the first N)
+        if (skipped < skip) {
+          skipped++;
+          continue;
+        }
+
         const msgTimestamp = new Date(msg.timestamp || Date.now());
 
         // If using time-based filtering and message is older than cutoff,
@@ -84,8 +96,8 @@ export async function GET(request: NextRequest) {
         // If not using time-based filtering, use limit
         if (!cutoffTime && messages.length >= limit) break;
 
-        // Safety limit to prevent fetching too many messages
-        if (messages.length >= 200) break;
+        // Safety limit to prevent runaway fetches
+        if (skipped + messages.length >= safetyLimit) break;
       }
 
       return NextResponse.json({ data: messages });

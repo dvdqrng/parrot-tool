@@ -2,9 +2,8 @@
 
 import { useState, useCallback, useRef } from 'react';
 import { logger } from '@/lib/logger';
-import { BeeperMessage, Draft, ToneSettings } from '@/lib/types';
-import { loadSettings, loadToneSettings, loadWritingStylePatterns } from '@/lib/storage';
-import { getEffectiveAiProvider } from '@/lib/api-headers';
+import { BeeperMessage } from '@/lib/types';
+import { useAiPipeline } from '@/hooks/use-ai-pipeline';
 
 interface BatchDraftGeneratorOptions {
   onDraftGenerated: (message: BeeperMessage, draftText: string) => void;
@@ -26,51 +25,20 @@ export function useBatchDraftGenerator({
   const [progress, setProgress] = useState<GeneratingProgress | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
+  const { generateDraft } = useAiPipeline();
+
   const generateDraftForMessage = useCallback(async (
     message: BeeperMessage,
     signal: AbortSignal
   ): Promise<string | null> => {
     try {
-      const settings = loadSettings();
-      const toneSettings = loadToneSettings();
-      const writingStyle = loadWritingStylePatterns();
-
-      const headers: HeadersInit = { 'Content-Type': 'application/json' };
-      if (settings.anthropicApiKey) {
-        headers['x-anthropic-key'] = settings.anthropicApiKey;
-      }
-      if (settings.openaiApiKey) {
-        headers['x-openai-key'] = settings.openaiApiKey;
-      }
-
-      const response = await fetch('/api/ai/draft', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          originalMessage: message.text,
-          senderName: message.senderName,
-          toneSettings: toneSettings || undefined,
-          writingStyle: writingStyle.sampleMessages.length > 0 ? writingStyle : undefined,
-          provider: getEffectiveAiProvider(settings),
-          ollamaModel: settings.ollamaModel,
-          ollamaBaseUrl: settings.ollamaBaseUrl,
-        }),
-        signal,
-      });
-
-      if (!response.ok) {
-        logger.error(`Failed to generate draft for message ${message.id}`);
-        return null;
-      }
-
-      const result = await response.json();
-
-      if (result.error) {
-        logger.error(`Error generating draft: ${result.error}`);
-        return null;
-      }
-
-      return result.data?.suggestedReply || null;
+      const result = await generateDraft(
+        message.chatId,
+        message.text,
+        message.senderName,
+        { signal },
+      );
+      return result.text || null;
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {
         return null;
@@ -78,7 +46,7 @@ export function useBatchDraftGenerator({
       logger.error('Error generating draft:', error instanceof Error ? error : String(error));
       return null;
     }
-  }, []);
+  }, [generateDraft]);
 
   const generateAllDrafts = useCallback(async (messages: BeeperMessage[]) => {
     if (isGenerating || messages.length === 0) return;

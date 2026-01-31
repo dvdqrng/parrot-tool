@@ -268,7 +268,7 @@ export interface AutopilotAgent {
 }
 
 // Per-chat autopilot config
-export type AutopilotMode = 'manual-approval' | 'self-driving';
+export type AutopilotMode = 'observer' | 'suggest' | 'manual-approval' | 'self-driving';
 export type AutopilotStatus = 'inactive' | 'active' | 'paused' | 'goal-completed' | 'error';
 
 export interface ChatAutopilotConfig {
@@ -327,7 +327,10 @@ export type AutopilotActivityType =
   | 'skipped-busy'           // Skipped due to response rate
   | 'emoji-only-sent'        // Sent emoji-only response
   | 'conversation-closing'   // Suggested closing
-  | 'fatigue-reduced';       // Response rate reduced due to fatigue
+  | 'fatigue-reduced'        // Response rate reduced due to fatigue
+  | 'history-loading'        // Loading message history batch
+  | 'history-complete'       // History loading finished
+  | 'knowledge-updated';     // Knowledge extracted from history
 
 export interface AutopilotActivityEntry {
   id: string;
@@ -422,6 +425,57 @@ export interface CrmContactProfile {
 export interface CrmChatMapping {
   chatId: string;
   contactId: string;
+}
+
+// ============================================
+// KNOWLEDGE SYSTEM
+// ============================================
+
+export type ChatFactCategory =
+  | 'preference'
+  | 'schedule'
+  | 'relationship'
+  | 'topic'
+  | 'sentiment'
+  | 'communication'
+  | 'personal'
+  | 'professional';
+
+export type ChatFactSource = 'observed' | 'stated' | 'inferred';
+
+export interface ChatFact {
+  id: string;
+  category: ChatFactCategory;
+  content: string;
+  confidence: number; // 0-100
+  source: ChatFactSource;
+  firstObserved: string; // ISO timestamp
+  lastObserved: string; // ISO timestamp
+  mentions: number; // how many times this fact was reinforced
+}
+
+export interface ChatKnowledge {
+  chatId: string;
+  facts: ChatFact[];
+  conversationTone?: string;
+  primaryLanguage?: string;
+  topicHistory: string[];
+  relationshipType?: string;
+  updatedAt: string;
+  createdAt: string;
+}
+
+// ============================================
+// HISTORY LOADING
+// ============================================
+
+export interface HistoryLoadProgress {
+  chatId: string;
+  oldestLoadedMessageId: string | null; // null = haven't started
+  totalMessagesProcessed: number;
+  totalBatchesProcessed: number;
+  isComplete: boolean; // true = reached end of history
+  lastProcessedAt: string; // ISO timestamp
 }
 
 /**

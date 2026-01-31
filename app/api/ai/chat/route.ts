@@ -18,6 +18,9 @@ interface AiChatBody {
   provider?: AiProvider;
   ollamaModel?: string;
   ollamaBaseUrl?: string;
+  // Optional enrichments from unified pipeline
+  knowledgeContext?: string;
+  writingStyleContext?: string;
 }
 
 export async function POST(request: NextRequest) {
@@ -31,6 +34,8 @@ export async function POST(request: NextRequest) {
       provider = 'anthropic',
       ollamaModel = 'deepseek-v3',
       ollamaBaseUrl,
+      knowledgeContext,
+      writingStyleContext,
     } = body;
 
     if (!userMessage) {
@@ -67,7 +72,7 @@ When drafting replies:
 - If providing multiple options, use separate <draft> tags for each one
 - You can include explanatory text before or after the draft tags
 
-Be helpful, concise, and friendly in your responses.`;
+Be helpful, concise, and friendly in your responses.${knowledgeContext ? `\n\nKnown information about ${senderName}:\n<knowledge>\n${knowledgeContext}\n</knowledge>` : ''}${writingStyleContext ? `\n\nWhen drafting replies, match this writing style:\n<writing_style>\n${writingStyleContext}\n</writing_style>` : ''}`;
 
     const responseText = await callAiProvider({
       provider,

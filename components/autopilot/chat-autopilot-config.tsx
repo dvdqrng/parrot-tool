@@ -202,7 +202,7 @@ export function ChatAutopilotConfig({ chatId, chatName, latestMessage }: ChatAut
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Mode:</span>
-                <span>{config.mode === 'self-driving' ? 'Self-Driving' : 'Manual Approval'}</span>
+                <span>{config.mode === 'observer' ? 'Observer' : config.mode === 'suggest' ? 'Suggest' : config.mode === 'self-driving' ? 'Self-Driving' : 'Manual Approval'}</span>
               </div>
               {config.mode === 'self-driving' && (
                 <div className="flex justify-between">
@@ -316,12 +316,14 @@ export function ChatAutopilotConfig({ chatId, chatName, latestMessage }: ChatAut
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="observer">Observer</SelectItem>
+                  <SelectItem value="suggest">Suggest</SelectItem>
                   <SelectItem value="manual-approval">Manual Approval</SelectItem>
                   <SelectItem value="self-driving">Self-Driving</SelectItem>
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
-                {selectedMode === 'manual-approval' ? 'Review before sending' : 'Fully automatic'}
+                {selectedMode === 'observer' ? 'Read and learn only' : selectedMode === 'suggest' ? 'Suggests drafts in AI panel' : selectedMode === 'manual-approval' ? 'Review before sending' : 'Fully automatic'}
               </p>
             </div>
 

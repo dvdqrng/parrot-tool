@@ -118,10 +118,18 @@ export const STORAGE_KEYS = {
   AUTOPILOT_HANDOFFS: 'parrot-autopilot-handoffs',
   CACHE_TIMESTAMP: 'parrot-cache-timestamp',
   // CRM storage keys
+  CHAT_KNOWLEDGE: 'parrot-chat-knowledge',
   CRM_CONTACTS: 'parrot-crm-contacts',
   CRM_TAGS: 'parrot-crm-tags',
   CRM_CHAT_MAPPINGS: 'parrot-crm-chat-mappings',
+  HISTORY_LOAD_PROGRESS: 'parrot-history-load-progress',
 } as const;
+
+/**
+ * Default observer agent ID
+ * Used for quick "Invite Agent" (level 1 observer mode)
+ */
+export const DEFAULT_OBSERVER_AGENT_ID = '__default-observer__';
 
 /**
  * Feature flags

@@ -157,7 +157,9 @@
       "Bash(# Check if NEXT_PUBLIC env vars are baked into the build grep -r \"\"NEXT_PUBLIC_SUPABASE\"\" \"\"/Volumes/Parrot Installer 19/Parrot.app/Contents/Resources/app/.next/standalone/.next/static\"\")",
       "Bash(gh workflow run:*)",
       "Bash(gh release download:*)",
-      "Bash(git revert:*)"
+      "Bash(git revert:*)",
+      "Bash(xargs basename:*)",
+      "Bash(npx next build:*)"
     ]
   }
 }

@@ -12,17 +12,13 @@ import { KanbanCard, BeeperMessage, BeeperAttachment } from '@/lib/types';
 import { getPlatformInfo } from '@/lib/beeper-client';
 import {
   loadSettings,
-  loadToneSettings,
-  loadWritingStylePatterns,
   updateThreadContextWithNewMessages,
   getThreadContext,
   formatThreadContextForPrompt,
-  getAiChatForThread,
-  formatAiChatSummaryForPrompt,
   ThreadContextMessage,
   getPendingActionsForChat,
 } from '@/lib/storage';
-import { getAIHeaders, getEffectiveAiProvider } from '@/lib/api-headers';
+import { useAiPipeline } from '@/hooks/use-ai-pipeline';
 import { logger } from '@/lib/logger';
 import { Loader2, ChevronUp, Users, X, MessagesSquare, RefreshCw, User } from 'lucide-react';
 import { MessageBottomSection } from '@/components/message-bottom-section';
@@ -93,6 +89,8 @@ export function MessagePanel({
   const platform = message?.platform || draft?.platform || 'unknown';
   const platformData = getPlatformInfo(platform);
 
+  const { generateDraft } = useAiPipeline();
+
   // Get autopilot context to listen for config changes
   const { configVersion } = useAutopilot();
 
@@ -132,6 +130,9 @@ export function MessagePanel({
   // Map status to glow class
   const getAutopilotGlowClass = () => {
     if (!isAutopilotActive || !autopilotStatus) return null;
+
+    // Observer mode: no glow, just a passive indicator
+    if (autopilotConfig?.mode === 'observer') return null;
 
     // If status is active but has pending scheduled actions, show waiting state
     if (autopilotStatus === 'active' && hasPendingActions) {
@@ -390,49 +391,12 @@ export function MessagePanel({
 
     setIsGenerating(true);
     try {
-      const settings = loadSettings();
-      const toneSettings = loadToneSettings();
-      const writingStyle = loadWritingStylePatterns();
-      const headers: HeadersInit = { 'Content-Type': 'application/json' };
-      if (settings.anthropicApiKey && settings.aiProvider === 'anthropic') {
-        headers['x-anthropic-key'] = settings.anthropicApiKey;
-      } else if (settings.openaiApiKey && settings.aiProvider === 'openai') {
-        headers['x-openai-key'] = settings.openaiApiKey;
-      }
-
       const senderName = message?.senderName || draft?.recipientName || 'Unknown';
       const originalText = message?.text || draft?.originalText || '';
 
-      // Get persistent thread context
-      const threadContext = getThreadContext(chatId);
-      const threadContextStr = formatThreadContextForPrompt(threadContext);
-
-      // Get AI chat history for this thread
-      const aiChatHistory = getAiChatForThread(chatId);
-      const aiChatSummary = formatAiChatSummaryForPrompt(aiChatHistory);
-
-      const response = await fetch('/api/ai/draft', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          originalMessage: originalText,
-          senderName,
-          toneSettings,
-          writingStyle: writingStyle.sampleMessages.length > 0 ? writingStyle : undefined,
-          threadContext: threadContextStr,
-          aiChatSummary,
-          // Provider settings
-          provider: getEffectiveAiProvider(settings),
-          ollamaModel: settings.ollamaModel,
-          ollamaBaseUrl: settings.ollamaBaseUrl,
-        }),
-      });
-
-      const result = await response.json();
-      if (result.data?.suggestedReply) {
-        setDraftText(result.data.suggestedReply);
-      } else if (result.error) {
-        toast.error(result.error);
+      const result = await generateDraft(chatId, originalText, senderName);
+      if (result.text) {
+        setDraftText(result.text);
       }
     } catch (error) {
       logger.error('Failed to generate suggestion:', error instanceof Error ? error : String(error));
@@ -440,7 +404,7 @@ export function MessagePanel({
     } finally {
       setIsGenerating(false);
     }
-  }, [message, draft, chatId]);
+  }, [message, draft, chatId, generateDraft]);
 
   // Send message
   const handleSend = useCallback(async () => {

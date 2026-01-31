@@ -21,16 +21,10 @@ import { KanbanCard, BeeperMessage } from '@/lib/types';
 import { getPlatformInfo } from '@/lib/beeper-client';
 import {
   loadSettings,
-  loadToneSettings,
-  loadWritingStylePatterns,
   updateThreadContextWithNewMessages,
-  getThreadContext,
-  formatThreadContextForPrompt,
-  getAiChatForThread,
-  formatAiChatSummaryForPrompt,
   ThreadContextMessage,
 } from '@/lib/storage';
-import { getEffectiveAiProvider } from '@/lib/api-headers';
+import { useAiPipeline } from '@/hooks/use-ai-pipeline';
 import { Loader2, ChevronUp, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { MessageBottomSection } from '@/components/message-bottom-section';
@@ -159,52 +153,17 @@ export function MessageModal({
     fetchHistory(newLimit);
   }, [historyLimit, fetchHistory]);
 
+  const { generateDraft } = useAiPipeline();
+
   // Generate AI suggestion
   const generateAISuggestion = useCallback(async () => {
     if (!message || !chatId) return;
 
     setIsGenerating(true);
     try {
-      const settings = loadSettings();
-      const toneSettings = loadToneSettings();
-      const writingStyle = loadWritingStylePatterns();
-      const headers: HeadersInit = { 'Content-Type': 'application/json' };
-      if (settings.anthropicApiKey) {
-        headers['x-anthropic-key'] = settings.anthropicApiKey;
-      }
-      if (settings.openaiApiKey) {
-        headers['x-openai-key'] = settings.openaiApiKey;
-      }
-
-      // Get persistent thread context
-      const threadContext = getThreadContext(chatId);
-      const threadContextStr = formatThreadContextForPrompt(threadContext);
-
-      // Get AI chat history for this thread
-      const aiChatHistory = getAiChatForThread(chatId);
-      const aiChatSummary = formatAiChatSummaryForPrompt(aiChatHistory);
-
-      const response = await fetch('/api/ai/draft', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          originalMessage: message.text,
-          senderName: message.senderName,
-          toneSettings,
-          writingStyle: writingStyle.sampleMessages.length > 0 ? writingStyle : undefined,
-          threadContext: threadContextStr,
-          aiChatSummary,
-          provider: getEffectiveAiProvider(settings),
-          ollamaModel: settings.ollamaModel,
-          ollamaBaseUrl: settings.ollamaBaseUrl,
-        }),
-      });
-
-      const result = await response.json();
-      if (result.data?.suggestedReply) {
-        setDraftText(result.data.suggestedReply);
-      } else if (result.error) {
-        toast.error(result.error);
+      const result = await generateDraft(chatId, message.text, message.senderName);
+      if (result.text) {
+        setDraftText(result.text);
       }
     } catch (error) {
       logger.error('Failed to generate suggestion:', error instanceof Error ? error : String(error));
@@ -212,7 +171,7 @@ export function MessageModal({
     } finally {
       setIsGenerating(false);
     }
-  }, [message, chatId]);
+  }, [message, chatId, generateDraft]);
 
   // Send message
   const handleSend = useCallback(async () => {

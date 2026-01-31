@@ -31,6 +31,8 @@ interface GenerateDraftBody {
   emojiOnlyResponse?: boolean;
   suggestClosing?: boolean;
   messagesInConversation?: number;
+  // Optional enrichments from unified pipeline
+  knowledgeContext?: string;
 }
 
 export async function POST(request: NextRequest) {
@@ -55,6 +57,7 @@ export async function POST(request: NextRequest) {
       emojiOnlyResponse = false,
       suggestClosing = false,
       messagesInConversation = 0,
+      knowledgeContext,
     } = body;
 
     // For autopilot mode with goals, originalMessage can be empty (proactive messages)
@@ -175,13 +178,16 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Build context sections
+    // Build context sections — clarify roles so AI doesn't confuse sender/receiver
     let contextSection = '';
     if (threadContext) {
-      contextSection += `\n\nConversation history with ${senderName}:\n<conversation>\n${threadContext}\n</conversation>`;
+      contextSection += `\n\nConversation history between you ("Me") and ${senderName}:\n<conversation>\n${threadContext}\n</conversation>\nIMPORTANT: In the conversation above, "Me" is YOU — the person whose replies you are drafting. "${senderName}" is the OTHER person you are replying to. You must draft a reply AS "Me", responding TO ${senderName}.`;
     }
     if (aiChatSummary) {
       contextSection += `\n\nRecent AI assistant discussion about this conversation:\n<ai_discussion>\n${aiChatSummary}\n</ai_discussion>`;
+    }
+    if (knowledgeContext) {
+      contextSection += `\n\nKnown information about ${senderName}:\n<knowledge>\n${knowledgeContext}\n</knowledge>`;
     }
 
     // Build goal detection section (for autopilot)
@@ -258,10 +264,10 @@ This user: "${writingStyle.sampleMessages[0]}"`);
       }
     }
 
-    // Build system prompt
+    // Build system prompt — clearly establish who the AI is drafting for
     const baseSystemPrompt = agentSystemPrompt
-      ? `You are an AI acting as a human in a conversation. Your responses should be completely natural and human-like.\n\n${agentSystemPrompt}\n\n${toneInstruction}`
-      : `You are helping draft message replies that sound exactly like the user wrote them. ${toneInstruction}`;
+      ? `You are an AI acting as "Me" in a conversation with ${senderName}. You are drafting replies on behalf of "Me" — the user. ${senderName} is the OTHER person. Your responses should be completely natural and human-like.\n\n${agentSystemPrompt}\n\n${toneInstruction}`
+      : `You are drafting message replies on behalf of "Me" (the user) in a conversation with ${senderName}. Your replies must sound exactly like the user wrote them. You are NOT ${senderName} — you are replying TO ${senderName}. ${toneInstruction}`;
 
     const systemPrompt = `${baseSystemPrompt}${writingStyleSection}${fewShotExamples}${contextSection}
 ${languageInstruction}${conversationClosingSection}${fatigueHint}
@@ -289,9 +295,9 @@ ${goalDetectionSection}`;
 
     const userPrompt = originalMessage
       ? (conversationContext
-          ? `Context from conversation:\n${conversationContext}\n\nMessage from ${senderName}:\n"${originalMessage}"\n\nSuggest a reply:`
-          : `Message from ${senderName}:\n"${originalMessage}"\n\nSuggest a reply:`)
-      : `Generate a proactive message to start or continue this conversation naturally.
+          ? `Context from conversation:\n${conversationContext}\n\n${senderName} just sent this message:\n"${originalMessage}"\n\nDraft a reply as "Me" (replying to ${senderName}):`
+          : `${senderName} just sent this message:\n"${originalMessage}"\n\nDraft a reply as "Me" (replying to ${senderName}):`)
+      : `Generate a proactive message from "Me" to ${senderName} to start or continue this conversation naturally.
 ${agentGoal ? `Work towards your goal: "${agentGoal}"` : 'Keep the conversation going naturally.'}
 
 Consider the conversation history and create an engaging, contextual message. Output ONLY the message text, nothing else.`;

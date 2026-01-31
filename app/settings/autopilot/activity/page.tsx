@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Activity, Brain, MessageSquare, AlertCircle, Clock, Filter, LucideIcon, BellOff, Smile, Zap, MessageCircleOff } from 'lucide-react';
+import { Activity, Brain, MessageSquare, AlertCircle, Clock, Filter, LucideIcon, BellOff, Smile, Zap, MessageCircleOff, BookOpen, CheckCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -31,6 +31,9 @@ const ACTIVITY_ICONS: Record<AutopilotActivityType, LucideIcon> = {
   'emoji-only-sent': Smile,
   'conversation-closing': MessageCircleOff,
   'fatigue-reduced': Zap,
+  'history-loading': BookOpen,
+  'history-complete': CheckCircle,
+  'knowledge-updated': BookOpen,
 };
 
 const ACTIVITY_LABELS: Record<AutopilotActivityType, string> = {
@@ -49,6 +52,9 @@ const ACTIVITY_LABELS: Record<AutopilotActivityType, string> = {
   'emoji-only-sent': 'Emoji Response',
   'conversation-closing': 'Suggested Closing',
   'fatigue-reduced': 'Fatigue Applied',
+  'history-loading': 'Loading History',
+  'history-complete': 'History Complete',
+  'knowledge-updated': 'Knowledge Updated',
 };
 
 export default function ActivityLogPage() {
