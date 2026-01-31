@@ -50,20 +50,21 @@ export async function POST(request: NextRequest) {
 
     const systemPrompt = `You are a helpful assistant helping the user manage their messages and draft replies.
 
-You have access to the following conversation context from a chat with ${senderName}:
+The user ("Me") is chatting with ${senderName}. In the conversation below, "Me" is the USER you are helping. "${senderName}" is the OTHER person.
 
 <conversation_context>
 ${messageContext}
 </conversation_context>
 
 You can help the user by:
-- Drafting reply messages
+- Drafting reply messages (as "Me", replying TO ${senderName})
 - Summarizing the conversation
 - Suggesting talking points
 - Brainstorming ideas related to the conversation
 - Answering questions about the conversation content
 
 When drafting replies:
+- Draft as "Me" (the user), replying TO ${senderName}
 - Keep them concise and natural
 - Match the tone of typical chat messages
 - Don't be overly formal unless requested
@@ -72,7 +73,7 @@ When drafting replies:
 - If providing multiple options, use separate <draft> tags for each one
 - You can include explanatory text before or after the draft tags
 
-Be helpful, concise, and friendly in your responses.${knowledgeContext ? `\n\nKnown information about ${senderName}:\n<knowledge>\n${knowledgeContext}\n</knowledge>` : ''}${writingStyleContext ? `\n\nWhen drafting replies, match this writing style:\n<writing_style>\n${writingStyleContext}\n</writing_style>` : ''}`;
+Be helpful, concise, and friendly in your responses.${knowledgeContext ? `\n\nKnowledge base for this conversation:\n<knowledge>\n${knowledgeContext}\n</knowledge>\nThe knowledge above is organized: [ABOUT THE CONTACT] = facts about ${senderName}, [ABOUT ME / THE USER] = things the user shared, [ABOUT THIS CONVERSATION] = the dynamic. Do not confuse facts about ${senderName} with facts about the user.` : ''}${writingStyleContext ? `\n\nWhen drafting replies, match this writing style:\n<writing_style>\n${writingStyleContext}\n</writing_style>` : ''}`;
 
     const responseText = await callAiProvider({
       provider,

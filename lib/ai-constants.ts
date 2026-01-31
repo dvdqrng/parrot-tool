@@ -13,6 +13,7 @@ export const AI_TOKENS = {
   DRAFT: 300,           // Draft generation
   CHAT: 1024,           // AI chat assistant
   SUMMARY: 500,         // Conversation summary
+  KNOWLEDGE: 1024,      // Knowledge extraction (JSON with multiple facts)
 } as const;
 
 // Temperature settings for different use cases

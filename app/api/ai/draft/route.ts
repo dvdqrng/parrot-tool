@@ -187,7 +187,7 @@ export async function POST(request: NextRequest) {
       contextSection += `\n\nRecent AI assistant discussion about this conversation:\n<ai_discussion>\n${aiChatSummary}\n</ai_discussion>`;
     }
     if (knowledgeContext) {
-      contextSection += `\n\nKnown information about ${senderName}:\n<knowledge>\n${knowledgeContext}\n</knowledge>`;
+      contextSection += `\n\nKnowledge base for this conversation:\n<knowledge>\n${knowledgeContext}\n</knowledge>\nThe knowledge above is organized into sections: [ABOUT THE CONTACT] = facts about ${senderName}, [ABOUT ME / THE USER] = things you ("Me") have shared in this conversation, [ABOUT THIS CONVERSATION] = the overall dynamic. Use this to draft an informed, consistent reply as "Me" to ${senderName}. Do NOT confuse facts about ${senderName} with facts about yourself.`;
     }
 
     // Build goal detection section (for autopilot)

@@ -569,6 +569,8 @@ export function clearAllData(): void {
     STORAGE_KEYS.AUTOPILOT_ACTIVITY,
     STORAGE_KEYS.AUTOPILOT_SCHEDULED,
     STORAGE_KEYS.AUTOPILOT_HANDOFFS,
+    STORAGE_KEYS.CHAT_KNOWLEDGE,
+    STORAGE_KEYS.HISTORY_LOAD_PROGRESS,
   ];
 
   keysToRemove.forEach(key => {
@@ -1224,13 +1226,31 @@ export function searchCrmContacts(query: string): CrmContactProfile[] {
 // CHAT KNOWLEDGE STORAGE
 // ============================================
 
-const MAX_FACTS_PER_CHAT = 50;
+const MAX_FACTS_PER_ENTITY = 25;
 
 function loadAllKnowledge(): Record<string, ChatKnowledge> {
   if (typeof window === 'undefined') return {};
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.CHAT_KNOWLEDGE);
-    return raw ? JSON.parse(raw) : {};
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    // Migrate old format: if any entry has `facts` array (old single-list format), clear it
+    let needsMigration = false;
+    for (const key of Object.keys(parsed)) {
+      const k = parsed[key];
+      if (k.facts && !k.contactFacts) {
+        delete parsed[key];
+        needsMigration = true;
+      }
+    }
+    if (needsMigration) {
+      // Persist the cleanup
+      localStorage.setItem(STORAGE_KEYS.CHAT_KNOWLEDGE, JSON.stringify(parsed));
+      // Reset history load progress so chats get re-processed with new extraction
+      localStorage.removeItem(STORAGE_KEYS.HISTORY_LOAD_PROGRESS);
+      logger.debug('[Knowledge] Migrated old knowledge format — cleared stale data and reset history loader');
+    }
+    return parsed;
   } catch {
     return {};
   }
@@ -1253,9 +1273,18 @@ export function saveChatKnowledge(knowledge: ChatKnowledge): void {
 }
 
 /**
- * Merge new facts into existing knowledge for a chat.
- * Deduplicates by content similarity, updates confidence/mentions for existing facts,
- * and prunes to MAX_FACTS_PER_CHAT by removing lowest confidence facts.
+ * Clear all knowledge data and reset history load progress so it re-extracts.
+ */
+export function clearAllKnowledge(): void {
+  if (typeof window === 'undefined') return;
+  localStorage.removeItem(STORAGE_KEYS.CHAT_KNOWLEDGE);
+  localStorage.removeItem(STORAGE_KEYS.HISTORY_LOAD_PROGRESS);
+}
+
+/**
+ * Merge new facts into the appropriate entity buckets for a chat.
+ * Facts are sorted into contactFacts, userFacts, or conversationFacts based on aboutEntity.
+ * Deduplicates by content similarity, updates confidence/mentions for existing facts.
  */
 export function mergeChatFacts(
   chatId: string,
@@ -1272,31 +1301,41 @@ export function mergeChatFacts(
 
   const knowledge: ChatKnowledge = existing || {
     chatId,
-    facts: [],
+    contactFacts: [],
+    userFacts: [],
+    conversationFacts: [],
     topicHistory: [],
     createdAt: now,
     updatedAt: now,
   };
 
-  // Merge facts
+  // Ensure arrays exist (handles partially migrated data)
+  if (!knowledge.contactFacts) knowledge.contactFacts = [];
+  if (!knowledge.userFacts) knowledge.userFacts = [];
+  if (!knowledge.conversationFacts) knowledge.conversationFacts = [];
+
+  // Merge facts into the right bucket
   for (const newFact of newFacts) {
-    const existingIdx = knowledge.facts.findIndex(
+    const bucket = newFact.aboutEntity === 'contact' ? knowledge.contactFacts
+      : newFact.aboutEntity === 'user' ? knowledge.userFacts
+      : knowledge.conversationFacts;
+
+    const existingIdx = bucket.findIndex(
       f => f.category === newFact.category &&
            f.content.toLowerCase() === newFact.content.toLowerCase()
     );
 
     if (existingIdx >= 0) {
       // Update existing fact - boost confidence and mentions
-      const existing = knowledge.facts[existingIdx];
-      knowledge.facts[existingIdx] = {
-        ...existing,
-        confidence: Math.min(100, Math.max(existing.confidence, newFact.confidence) + 5),
-        mentions: existing.mentions + 1,
+      const existingFact = bucket[existingIdx];
+      bucket[existingIdx] = {
+        ...existingFact,
+        confidence: Math.min(100, Math.max(existingFact.confidence, newFact.confidence) + 5),
+        mentions: existingFact.mentions + 1,
         lastObserved: now,
       };
     } else {
-      // Add new fact
-      knowledge.facts.push({
+      bucket.push({
         ...newFact,
         firstObserved: now,
         lastObserved: now,
@@ -1305,10 +1344,12 @@ export function mergeChatFacts(
     }
   }
 
-  // Prune to max facts - sort by confidence (desc), keep top N
-  if (knowledge.facts.length > MAX_FACTS_PER_CHAT) {
-    knowledge.facts.sort((a, b) => b.confidence - a.confidence);
-    knowledge.facts = knowledge.facts.slice(0, MAX_FACTS_PER_CHAT);
+  // Prune each bucket independently
+  for (const bucket of [knowledge.contactFacts, knowledge.userFacts, knowledge.conversationFacts]) {
+    if (bucket.length > MAX_FACTS_PER_ENTITY) {
+      bucket.sort((a, b) => b.confidence - a.confidence);
+      bucket.length = MAX_FACTS_PER_ENTITY;
+    }
   }
 
   // Update metadata if provided
@@ -1317,7 +1358,6 @@ export function mergeChatFacts(
     if (metadata.primaryLanguage) knowledge.primaryLanguage = metadata.primaryLanguage;
     if (metadata.relationshipType) knowledge.relationshipType = metadata.relationshipType;
     if (metadata.topicHistory) {
-      // Merge topic history, keeping unique entries, max 20
       const topics = new Set([...knowledge.topicHistory, ...metadata.topicHistory]);
       knowledge.topicHistory = Array.from(topics).slice(-20);
     }
@@ -1328,44 +1368,64 @@ export function mergeChatFacts(
   return knowledge;
 }
 
-/**
- * Format knowledge into a string for inclusion in AI prompts.
- */
-export function formatKnowledgeForPrompt(knowledge: ChatKnowledge | null): string {
-  if (!knowledge || knowledge.facts.length === 0) return '';
-
-  const lines: string[] = [];
-
-  if (knowledge.conversationTone) {
-    lines.push(`Conversation tone: ${knowledge.conversationTone}`);
-  }
-  if (knowledge.primaryLanguage) {
-    lines.push(`Primary language: ${knowledge.primaryLanguage}`);
-  }
-  if (knowledge.relationshipType) {
-    lines.push(`Relationship: ${knowledge.relationshipType}`);
-  }
-
-  // Group facts by category
+function formatFactsList(facts: ChatFact[]): string {
+  if (facts.length === 0) return '';
   const byCategory = new Map<string, ChatFact[]>();
-  for (const fact of knowledge.facts) {
+  for (const fact of facts) {
     const existing = byCategory.get(fact.category) || [];
     existing.push(fact);
     byCategory.set(fact.category, existing);
   }
-
-  for (const [category, facts] of byCategory) {
-    lines.push(`\n${category.charAt(0).toUpperCase() + category.slice(1)}:`);
-    for (const fact of facts.sort((a, b) => b.confidence - a.confidence)) {
-      lines.push(`- ${fact.content} (confidence: ${fact.confidence}%)`);
+  const lines: string[] = [];
+  for (const [category, catFacts] of byCategory) {
+    lines.push(`${category.charAt(0).toUpperCase() + category.slice(1)}:`);
+    for (const fact of catFacts.sort((a, b) => b.confidence - a.confidence)) {
+      lines.push(`- ${fact.content}`);
     }
   }
+  return lines.join('\n');
+}
 
+/**
+ * Format knowledge into structured sections for AI prompts.
+ * Returns an object with separate sections for contact, user, and conversation knowledge.
+ */
+export function formatKnowledgeForPrompt(knowledge: ChatKnowledge | null): string {
+  if (!knowledge) return '';
+
+  const totalFacts = (knowledge.contactFacts?.length || 0) +
+    (knowledge.userFacts?.length || 0) +
+    (knowledge.conversationFacts?.length || 0);
+  if (totalFacts === 0) return '';
+
+  const sections: string[] = [];
+
+  // Conversation-level metadata
+  const meta: string[] = [];
+  if (knowledge.conversationTone) meta.push(`Conversation tone: ${knowledge.conversationTone}`);
+  if (knowledge.primaryLanguage) meta.push(`Primary language: ${knowledge.primaryLanguage}`);
+  if (knowledge.relationshipType) meta.push(`Relationship: ${knowledge.relationshipType}`);
   if (knowledge.topicHistory.length > 0) {
-    lines.push(`\nRecent topics: ${knowledge.topicHistory.slice(-5).join(', ')}`);
+    meta.push(`Recent topics: ${knowledge.topicHistory.slice(-5).join(', ')}`);
+  }
+  if (meta.length > 0) sections.push(meta.join('\n'));
+
+  // Contact facts
+  if (knowledge.contactFacts?.length > 0) {
+    sections.push(`[ABOUT THE CONTACT]\n${formatFactsList(knowledge.contactFacts)}`);
   }
 
-  return lines.join('\n');
+  // User facts (what I've shared in this conversation)
+  if (knowledge.userFacts?.length > 0) {
+    sections.push(`[ABOUT ME / THE USER]\n${formatFactsList(knowledge.userFacts)}`);
+  }
+
+  // Conversation facts
+  if (knowledge.conversationFacts?.length > 0) {
+    sections.push(`[ABOUT THIS CONVERSATION]\n${formatFactsList(knowledge.conversationFacts)}`);
+  }
+
+  return sections.join('\n\n');
 }
 
 // ============================================

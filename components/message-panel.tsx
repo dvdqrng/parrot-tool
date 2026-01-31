@@ -43,6 +43,7 @@ interface MessagePanelProps {
   onMessageContextChange?: (context: string, senderName: string) => void;
   onMessagesLoaded?: (chatId: string, messages: Array<{ timestamp: string; isFromMe: boolean }>) => void;
   aiEnabled?: boolean;
+  onSaveAttachmentToMemory?: (attachment: BeeperAttachment) => void;
 }
 
 interface ChatMessage {
@@ -69,6 +70,7 @@ export function MessagePanel({
   onMessageContextChange,
   onMessagesLoaded,
   aiEnabled = true,
+  onSaveAttachmentToMemory,
 }: MessagePanelProps) {
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
@@ -131,8 +133,8 @@ export function MessagePanel({
   const getAutopilotGlowClass = () => {
     if (!isAutopilotActive || !autopilotStatus) return null;
 
-    // Observer mode: no glow, just a passive indicator
-    if (autopilotConfig?.mode === 'observer') return null;
+    // Observer and suggest modes: no glow, just a passive indicator
+    if (autopilotConfig?.mode === 'observer' || autopilotConfig?.mode === 'suggest') return null;
 
     // If status is active but has pending scheduled actions, show waiting state
     if (autopilotStatus === 'active' && hasPendingActions) {
@@ -595,7 +597,7 @@ export function MessagePanel({
                         {/* Media attachments */}
                         {hasMedia && (
                           <div className={hasText ? "mb-2" : ""}>
-                            <MediaAttachments attachments={msg.attachments!} isFromMe={msg.isFromMe} />
+                            <MediaAttachments attachments={msg.attachments!} isFromMe={msg.isFromMe} onSaveToMemory={onSaveAttachmentToMemory} />
                           </div>
                         )}
                         {/* Text content */}

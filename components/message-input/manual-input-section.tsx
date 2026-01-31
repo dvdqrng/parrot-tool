@@ -30,6 +30,8 @@ interface ManualInputSectionProps {
   onToggleInviteOverlay?: () => void;
   selectedLevel?: AutopilotMode;
   onLevelChange?: (mode: AutopilotMode) => void;
+  selectedDuration?: number;
+  onDurationChange?: (minutes: number) => void;
   templates?: AgentTemplate[];
   selectedTemplateId?: string | null;
   onTemplateSelect?: (templateId: string | null) => void;
@@ -42,7 +44,7 @@ interface ManualInputSectionProps {
   selectedAgentId?: string;
   lastActivity?: AutopilotActivityEntry | null;
   schedulerStatus?: SchedulerStatus;
-  onModeChange?: (mode: AutopilotMode) => void;
+  onModeChange?: (mode: AutopilotMode, durationMinutes?: number) => void;
   onAgentChange?: (agentId: string) => void;
   onPause?: () => void;
   onResume?: () => void;
@@ -56,12 +58,36 @@ interface ManualInputSectionProps {
   isRegeneratingDraft?: boolean;
 }
 
-const LEVEL_OPTIONS: SegmentedControlItem<AutopilotMode>[] = [
+// Top-level 3-segment control
+type TopLevelMode = 'observer' | 'suggest' | 'autopilot';
+
+const TOP_LEVEL_OPTIONS: SegmentedControlItem<TopLevelMode>[] = [
   { value: 'observer', label: 'Observer', icon: Eye },
   { value: 'suggest', label: 'Suggest', icon: Lightbulb },
-  { value: 'manual-approval', label: 'Approval', icon: Hand },
-  { value: 'self-driving', label: 'Auto', icon: Zap },
+  { value: 'autopilot', label: 'Autopilot', icon: Zap },
 ];
+
+// Sub-toggle within Autopilot
+const AUTOPILOT_SUB_OPTIONS: SegmentedControlItem<'manual-approval' | 'self-driving'>[] = [
+  { value: 'manual-approval', label: 'Approval', icon: Hand },
+  { value: 'self-driving', label: 'Self-Driving', icon: Zap },
+];
+
+const DURATION_OPTIONS = [
+  { value: 10, label: '10m' },
+  { value: 30, label: '30m' },
+  { value: 60, label: '1h' },
+  { value: 120, label: '2h' },
+  { value: 480, label: '8h' },
+];
+
+function toTopLevel(mode: AutopilotMode): TopLevelMode {
+  return mode === 'manual-approval' || mode === 'self-driving' ? 'autopilot' : mode;
+}
+
+function getAutopilotSubMode(mode: AutopilotMode): 'manual-approval' | 'self-driving' {
+  return mode === 'self-driving' ? 'self-driving' : 'manual-approval';
+}
 
 export function ManualInputSection({
   draftText,
@@ -78,6 +104,8 @@ export function ManualInputSection({
   onToggleInviteOverlay,
   selectedLevel,
   onLevelChange,
+  selectedDuration = 30,
+  onDurationChange,
   templates,
   selectedTemplateId,
   onTemplateSelect,
@@ -144,6 +172,72 @@ export function ManualInputSection({
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [overlayOpen, onToggleInviteOverlay]);
 
+  // Shared mode selector UI (used in both pre-invite overlay and active agent panel)
+  const renderModeSelector = (
+    currentMode: AutopilotMode,
+    onModeSelect: (mode: AutopilotMode, duration?: number) => void,
+    duration: number,
+    onDurationSelect?: (minutes: number) => void,
+  ) => {
+    const topLevel = toTopLevel(currentMode);
+    const subMode = getAutopilotSubMode(currentMode);
+
+    return (
+      <div className="space-y-2">
+        {/* Top-level 3-segment control */}
+        <SegmentedControl
+          items={TOP_LEVEL_OPTIONS}
+          value={topLevel}
+          onValueChange={(value) => {
+            if (value === 'observer') onModeSelect('observer');
+            else if (value === 'suggest') onModeSelect('suggest');
+            else onModeSelect('manual-approval'); // Autopilot defaults to approval
+          }}
+        />
+
+        {/* Autopilot sub-toggle */}
+        {topLevel === 'autopilot' && (
+          <>
+            <SegmentedControl
+              items={AUTOPILOT_SUB_OPTIONS}
+              value={subMode}
+              onValueChange={(value) => {
+                if (value === 'self-driving') {
+                  onModeSelect('self-driving', duration);
+                } else {
+                  onModeSelect('manual-approval');
+                }
+              }}
+            />
+
+            {/* Duration pills for self-driving */}
+            {subMode === 'self-driving' && (
+              <div className="flex gap-1.5">
+                {DURATION_OPTIONS.map(opt => (
+                  <button
+                    key={opt.value}
+                    onClick={() => {
+                      onDurationSelect?.(opt.value);
+                      onModeSelect('self-driving', opt.value);
+                    }}
+                    className={cn(
+                      'rounded-full px-2.5 py-1 text-xs transition-colors',
+                      duration === opt.value
+                        ? 'bg-foreground text-background'
+                        : 'text-muted-foreground hover:text-foreground border'
+                    )}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div>
       {/* Active Agent Inline Panel — sits above the textarea in normal flow */}
@@ -200,12 +294,13 @@ export function ManualInputSection({
                 </p>
               )}
 
-              {/* Mode Segmented Control */}
-              <SegmentedControl
-                items={LEVEL_OPTIONS}
-                value={agentMode!}
-                onValueChange={(mode) => onModeChange?.(mode)}
-              />
+              {/* Mode selector with sub-toggle */}
+              {renderModeSelector(
+                agentMode,
+                (mode, duration) => onModeChange?.(mode, duration),
+                selectedDuration,
+                onDurationChange,
+              )}
             </div>
           )}
 
@@ -293,12 +388,13 @@ export function ManualInputSection({
                         </button>
                       </div>
 
-                      {/* Level Segmented Control */}
-                      <SegmentedControl
-                        items={LEVEL_OPTIONS}
-                        value={selectedLevel!}
-                        onValueChange={(mode) => onLevelChange?.(mode)}
-                      />
+                      {/* Mode selector with sub-toggle */}
+                      {selectedLevel && renderModeSelector(
+                        selectedLevel,
+                        (mode) => onLevelChange?.(mode),
+                        selectedDuration,
+                        onDurationChange,
+                      )}
 
                       {/* Template Carousel (horizontal scroll) */}
                       {templates && templates.length > 0 && (

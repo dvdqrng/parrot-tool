@@ -81,6 +81,7 @@ export interface ExtractedFact {
   content: string;
   confidence: number;
   source: 'observed' | 'stated' | 'inferred';
+  aboutEntity: 'contact' | 'user' | 'conversation';
 }
 
 export interface AiPipelineResponse {

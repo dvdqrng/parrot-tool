@@ -69,6 +69,7 @@ export function MessageBottomSection({
   // Pre-invite overlay state
   const [showInviteOverlay, setShowInviteOverlay] = useState(false);
   const [selectedLevel, setSelectedLevel] = useState<AutopilotMode>('observer');
+  const [selectedDuration, setSelectedDuration] = useState(30);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
 
   // Calculate if autopilot is active
@@ -158,7 +159,7 @@ export function MessageBottomSection({
       shouldTriggerActionRef.current = true;
     }
 
-    enable(agentId, selectedLevel, selectedLevel === 'self-driving' ? 30 : undefined);
+    enable(agentId, selectedLevel, selectedLevel === 'self-driving' ? selectedDuration : undefined);
     notifyConfigChange();
     setShowInviteOverlay(false);
 
@@ -167,9 +168,10 @@ export function MessageBottomSection({
     }
   };
 
-  const handleModeChange = (mode: AutopilotMode) => {
+  const handleModeChange = (mode: AutopilotMode, durationMinutes?: number) => {
     if (!isAutopilotActive) return;
-    setMode(mode, mode === 'self-driving' ? 30 : undefined);
+    const duration = mode === 'self-driving' ? (durationMinutes || selectedDuration) : undefined;
+    setMode(mode, duration);
     notifyConfigChange();
 
     // Trigger processing whenever switching to a non-observer mode
@@ -222,6 +224,8 @@ export function MessageBottomSection({
       onToggleInviteOverlay={() => setShowInviteOverlay(prev => !prev)}
       selectedLevel={selectedLevel}
       onLevelChange={setSelectedLevel}
+      selectedDuration={selectedDuration}
+      onDurationChange={setSelectedDuration}
       templates={AGENT_TEMPLATES}
       selectedTemplateId={selectedTemplateId}
       onTemplateSelect={setSelectedTemplateId}

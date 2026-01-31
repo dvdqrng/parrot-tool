@@ -14,7 +14,7 @@ import {
   ExtractedFact,
 } from '@/lib/ai-pipeline';
 import { mergeChatFacts, generateId } from '@/lib/storage';
-import { ChatFact, ChatFactCategory, ChatFactSource } from '@/lib/types';
+import { ChatFact, ChatFactCategory, ChatFactSource, ChatFactEntity } from '@/lib/types';
 
 export interface DraftOptions {
   agentId?: string;
@@ -168,6 +168,7 @@ export function useAiPipeline() {
         content: f.content,
         confidence: f.confidence,
         source: f.source as ChatFactSource,
+        aboutEntity: (f.aboutEntity || 'contact') as ChatFactEntity,
         firstObserved: new Date().toISOString(),
         lastObserved: new Date().toISOString(),
         mentions: 1,

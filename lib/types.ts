@@ -413,9 +413,25 @@ export interface CrmContactProfile {
   messagesReceived?: number;    // Messages received from this contact
   avgResponseTimeMinutes?: number;           // Average time to respond in minutes
 
+  // Attachments (PDFs, images, documents)
+  attachments?: ContactAttachment[];
+
   // Timestamps
   createdAt: string;
   updatedAt: string;
+}
+
+/**
+ * File attachment on a contact profile
+ */
+export interface ContactAttachment {
+  id: string;
+  fileName: string;       // Original file name
+  storedName: string;     // Name in the attachments directory (unique)
+  mimeType: string;
+  fileSize: number;       // Bytes
+  addedAt: string;        // ISO timestamp
+  note?: string;          // Optional user note about the attachment
 }
 
 /**
@@ -441,7 +457,10 @@ export type ChatFactCategory =
   | 'personal'
   | 'professional';
 
-export type ChatFactSource = 'observed' | 'stated' | 'inferred';
+export type ChatFactSource = 'observed' | 'stated' | 'inferred' | 'manual';
+
+// Who this fact is about
+export type ChatFactEntity = 'contact' | 'user' | 'conversation';
 
 export interface ChatFact {
   id: string;
@@ -449,6 +468,7 @@ export interface ChatFact {
   content: string;
   confidence: number; // 0-100
   source: ChatFactSource;
+  aboutEntity: ChatFactEntity; // who this fact is about
   firstObserved: string; // ISO timestamp
   lastObserved: string; // ISO timestamp
   mentions: number; // how many times this fact was reinforced
@@ -456,7 +476,9 @@ export interface ChatFact {
 
 export interface ChatKnowledge {
   chatId: string;
-  facts: ChatFact[];
+  contactFacts: ChatFact[]; // facts about the other person
+  userFacts: ChatFact[]; // facts about me in context of this conversation
+  conversationFacts: ChatFact[]; // facts about the conversation/relationship itself
   conversationTone?: string;
   primaryLanguage?: string;
   topicHistory: string[];

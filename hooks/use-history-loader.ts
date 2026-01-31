@@ -20,8 +20,8 @@ import {
 import { BeeperMessage, HistoryLoadProgress, AutopilotActivityEntry } from '@/lib/types';
 import { logger } from '@/lib/logger';
 
-const BATCH_SIZE = 200;
-const BATCH_DELAY_MS = 8_000; // 8 seconds between batches
+const BATCH_SIZE = 50;
+const BATCH_DELAY_MS = 30_000; // 30 seconds between batches — gradual background processing
 
 function logActivity(
   chatId: string,

@@ -124,9 +124,12 @@ export function useAutopilotEngine(options: UseAutopilotEngineOptions = {}) {
       return;
     }
 
-    // Observer mode: agent only reads/learns, no draft generation
+    // Observer mode: extract knowledge but skip draft generation
     if (config.mode === 'observer') {
-      logger.engine('Observer mode - skipping draft generation', { chatId });
+      logger.engine('Observer mode - extracting knowledge, skipping draft generation', { chatId });
+      extractKnowledge(chatId, senderName).catch(err => {
+        logger.debug('[Autopilot] Observer knowledge extraction failed (non-critical):', err);
+      });
       return;
     }
 

@@ -83,8 +83,8 @@ function MessageCardComponent({ card, onClick, onArchive, onUnarchive, onHide, o
   const getAutopilotGlowClass = () => {
     if (!autopilotConfig?.enabled || !autopilotConfig.status) return null;
 
-    // Observer mode: no glow, just a passive indicator
-    if (autopilotConfig.mode === 'observer') return null;
+    // Observer and suggest modes: no glow, just a passive indicator
+    if (autopilotConfig.mode === 'observer' || autopilotConfig.mode === 'suggest') return null;
 
     // If status is active but has pending scheduled actions, show waiting state
     if (autopilotConfig.status === 'active' && hasPendingActions) {

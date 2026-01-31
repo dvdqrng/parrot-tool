@@ -18,4 +18,11 @@ contextBridge.exposeInMainWorld('electron', {
     ipcRenderer.on('update-status', handler);
     return () => ipcRenderer.removeListener('update-status', handler);
   },
+  // File attachments
+  selectFiles: () => ipcRenderer.invoke('select-files'),
+  copyFileToAttachments: (sourcePath, storedName) =>
+    ipcRenderer.invoke('copy-file-to-attachments', sourcePath, storedName),
+  deleteAttachmentFile: (storedName) =>
+    ipcRenderer.invoke('delete-attachment-file', storedName),
+  getAttachmentsPath: () => ipcRenderer.invoke('get-attachments-path'),
 });

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { Search, Tag, Trash2, Plus, X, Mail, Building2, MessageSquare, Clock, ArrowUpDown, ArrowUp, ArrowDown, Check } from 'lucide-react';
+import { Search, Tag, Trash2, Plus, X, Mail, Building2, MessageSquare, Clock, ArrowUpDown, ArrowUp, ArrowDown, Check, UserRound } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -54,6 +54,7 @@ interface ContactsViewProps {
   search: (query: string) => CrmContactProfile[];
   updateContact: (contactId: string, updates: Partial<CrmContactProfile>) => void;
   showHeader?: boolean;
+  onContactClick?: (contact: CrmContactProfile) => void;
 }
 
 export function ContactsView({
@@ -67,6 +68,7 @@ export function ContactsView({
   search,
   updateContact,
   showHeader = true,
+  onContactClick,
 }: ContactsViewProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTagFilters, setSelectedTagFilters] = useState<Set<string>>(new Set());
@@ -897,14 +899,27 @@ export function ContactsView({
                           </Button>
                         </div>
                       ) : (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setContactToDelete(contact)}
-                          className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100"
-                        >
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
+                        <div className="flex gap-0.5 justify-end">
+                          {onContactClick && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => onContactClick(contact)}
+                              className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100"
+                              title="View details"
+                            >
+                              <UserRound className="h-4 w-4 text-muted-foreground" />
+                            </Button>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setContactToDelete(contact)}
+                            className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100"
+                          >
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </div>
                       )}
                     </TableCell>
                   </TableRow>

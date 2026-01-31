@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, shell, nativeTheme, ipcMain } = require('electron');
+const { app, BrowserWindow, Menu, shell, nativeTheme, ipcMain, dialog } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const http = require('http');
@@ -324,4 +324,78 @@ ipcMain.handle('check-for-updates', async () => {
 
 ipcMain.handle('install-update', () => {
   autoUpdater.quitAndInstall();
+});
+
+// =============================================================================
+// File Attachments
+// =============================================================================
+
+// Get the attachments directory path
+function getAttachmentsDir() {
+  return path.join(app.getPath('userData'), 'attachments');
+}
+
+// Ensure the attachments directory exists
+function ensureAttachmentsDir() {
+  const dir = getAttachmentsDir();
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+  return dir;
+}
+
+ipcMain.handle('select-files', async () => {
+  if (!mainWindow) return null;
+  const result = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openFile', 'multiSelections'],
+    filters: [
+      { name: 'Documents', extensions: ['pdf', 'doc', 'docx', 'txt', 'rtf', 'csv', 'xls', 'xlsx'] },
+      { name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'heic'] },
+      { name: 'All Files', extensions: ['*'] },
+    ],
+  });
+  if (result.canceled || result.filePaths.length === 0) return null;
+
+  // Return file info for each selected file
+  const files = [];
+  for (const filePath of result.filePaths) {
+    try {
+      const stat = fs.statSync(filePath);
+      files.push({
+        path: filePath,
+        name: path.basename(filePath),
+        size: stat.size,
+      });
+    } catch {
+      // Skip files that can't be read
+    }
+  }
+  return files.length > 0 ? files : null;
+});
+
+ipcMain.handle('copy-file-to-attachments', async (_event, sourcePath, storedName) => {
+  try {
+    const dir = ensureAttachmentsDir();
+    const destPath = path.join(dir, storedName);
+    fs.copyFileSync(sourcePath, destPath);
+    return { success: true, path: destPath };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle('delete-attachment-file', async (_event, storedName) => {
+  try {
+    const filePath = path.join(getAttachmentsDir(), storedName);
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle('get-attachments-path', () => {
+  return ensureAttachmentsDir();
 });

@@ -32,10 +32,11 @@ import { useBatchDraftGenerator } from '@/hooks/use-batch-draft-generator';
 import { useBatchSend } from '@/hooks/use-batch-send';
 import { useSendMessage } from '@/hooks/use-send-message';
 import { useAutopilot } from '@/contexts/autopilot-context';
-import { KanbanCard, ColumnId, BeeperMessage, Draft } from '@/lib/types';
+import { KanbanCard, ColumnId, BeeperMessage, BeeperAttachment, Draft } from '@/lib/types';
 import { useAiPipeline } from '@/hooks/use-ai-pipeline';
 import { useHistoryLoader } from '@/hooks/use-history-loader';
-import { loadHiddenChats, addHiddenChat, getChatAutopilotConfig } from '@/lib/storage';
+import { loadHiddenChats, addHiddenChat, getChatAutopilotConfig, getChatKnowledge, mergeChatFacts, saveChatKnowledge } from '@/lib/storage';
+import { ChatKnowledge, ChatFact, ChatFactEntity, ChatFactCategory, ContactAttachment } from '@/lib/types';
 import { getBeeperHeaders } from '@/lib/api-headers';
 import { toast } from 'sonner';
 
@@ -115,11 +116,11 @@ export default function Home() {
     const autopilot: BeeperMessage[] = [];
     const regularUnread: BeeperMessage[] = [];
 
-    // First, identify all chats with active autopilot by checking unread messages
+    // First, identify all chats with active autopilot (only manual-approval/self-driving modes)
     for (const m of unreadMessages) {
       if (archivedChats.has(m.chatId)) continue;
       const config = getChatAutopilotConfig(m.chatId);
-      if (config?.enabled && config.status === 'active') {
+      if (config?.enabled && config.status === 'active' && (config.mode === 'manual-approval' || config.mode === 'self-driving')) {
         autopilotChatIds.add(m.chatId);
         autopilot.push(m);
       } else if (!draftChatIds.has(m.chatId)) {
@@ -127,12 +128,12 @@ export default function Home() {
       }
     }
 
-    // Also check sent messages for active autopilot (chat could be waiting for reply)
+    // Also check sent messages for active autopilot (only manual-approval/self-driving modes)
     for (const m of sentMessages) {
       if (archivedChats.has(m.chatId)) continue;
       if (autopilotChatIds.has(m.chatId)) continue; // Already added from unread
       const config = getChatAutopilotConfig(m.chatId);
-      if (config?.enabled && config.status === 'active') {
+      if (config?.enabled && config.status === 'active' && (config.mode === 'manual-approval' || config.mode === 'self-driving')) {
         autopilotChatIds.add(m.chatId);
         autopilot.push(m);
       }
@@ -304,8 +305,80 @@ export default function Home() {
     }
   }, [unreadMessages, sentMessages, isLoading, getOrCreateContactForChat, chatInfo, avatars, updateCrmContact, updateInteractionStats]);
 
-  // Get the current contact profile for the selected card
-  const currentContact = currentChatId ? getContactForChat(currentChatId) : null;
+  // Contact selected from the contacts list view (separate from card-based selection)
+  const [selectedListContactId, setSelectedListContactId] = useState<string | null>(null);
+  const selectedListContact = selectedListContactId ? crmContacts[selectedListContactId] || null : null;
+
+  // Get the current contact profile — from list selection or selected card
+  const currentContact = selectedListContact || (currentChatId ? getContactForChat(currentChatId) : null);
+
+  // Load knowledge for current contact (aggregated across all platform links)
+  // Re-reads periodically while panel is open so background extraction results appear
+  const [currentKnowledge, setCurrentKnowledge] = useState<ChatKnowledge | null>(null);
+  // Use contact ID as a stable dependency instead of the contact object
+  const currentContactId = currentContact?.id || null;
+  useEffect(() => {
+    const loadKnowledge = () => {
+      // Look up the contact fresh each time (for polling)
+      const contact = (selectedListContactId ? crmContacts[selectedListContactId] : null)
+        || (currentChatId ? getContactForChat(currentChatId) : null);
+      if (!contact || !isContactProfileOpen) {
+        setCurrentKnowledge(null);
+        return;
+      }
+
+      const links = contact.platformLinks;
+      if (links.length === 0) {
+        setCurrentKnowledge(null);
+        return;
+      }
+
+      if (links.length === 1) {
+        setCurrentKnowledge(getChatKnowledge(links[0].chatId));
+        return;
+      }
+
+      // Aggregate knowledge from all linked chats
+      const allKnowledge = links
+        .map(link => getChatKnowledge(link.chatId))
+        .filter((k): k is ChatKnowledge => k !== null);
+
+      if (allKnowledge.length === 0) { setCurrentKnowledge(null); return; }
+      if (allKnowledge.length === 1) { setCurrentKnowledge(allKnowledge[0]); return; }
+
+      const dedup = (facts: ChatFact[]) => {
+        const seen = new Map<string, ChatFact>();
+        for (const f of facts) {
+          const key = f.content.toLowerCase();
+          const existing = seen.get(key);
+          if (!existing || f.confidence > existing.confidence) {
+            seen.set(key, f);
+          }
+        }
+        return Array.from(seen.values());
+      };
+
+      const merged: ChatKnowledge = {
+        chatId: links[0].chatId,
+        contactFacts: dedup(allKnowledge.flatMap(k => k.contactFacts || [])),
+        userFacts: dedup(allKnowledge.flatMap(k => k.userFacts || [])),
+        conversationFacts: dedup(allKnowledge.flatMap(k => k.conversationFacts || [])),
+        topicHistory: [...new Set(allKnowledge.flatMap(k => k.topicHistory || []))].slice(-20),
+        conversationTone: allKnowledge.find(k => k.conversationTone)?.conversationTone,
+        primaryLanguage: allKnowledge.find(k => k.primaryLanguage)?.primaryLanguage,
+        relationshipType: allKnowledge.find(k => k.relationshipType)?.relationshipType,
+        updatedAt: new Date().toISOString(),
+        createdAt: allKnowledge[0].createdAt,
+      };
+      setCurrentKnowledge(merged);
+    };
+
+    loadKnowledge();
+    if (!currentContactId || !isContactProfileOpen) return;
+    // Poll every 10s to pick up background knowledge extraction results
+    const interval = setInterval(loadKnowledge, 10_000);
+    return () => clearInterval(interval);
+  }, [currentContactId, isContactProfileOpen, currentChatId, selectedListContactId, getContactForChat]);
 
   // Filter helper - check if message passes filter
   const messagePassesFilter = useCallback((message: BeeperMessage) => {
@@ -532,6 +605,7 @@ export default function Home() {
   // Handle closing the message panel
   const handleClosePanel = useCallback(() => {
     setSelectedCard(null);
+    setSelectedListContactId(null);
     setIsAiChatOpen(false);
     setIsContactProfileOpen(false);
   }, []);
@@ -590,6 +664,202 @@ export default function Home() {
       setIsContactProfileOpen(false);
     }
   }, [mergeCrmContacts, currentContact]);
+
+  // Knowledge manual entry handlers
+  const handleAddFact = useCallback((content: string, aboutEntity: ChatFactEntity, category: ChatFactCategory) => {
+    const contact = currentContact;
+    if (!contact || contact.platformLinks.length === 0) return;
+    const chatId = contact.platformLinks[0].chatId;
+    const now = new Date().toISOString();
+    const fact: ChatFact = {
+      id: `manual-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      category,
+      content,
+      confidence: 100,
+      source: 'manual',
+      aboutEntity,
+      firstObserved: now,
+      lastObserved: now,
+      mentions: 1,
+    };
+    mergeChatFacts(chatId, [fact]);
+  }, [currentContact]);
+
+  const handleRemoveFact = useCallback((factId: string, aboutEntity: ChatFactEntity) => {
+    const contact = currentContact;
+    if (!contact || contact.platformLinks.length === 0) return;
+    const chatId = contact.platformLinks[0].chatId;
+    const knowledge = getChatKnowledge(chatId);
+    if (!knowledge) return;
+    const bucketKey = aboutEntity === 'contact' ? 'contactFacts' : aboutEntity === 'user' ? 'userFacts' : 'conversationFacts';
+    knowledge[bucketKey] = knowledge[bucketKey].filter(f => f.id !== factId);
+    knowledge.updatedAt = new Date().toISOString();
+    saveChatKnowledge(knowledge);
+  }, [currentContact]);
+
+  // Attachment handlers
+  const mimeTypes: Record<string, string> = {
+    '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png',
+    '.gif': 'image/gif', '.webp': 'image/webp', '.svg': 'image/svg+xml',
+    '.heic': 'image/heic', '.pdf': 'application/pdf',
+    '.doc': 'application/msword', '.txt': 'text/plain', '.csv': 'text/csv',
+    '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    '.xls': 'application/vnd.ms-excel',
+    '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    '.rtf': 'application/rtf',
+  };
+
+  const processAttachmentFiles = useCallback(async (
+    contact: import('@/lib/types').CrmContactProfile,
+    fileEntries: { name: string; size: number; path?: string; file?: File }[],
+  ) => {
+    const newAttachments: ContactAttachment[] = [];
+
+    for (const entry of fileEntries) {
+      const ext = entry.name.includes('.') ? `.${entry.name.split('.').pop()?.toLowerCase()}` : '';
+      const id = `att-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      const storedName = `${id}${ext}`;
+
+      // Electron path: use IPC to copy file by path
+      if (entry.path && window.electron?.copyFileToAttachments) {
+        const result = await window.electron.copyFileToAttachments(entry.path, storedName);
+        if (!result.success) {
+          toast.error(`Failed to add ${entry.name}`);
+          continue;
+        }
+      }
+      // Browser path: upload via API
+      else if (entry.file) {
+        const formData = new FormData();
+        formData.append('file', entry.file);
+        formData.append('storedName', storedName);
+        const res = await fetch('/api/attachments', { method: 'POST', body: formData });
+        if (!res.ok) {
+          toast.error(`Failed to add ${entry.name}`);
+          continue;
+        }
+      } else {
+        continue;
+      }
+
+      newAttachments.push({
+        id,
+        fileName: entry.name,
+        storedName,
+        mimeType: mimeTypes[ext] || 'application/octet-stream',
+        fileSize: entry.size,
+        addedAt: new Date().toISOString(),
+      });
+    }
+
+    if (newAttachments.length > 0) {
+      const existing = contact.attachments || [];
+      updateCrmContact(contact.id, { attachments: [...existing, ...newAttachments] });
+      toast.success(`Added ${newAttachments.length} attachment${newAttachments.length > 1 ? 's' : ''}`);
+    }
+  }, [updateCrmContact]);
+
+  const handleAddAttachments = useCallback(async () => {
+    const contact = currentContact;
+    if (!contact) return;
+
+    // Electron: use native file dialog
+    if (window.electron?.selectFiles) {
+      const files = await window.electron.selectFiles();
+      if (!files) return;
+      await processAttachmentFiles(
+        contact,
+        files.map(f => ({ name: f.name, size: f.size, path: f.path })),
+      );
+      return;
+    }
+
+    // Browser fallback: hidden file input
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.multiple = true;
+    input.accept = '.pdf,.doc,.docx,.txt,.rtf,.csv,.xls,.xlsx,.jpg,.jpeg,.png,.gif,.webp,.svg,.heic';
+    input.onchange = async () => {
+      const fileList = input.files;
+      if (!fileList || fileList.length === 0) return;
+      const entries = Array.from(fileList).map(f => ({ name: f.name, size: f.size, file: f }));
+      await processAttachmentFiles(contact, entries);
+    };
+    input.click();
+  }, [currentContact, processAttachmentFiles]);
+
+  const handleRemoveAttachment = useCallback(async (attachmentId: string) => {
+    const contact = currentContact;
+    if (!contact?.attachments) return;
+
+    const att = contact.attachments.find(a => a.id === attachmentId);
+    if (att) {
+      // Electron: use IPC
+      if (window.electron?.deleteAttachmentFile) {
+        await window.electron.deleteAttachmentFile(att.storedName);
+      } else {
+        // Browser fallback: use DELETE API
+        await fetch(`/api/attachments?name=${encodeURIComponent(att.storedName)}`, { method: 'DELETE' });
+      }
+    }
+
+    updateCrmContact(contact.id, {
+      attachments: contact.attachments.filter(a => a.id !== attachmentId),
+    });
+  }, [currentContact, updateCrmContact]);
+
+  // Save a chat attachment to the current contact's memory
+  const handleSaveAttachmentToMemory = useCallback(async (attachment: BeeperAttachment) => {
+    const contact = currentContact;
+    if (!contact) {
+      toast.error('No contact selected');
+      return;
+    }
+    if (!attachment.srcURL) {
+      toast.error('Attachment has no source URL');
+      return;
+    }
+
+    try {
+      // Download the media file via the /api/media proxy
+      const mediaUrl = attachment.srcURL.startsWith('file://') || attachment.srcURL.startsWith('http')
+        ? `/api/media?url=${encodeURIComponent(attachment.srcURL)}`
+        : attachment.srcURL;
+
+      const response = await fetch(mediaUrl);
+      if (!response.ok) throw new Error('Failed to download attachment');
+
+      const blob = await response.blob();
+      const fileName = attachment.fileName || `attachment-${Date.now()}`;
+      const ext = fileName.includes('.') ? `.${fileName.split('.').pop()?.toLowerCase()}` : '';
+      const id = `att-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      const storedName = `${id}${ext}`;
+
+      // Upload to attachments storage
+      const formData = new FormData();
+      formData.append('file', blob, storedName);
+      formData.append('storedName', storedName);
+      const uploadRes = await fetch('/api/attachments', { method: 'POST', body: formData });
+      if (!uploadRes.ok) throw new Error('Failed to save attachment');
+
+      const mimeType = attachment.mimeType || blob.type || 'application/octet-stream';
+
+      const newAttachment: ContactAttachment = {
+        id,
+        fileName,
+        storedName,
+        mimeType,
+        fileSize: attachment.fileSize || blob.size,
+        addedAt: new Date().toISOString(),
+      };
+
+      const existing = contact.attachments || [];
+      updateCrmContact(contact.id, { attachments: [...existing, newAttachment] });
+      toast.success(`Saved "${fileName}" to ${contact.displayName}'s memory`);
+    } catch (err) {
+      toast.error('Failed to save attachment to memory');
+    }
+  }, [currentContact, updateCrmContact]);
 
   // Handle message context change from MessagePanel
   const handleMessageContextChange = useCallback((context: string, sender: string) => {
@@ -786,7 +1056,7 @@ export default function Home() {
     );
   }
 
-  const isPanelOpen = selectedCard !== null;
+  const isPanelOpen = selectedCard !== null || selectedListContactId !== null;
 
   // Check if AI features are enabled (default to true for backwards compatibility)
   const aiEnabled = settings.aiEnabled !== false;
@@ -848,6 +1118,10 @@ export default function Home() {
                 search={searchCrmContacts}
                 updateContact={updateCrmContact}
                 showHeader={false}
+                onContactClick={(contact) => {
+                  setSelectedListContactId(contact.id);
+                  setIsContactProfileOpen(true);
+                }}
               />
             </div>
           )}
@@ -927,8 +1201,9 @@ export default function Home() {
           contact={currentContact}
           allContacts={crmContacts}
           tags={crmTags}
+          knowledge={currentKnowledge}
           isOpen={isPanelOpen && isContactProfileOpen}
-          onClose={() => setIsContactProfileOpen(false)}
+          onClose={() => { setIsContactProfileOpen(false); setSelectedListContactId(null); }}
           onSave={handleSaveCrmContact}
           onCreateTag={handleCreateCrmTag}
           onAddTag={handleAddCrmTag}
@@ -936,6 +1211,10 @@ export default function Home() {
           onUnlinkPlatform={handleUnlinkPlatform}
           onMerge={handleMergeCrmContacts}
           onLinkPlatform={handleLinkPlatform}
+          onAddFact={handleAddFact}
+          onRemoveFact={handleRemoveFact}
+          onAddAttachments={handleAddAttachments}
+          onRemoveAttachment={handleRemoveAttachment}
         />
         <MessagePanel
           card={isPanelOpen ? selectedCard : null}
@@ -951,6 +1230,7 @@ export default function Home() {
           onMessageContextChange={aiEnabled ? handleMessageContextChange : undefined}
           onMessagesLoaded={handleMessagesLoaded}
           aiEnabled={aiEnabled}
+          onSaveAttachmentToMemory={handleSaveAttachmentToMemory}
         />
         {aiEnabled && (
           <AiChatPanel
