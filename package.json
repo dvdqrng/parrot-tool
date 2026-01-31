@@ -1,6 +1,6 @@
 {
   "name": "parrot",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Parrot is a Kanban board for managing Beeper messages with AI assistance",
   "main": "electron.js",
   "author": {
