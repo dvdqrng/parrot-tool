@@ -20,6 +20,7 @@ export default function AccountPage() {
   const [updateStatus, setUpdateStatus] = useState<string | null>(null)
   const [updateVersion, setUpdateVersion] = useState<string | null>(null)
   const [isChecking, setIsChecking] = useState(false)
+  const [lastChecked, setLastChecked] = useState<Date | null>(null)
 
   useEffect(() => {
     if (typeof window !== 'undefined' && window.electron) {
@@ -29,7 +30,10 @@ export default function AccountPage() {
       const unsubscribe = window.electron.onUpdateStatus((status) => {
         setUpdateStatus(status.status)
         if (status.version) setUpdateVersion(status.version)
-        if (status.status !== 'checking') setIsChecking(false)
+        if (status.status !== 'checking') {
+          setIsChecking(false)
+          setLastChecked(new Date())
+        }
       })
 
       return unsubscribe
@@ -210,9 +214,18 @@ export default function AccountPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex items-center justify-between">
-              <span className="text-sm text-muted-foreground">Current version</span>
-              <span className="text-sm font-mono">{appVersion}</span>
+              <span className="text-sm text-muted-foreground">Version</span>
+              <span className="text-sm font-mono">Parrot v{appVersion}</span>
             </div>
+
+            {lastChecked && (
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Last checked</span>
+                <span className="text-sm text-muted-foreground">
+                  {lastChecked.toLocaleString()}
+                </span>
+              </div>
+            )}
 
             {updateStatus === 'up-to-date' && (
               <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400">

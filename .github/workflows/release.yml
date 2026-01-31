@@ -2,8 +2,6 @@ name: Release
 
 on:
   push:
-    branches:
-      - main
     tags:
       - 'v*'
 
@@ -29,23 +27,17 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Get version info
-        id: version
-        run: |
-          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
-            TAG="${GITHUB_REF#refs/tags/}"
-            echo "tag=$TAG" >> $GITHUB_OUTPUT
-            echo "name=$TAG" >> $GITHUB_OUTPUT
-          else
-            VERSION=$(node -p "require('./package.json').version")
-            SHORT_SHA=$(git rev-parse --short HEAD)
-            TIMESTAMP=$(date +%Y%m%d%H%M%S)
-            echo "tag=v${VERSION}-${TIMESTAMP}-${SHORT_SHA}" >> $GITHUB_OUTPUT
-            echo "name=v${VERSION} (${SHORT_SHA})" >> $GITHUB_OUTPUT
-          fi
+      - name: Build Next.js
+        run: npm run build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
 
-      - name: Build Electron app (macOS)
-        run: npm run electron:build
+      - name: Copy static files
+        run: npm run build:copy-static
+
+      - name: Build and publish Electron app
+        run: npx electron-builder --mac --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_LINK: ${{ secrets.CSC_LINK }}
@@ -53,15 +45,3 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
-
-      - name: Create Release
-        run: |
-          gh release create "${{ steps.version.outputs.tag }}" \
-            --title "${{ steps.version.outputs.name }}" \
-            --generate-notes \
-            --latest \
-            dist/*.dmg
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

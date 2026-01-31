@@ -28,7 +28,7 @@
     "start": "next start",
     "lint": "eslint",
     "electron:dev": "ELECTRON_RUN_AS_NODE= NODE_ENV=development electron electron.js",
-    "electron:build": "npm run build && npm run build:copy-static && node scripts/build-with-version.js",
+    "electron:build": "npm run build && npm run build:copy-static && npx electron-builder --mac",
     "build:copy-static": "echo 'Static files already included in standalone build'",
     "electron:build:mac": "./build-mac.sh",
     "electron:build:win": "npm run build && npm run build:copy-static-win && electron-builder --win",
