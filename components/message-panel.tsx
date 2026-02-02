@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback, useEffect, useRef } from 'react';
+import { useChatHistory } from '@/hooks/use-chat-history';
 import { formatDistanceToNow } from 'date-fns';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -8,14 +9,11 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { KanbanCard, BeeperMessage, BeeperAttachment } from '@/lib/types';
+import { KanbanCard, BeeperAttachment } from '@/lib/types';
 import { getPlatformInfo } from '@/lib/beeper-client';
 import {
-  loadSettings,
-  updateThreadContextWithNewMessages,
   getThreadContext,
   formatThreadContextForPrompt,
-  ThreadContextMessage,
   getPendingActionsForChat,
 } from '@/lib/storage';
 import { useAiPipeline } from '@/hooks/use-ai-pipeline';
@@ -46,16 +44,6 @@ interface MessagePanelProps {
   onSaveAttachmentToMemory?: (attachment: BeeperAttachment) => void;
 }
 
-interface ChatMessage {
-  id: string;
-  text: string;
-  timestamp: string;
-  isFromMe: boolean;
-  senderName: string;
-  senderAvatarUrl?: string;
-  attachments?: BeeperAttachment[];
-}
-
 export function MessagePanel({
   card,
   onClose,
@@ -72,16 +60,11 @@ export function MessagePanel({
   aiEnabled = true,
   onSaveAttachmentToMemory,
 }: MessagePanelProps) {
-  const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
-  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
-  const [hasMoreHistory, setHasMoreHistory] = useState(true);
   const [draftText, setDraftText] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [sendSuccess, setSendSuccess] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const [initialLoadDone, setInitialLoadDone] = useState(false);
 
   const isOpen = card !== null;
   const message = card?.message;
@@ -169,145 +152,26 @@ export function MessagePanel({
     }
   }, [chatId, autopilotConfig, isAutopilotActive, autopilotStatus, hasPendingActions]);
 
-  // Fetch chat history using limit-based fetching, merging with existing messages
-  const fetchHistory = useCallback(async (limit: number, isLoadMore = false) => {
-    if (!chatId) return;
+  // Unified chat history: handles initial load, polling, load-more, and auto-load
+  const history = useChatHistory(chatId, {
+    autoLoadAll: !!isAutopilotActive,
+    initialLimit: 20,
+    pollInterval: isOpen ? 5000 : 0,
+    senderName: message?.senderName || draft?.recipientName || 'Unknown',
+    onMessagesLoaded,
+  });
 
-    logger.debug(`[FetchHistory] Starting fetch: limit=${limit}, isLoadMore=${isLoadMore}, chatId=${chatId}`);
-
-    // Only show loading indicator for initial load or explicit load more
-    // Don't show loading for background polling to avoid UI flicker
-    if (isLoadMore) {
-      setIsLoadingMore(true);
-    }
-
-    try {
-      const settings = loadSettings();
-      const headers: HeadersInit = {};
-      if (settings.beeperAccessToken) {
-        headers['x-beeper-token'] = settings.beeperAccessToken;
-      }
-
-      // Use limit parameter to fetch N most recent messages
-      const response = await fetch(
-        `/api/beeper/chats?chatId=${encodeURIComponent(chatId)}&limit=${limit}`,
-        { headers }
-      );
-      const result = await response.json();
-      logger.debug(`[FetchHistory] Got ${result.data?.length || 0} messages from API`);
-
-      if (result.data) {
-        const newMessages: ChatMessage[] = result.data.map((m: BeeperMessage) => ({
-          id: m.id,
-          text: m.text,
-          timestamp: m.timestamp,
-          isFromMe: m.isFromMe,
-          senderName: m.senderName,
-          senderAvatarUrl: m.senderAvatarUrl,
-          attachments: m.attachments,
-        }));
-
-        // Merge with existing messages - keep all unique messages by ID
-        // Only update state if there are actually new messages to avoid unnecessary re-renders
-        setChatHistory(prev => {
-          const existingIds = new Set(prev.map(m => m.id));
-          const uniqueNewMessages = newMessages.filter(m => !existingIds.has(m.id));
-
-          // If no new messages, return the same array reference to prevent re-render
-          if (uniqueNewMessages.length === 0) {
-            logger.debug(`[FetchHistory] No new messages, skipping update`);
-            return prev;
-          }
-
-          logger.debug(`[FetchHistory] Adding ${uniqueNewMessages.length} new unique messages (had ${prev.length})`);
-          const merged = [...prev, ...uniqueNewMessages];
-          // Sort by timestamp (oldest first for chat display)
-          return merged.sort((a, b) =>
-            new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
-          );
-        });
-
-        // If we got fewer messages than requested, there's no more history
-        setHasMoreHistory(newMessages.length >= limit);
-
-        // Save to persistent thread context (for AI)
-        const senderName = message?.senderName || draft?.recipientName || 'Unknown';
-        const contextMessages: ThreadContextMessage[] = newMessages.map(m => ({
-          id: m.id,
-          text: m.text,
-          isFromMe: m.isFromMe,
-          senderName: m.senderName,
-          timestamp: m.timestamp,
-        }));
-        updateThreadContextWithNewMessages(chatId, senderName, contextMessages);
-
-        // Notify parent about loaded messages for CRM stats tracking
-        if (onMessagesLoaded && newMessages.length > 0) {
-          onMessagesLoaded(chatId, newMessages.map(m => ({
-            timestamp: m.timestamp,
-            isFromMe: m.isFromMe,
-          })));
-        }
-      }
-    } catch (error) {
-      logger.error('Failed to fetch chat history:', error instanceof Error ? error : String(error));
-      toast.error('Failed to load chat history');
-    } finally {
-      if (isLoadMore) {
-        setIsLoadingMore(false);
-      }
-    }
-  }, [chatId, message?.senderName, draft?.recipientName, onMessagesLoaded]);
-
-  // Load initial history when panel opens with a new card
+  // Initialize draft text when panel opens
   useEffect(() => {
     if (isOpen && chatId) {
-      // Initialize draft text from existing draft, or clear it
       setDraftText(draft?.draftText || '');
-      setInitialLoadDone(false);
-
-      // First, load persisted messages from ThreadContext (instant display)
-      const threadContext = getThreadContext(chatId);
-      if (threadContext && threadContext.messages.length > 0) {
-        // Convert ThreadContextMessage to ChatMessage for display
-        const persistedMessages: ChatMessage[] = threadContext.messages.map(m => ({
-          id: m.id,
-          text: m.text,
-          timestamp: m.timestamp,
-          isFromMe: m.isFromMe,
-          senderName: m.senderName,
-          senderAvatarUrl: undefined, // ThreadContext doesn't store avatars
-          attachments: undefined, // ThreadContext doesn't store attachments
-        }));
-        setChatHistory(persistedMessages);
-        setHasMoreHistory(true); // Assume there's more history available
-      } else {
-        setChatHistory([]);
-      }
-
-      // Then fetch recent messages from API to get any new ones (and full message data with attachments)
-      // Start with 20 messages - show loading only for initial load
-      setIsLoadingHistory(true);
-      fetchHistory(20).then(() => {
-        setIsLoadingHistory(false);
-        setInitialLoadDone(true);
-        // Ensure scroll to bottom after initial load completes
-        requestAnimationFrame(() => {
-          const viewport = scrollRef.current?.querySelector('[data-slot="scroll-area-viewport"]');
-          if (viewport) {
-            viewport.scrollTop = viewport.scrollHeight;
-          }
-        });
-      }).catch(() => {
-        setIsLoadingHistory(false);
-      });
     }
-  }, [isOpen, chatId, draft?.draftText, draft?.updatedAt, message?.id, fetchHistory]);
+  }, [isOpen, chatId, draft?.draftText, draft?.updatedAt, message?.id]);
 
-  // Auto-scroll to bottom when chat history changes
+  // Auto-scroll to bottom when messages change, but NOT during batch auto-loading
   useEffect(() => {
-    if (scrollRef.current && chatHistory.length > 0) {
-      // Use requestAnimationFrame to ensure DOM has updated before scrolling
+    if (history.isAutoLoading) return;
+    if (scrollRef.current && history.messages.length > 0) {
       requestAnimationFrame(() => {
         const viewport = scrollRef.current?.querySelector('[data-slot="scroll-area-viewport"]');
         if (viewport) {
@@ -315,37 +179,7 @@ export function MessagePanel({
         }
       });
     }
-  }, [chatHistory]);
-
-  // Poll for new messages when panel is open
-  useEffect(() => {
-    if (!isOpen || !chatId || !initialLoadDone) return;
-
-    const pollInterval = setInterval(() => {
-      // Fetch with the current limit we've loaded
-      const currentLimit = loadedLimitRef.current[chatId] || 20;
-      logger.debug(`[MessagePanel] Polling for new messages (limit: ${currentLimit})`);
-      fetchHistory(currentLimit, false);
-    }, 5000); // Poll every 5 seconds
-
-    return () => clearInterval(pollInterval);
-  }, [isOpen, chatId, initialLoadDone, fetchHistory]);
-
-  // Track how many messages we've loaded for this chat
-  const loadedLimitRef = useRef<Record<string, number>>({});
-
-  // Load more messages (increase limit)
-  const handleLoadMore = useCallback(() => {
-    if (!chatId) {
-      logger.debug('[LoadMore] No chatId, returning');
-      return;
-    }
-    const currentLimit = loadedLimitRef.current[chatId] || 20;
-    const newLimit = currentLimit + 20; // Add 20 more messages each time
-    loadedLimitRef.current[chatId] = newLimit;
-    logger.debug(`[LoadMore] Fetching ${newLimit} messages for chat ${chatId}`);
-    fetchHistory(newLimit, true);
-  }, [chatId, fetchHistory]);
+  }, [history.messages, history.isAutoLoading]);
 
   // Generate AI suggestion
   const generateAISuggestion = useCallback(async () => {
@@ -380,16 +214,15 @@ export function MessagePanel({
       setSendSuccess(true);
       // Reset success state after 2 seconds
       setTimeout(() => setSendSuccess(false), 2000);
-      // Refresh history after sending - use the limit we've loaded for this chat
-      const limitToFetch = loadedLimitRef.current[chatId] || 20;
-      setTimeout(() => fetchHistory(limitToFetch), 500);
+      // Refresh history after sending to pick up the new message
+      setTimeout(() => history.refresh(), 500);
     } catch (error) {
       // Error handling is done in parent
       setSendSuccess(false);
     } finally {
       setIsSending(false);
     }
-  }, [draftText, onSend, chatId, fetchHistory]);
+  }, [draftText, onSend, chatId, history]);
 
   // Save draft
   const handleSaveDraft = useCallback(() => {
@@ -417,7 +250,7 @@ export function MessagePanel({
         onMessageContextChange(context, senderName);
       }
     }
-  }, [chatHistory, chatId, message, draft, onMessageContextChange]);
+  }, [history.messages, chatId, message, draft, onMessageContextChange]);
 
   const title = card?.title || '';
   const initials = title
@@ -494,15 +327,15 @@ export function MessagePanel({
           <ScrollArea className="flex-1 min-h-0 w-full" ref={scrollRef}>
             <div className="p-4 space-y-3 overflow-hidden">
               {/* Load more button */}
-              {hasMoreHistory && !isLoadingHistory && (
+              {history.hasMore && !history.isLoading && (
                 <Button
                   variant="ghost"
                   size="sm"
                   className="w-full"
-                  onClick={handleLoadMore}
-                  disabled={isLoadingMore}
+                  onClick={history.loadMore}
+                  disabled={history.isLoadingMore}
                 >
-                  {isLoadingMore ? (
+                  {history.isLoadingMore ? (
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" strokeWidth={2} />
                   ) : (
                     <ChevronUp className="h-4 w-4 mr-2" strokeWidth={2} />
@@ -511,16 +344,16 @@ export function MessagePanel({
                 </Button>
               )}
 
-              {isLoadingHistory ? (
+              {history.isLoading ? (
                 <div className="flex justify-center py-8">
                   <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" strokeWidth={2} />
                 </div>
-              ) : chatHistory.length === 0 ? (
+              ) : history.messages.length === 0 ? (
                 <div className="text-center py-8 text-xs text-muted-foreground">
                   No messages found
                 </div>
               ) : (
-                chatHistory.map((msg) => {
+                history.messages.map((msg) => {
                   const hasMedia = msg.attachments && msg.attachments.length > 0;
                   const hasText = msg.text && msg.text.trim().length > 0;
 

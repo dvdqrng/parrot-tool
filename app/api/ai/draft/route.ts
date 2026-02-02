@@ -383,12 +383,7 @@ Consider the conversation history and create an engaging, contextual message. Ou
     // Log raw AI response for debugging
     logger.debug('[Draft] Raw AI response:', { suggestedReply: suggestedReply.slice(0, 500) });
 
-    // Extract final answer if model outputs reasoning (especially for Ollama/reasoning models)
-    suggestedReply = extractFinalAnswer(suggestedReply);
-
-    logger.debug('[Draft] After extractFinalAnswer:', { suggestedReply: suggestedReply.slice(0, 500) });
-
-    // Parse the response - extract reply and goal analysis
+    // Parse the response - extract goal analysis FIRST (before any text cleaning)
     let finalReply = suggestedReply.trim();
     let goalAnalysis: GoalAnalysis | undefined;
 
@@ -407,6 +402,14 @@ Consider the conversation history and create an engaging, contextual message. Ou
     }
 
     logger.debug('[Draft] After goal extraction:', { finalReply: finalReply.slice(0, 500), goalAnalysis });
+
+    // Extract final answer only for reasoning models (Ollama/DeepSeek) that wrap
+    // replies in <think> tags or emit chain-of-thought. Anthropic and OpenAI follow
+    // instructions directly and this aggressive cleaning destroys valid replies.
+    if (provider === 'ollama') {
+      finalReply = extractFinalAnswer(finalReply);
+      logger.debug('[Draft] After extractFinalAnswer (ollama):', { finalReply: finalReply.slice(0, 500) });
+    }
 
     // Validate that we have a meaningful reply
     const looksLikeJson = /^\s*\{[\s\S]*\}\s*$/.test(finalReply);

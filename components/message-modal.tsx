@@ -17,14 +17,10 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { KanbanCard, BeeperMessage } from '@/lib/types';
+import { KanbanCard } from '@/lib/types';
 import { getPlatformInfo } from '@/lib/beeper-client';
-import {
-  loadSettings,
-  updateThreadContextWithNewMessages,
-  ThreadContextMessage,
-} from '@/lib/storage';
 import { useAiPipeline } from '@/hooks/use-ai-pipeline';
+import { useChatHistory } from '@/hooks/use-chat-history';
 import { Loader2, ChevronUp, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { MessageBottomSection } from '@/components/message-bottom-section';
@@ -47,15 +43,6 @@ function getAvatarSrc(url?: string): string | undefined {
   return url;
 }
 
-interface ChatMessage {
-  id: string;
-  text: string;
-  timestamp: string;
-  isFromMe: boolean;
-  senderName: string;
-  senderAvatarUrl?: string;
-}
-
 export function MessageModal({
   open,
   onOpenChange,
@@ -64,94 +51,27 @@ export function MessageModal({
   onSaveDraft,
   aiEnabled = true,
 }: MessageModalProps) {
-  const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
-  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
-  const [hasMoreHistory, setHasMoreHistory] = useState(true);
   const [draftText, setDraftText] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSending, setIsSending] = useState(false);
-  const [historyLimit, setHistoryLimit] = useState(2);
 
   const message = card?.message;
   const chatId = message?.chatId || null;
   const platform = message?.platform || 'unknown';
   const platformData = getPlatformInfo(platform);
 
-  // Fetch chat history
-  const fetchHistory = useCallback(async (limit: number) => {
-    if (!chatId) return;
+  const history = useChatHistory(open ? chatId : null, {
+    initialLimit: 2,
+    pollInterval: 0, // No polling in modal
+    senderName: message?.senderName,
+  });
 
-    const isLoadMore = limit > 2;
-    if (isLoadMore) {
-      setIsLoadingMore(true);
-    } else {
-      setIsLoadingHistory(true);
-    }
-
-    try {
-      const settings = loadSettings();
-      const headers: HeadersInit = {};
-      if (settings.beeperAccessToken) {
-        headers['x-beeper-token'] = settings.beeperAccessToken;
-      }
-
-      const response = await fetch(
-        `/api/beeper/chats?chatId=${encodeURIComponent(chatId)}&limit=${limit}`,
-        { headers }
-      );
-      const result = await response.json();
-
-      if (result.data) {
-        const messages: ChatMessage[] = result.data.map((m: BeeperMessage) => ({
-          id: m.id,
-          text: m.text,
-          timestamp: m.timestamp,
-          isFromMe: m.isFromMe,
-          senderName: m.senderName,
-          senderAvatarUrl: m.senderAvatarUrl,
-        }));
-        // Reverse to show oldest first (for chat-style display)
-        const sortedMessages = messages.reverse();
-        setChatHistory(sortedMessages);
-        setHasMoreHistory(messages.length >= limit);
-
-        // Save to persistent thread context
-        if (message) {
-          const contextMessages: ThreadContextMessage[] = sortedMessages.map(m => ({
-            id: m.id,
-            text: m.text,
-            isFromMe: m.isFromMe,
-            senderName: m.senderName,
-            timestamp: m.timestamp,
-          }));
-          updateThreadContextWithNewMessages(chatId, message.senderName, contextMessages);
-        }
-      }
-    } catch (error) {
-      logger.error('Failed to fetch chat history:', error instanceof Error ? error : String(error));
-      toast.error('Failed to load chat history');
-    } finally {
-      setIsLoadingHistory(false);
-      setIsLoadingMore(false);
-    }
-  }, [chatId, message]);
-
-  // Load initial history when modal opens
+  // Reset draft when modal opens
   useEffect(() => {
     if (open && chatId) {
-      setHistoryLimit(2);
       setDraftText('');
-      fetchHistory(2);
     }
-  }, [open, chatId, fetchHistory]);
-
-  // Load more messages
-  const handleLoadMore = useCallback(() => {
-    const newLimit = historyLimit + 10;
-    setHistoryLimit(newLimit);
-    fetchHistory(newLimit);
-  }, [historyLimit, fetchHistory]);
+  }, [open, chatId]);
 
   const { generateDraft } = useAiPipeline();
 
@@ -181,14 +101,14 @@ export function MessageModal({
     try {
       await onSend(draftText);
       setDraftText('');
-      // Refresh history after sending
-      setTimeout(() => fetchHistory(historyLimit), 500);
+      // Refresh history after sending to pick up the new message
+      setTimeout(() => history.refresh(), 500);
     } catch (error) {
       // Error handling is done in parent
     } finally {
       setIsSending(false);
     }
-  }, [draftText, onSend, fetchHistory, historyLimit]);
+  }, [draftText, onSend, history]);
 
   // Save draft
   const handleSaveDraft = useCallback(() => {
@@ -244,15 +164,15 @@ export function MessageModal({
           <ScrollArea className="h-[250px] pr-4">
             <div className="space-y-3">
               {/* Load more button */}
-              {hasMoreHistory && !isLoadingHistory && (
+              {history.hasMore && !history.isLoading && (
                 <Button
                   variant="ghost"
                   size="sm"
                   className="w-full"
-                  onClick={handleLoadMore}
-                  disabled={isLoadingMore}
+                  onClick={history.loadMore}
+                  disabled={history.isLoadingMore}
                 >
-                  {isLoadingMore ? (
+                  {history.isLoadingMore ? (
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" strokeWidth={2} />
                   ) : (
                     <ChevronUp className="h-4 w-4 mr-2" strokeWidth={2} />
@@ -261,16 +181,16 @@ export function MessageModal({
                 </Button>
               )}
 
-              {isLoadingHistory ? (
+              {history.isLoading ? (
                 <div className="flex justify-center py-8">
                   <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" strokeWidth={2} />
                 </div>
-              ) : chatHistory.length === 0 ? (
+              ) : history.messages.length === 0 ? (
                 <div className="text-center py-8 text-sm text-muted-foreground">
                   No messages found
                 </div>
               ) : (
-                chatHistory.map((msg) => (
+                history.messages.map((msg) => (
                   <div
                     key={msg.id}
                     className={`flex flex-col ${msg.isFromMe ? 'items-end' : 'items-start'}`}

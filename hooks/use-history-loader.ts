@@ -17,7 +17,8 @@ import {
   saveHistoryLoadProgress,
   addAutopilotActivityEntry,
 } from '@/lib/storage';
-import { BeeperMessage, HistoryLoadProgress, AutopilotActivityEntry } from '@/lib/types';
+import { BeeperMessage, AutopilotActivityEntry } from '@/lib/types';
+import { fetchChatMessages } from './use-chat-history';
 import { logger } from '@/lib/logger';
 
 const BATCH_SIZE = 50;
@@ -53,33 +54,6 @@ function formatMessagesForExtraction(messages: BeeperMessage[]): string {
     .join('\n');
 }
 
-/**
- * Fetch a batch of messages for a chat, skipping already-processed ones.
- */
-async function fetchMessageBatch(
-  chatId: string,
-  skip: number,
-  beeperToken: string,
-): Promise<BeeperMessage[]> {
-  const params = new URLSearchParams({
-    chatId,
-    limit: String(BATCH_SIZE),
-    skip: String(skip),
-  });
-
-  const headers: HeadersInit = {};
-  if (beeperToken) {
-    headers['x-beeper-token'] = beeperToken;
-  }
-
-  const response = await fetch(`/api/beeper/chats?${params}`, { headers });
-  if (!response.ok) {
-    throw new Error(`Failed to fetch messages: ${response.status}`);
-  }
-
-  const result = await response.json();
-  return (result.data as BeeperMessage[]) || [];
-}
 
 export function useHistoryLoader(configVersion?: number) {
   const { extractKnowledge } = useAiPipeline();
@@ -107,15 +81,16 @@ export function useHistoryLoader(configVersion?: number) {
       return;
     }
 
-    logger.debug(`[HistoryLoader] Starting deep history load for ${chatId}, skip=${progress.totalMessagesProcessed}`);
+    logger.debug(`[HistoryLoader] Starting deep history load for ${chatId}, cursor=${progress.nextCursor || 'none'}, processed=${progress.totalMessagesProcessed}`);
     logActivity(chatId, agentId, 'history-loading', { messagesProcessed: progress.totalMessagesProcessed });
+
+    let currentCursor = progress.nextCursor || null;
 
     while (!signal.aborted) {
       try {
-        const messages = await fetchMessageBatch(
+        const { messages, nextCursor } = await fetchChatMessages(
           chatId,
-          progress.totalMessagesProcessed,
-          beeperToken,
+          { limit: BATCH_SIZE, cursor: currentCursor, beeperToken },
         );
 
         if (signal.aborted) break;
@@ -125,6 +100,7 @@ export function useHistoryLoader(configVersion?: number) {
           progress = {
             ...progress,
             isComplete: true,
+            nextCursor: null,
             lastProcessedAt: new Date().toISOString(),
           };
           saveHistoryLoadProgress(progress);
@@ -148,13 +124,15 @@ export function useHistoryLoader(configVersion?: number) {
 
         if (signal.aborted) break;
 
-        // Update progress
+        // Update cursor and progress
+        currentCursor = nextCursor;
         const oldestMessage = messages[messages.length - 1];
         progress = {
           ...progress,
           oldestLoadedMessageId: oldestMessage?.id || progress.oldestLoadedMessageId,
           totalMessagesProcessed: progress.totalMessagesProcessed + messages.length,
           totalBatchesProcessed: progress.totalBatchesProcessed + 1,
+          nextCursor: nextCursor,
           lastProcessedAt: new Date().toISOString(),
         };
         saveHistoryLoadProgress(progress);
@@ -164,7 +142,7 @@ export function useHistoryLoader(configVersion?: number) {
 
         // End of history if we got fewer than requested
         if (messages.length < BATCH_SIZE) {
-          progress = { ...progress, isComplete: true };
+          progress = { ...progress, isComplete: true, nextCursor: null };
           saveHistoryLoadProgress(progress);
           logActivity(chatId, agentId, 'history-complete', { messagesProcessed: progress.totalMessagesProcessed });
           logger.debug(`[HistoryLoader] Chat ${chatId} fully processed (partial batch)`);

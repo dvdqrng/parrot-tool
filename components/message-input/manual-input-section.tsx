@@ -35,6 +35,9 @@ interface ManualInputSectionProps {
   templates?: AgentTemplate[];
   selectedTemplateId?: string | null;
   onTemplateSelect?: (templateId: string | null) => void;
+  existingAgents?: AutopilotAgent[];
+  selectedExistingAgentId?: string | null;
+  onExistingAgentSelect?: (agentId: string | null) => void;
   onInviteAgent?: () => void;
   // Active agent inline panel
   agentActive?: boolean;
@@ -109,6 +112,9 @@ export function ManualInputSection({
   templates,
   selectedTemplateId,
   onTemplateSelect,
+  existingAgents,
+  selectedExistingAgentId,
+  onExistingAgentSelect,
   onInviteAgent,
   agentActive,
   agentStatus,
@@ -394,6 +400,34 @@ export function ManualInputSection({
                         (mode) => onLevelChange?.(mode),
                         selectedDuration,
                         onDurationChange,
+                      )}
+
+                      {/* Existing Agents Carousel (horizontal scroll) */}
+                      {existingAgents && existingAgents.length > 0 && (
+                        <div>
+                          <p className="text-xs text-muted-foreground mb-1.5">Your Agents</p>
+                          <ScrollArea className="w-full">
+                            <div className="flex gap-2 pb-2">
+                              {existingAgents.map((agent) => (
+                                <button
+                                  key={agent.id}
+                                  onClick={() => onExistingAgentSelect?.(
+                                    selectedExistingAgentId === agent.id ? null : agent.id
+                                  )}
+                                  className={cn(
+                                    'flex-shrink-0 flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs transition-all',
+                                    selectedExistingAgentId === agent.id
+                                      ? 'border-foreground bg-foreground/5 text-foreground font-medium'
+                                      : 'border-border text-muted-foreground hover:border-foreground/30 hover:text-foreground'
+                                  )}
+                                >
+                                  <span className="whitespace-nowrap">{agent.name}</span>
+                                </button>
+                              ))}
+                            </div>
+                            <ScrollBar orientation="horizontal" />
+                          </ScrollArea>
+                        </div>
                       )}
 
                       {/* Template Carousel (horizontal scroll) */}

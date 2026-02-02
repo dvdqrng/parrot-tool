@@ -71,6 +71,7 @@ export function MessageBottomSection({
   const [selectedLevel, setSelectedLevel] = useState<AutopilotMode>('observer');
   const [selectedDuration, setSelectedDuration] = useState(30);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
+  const [selectedExistingAgentId, setSelectedExistingAgentId] = useState<string | null>(null);
 
   // Calculate if autopilot is active
   const isAutopilotActive = isEnabled && status !== 'inactive';
@@ -124,7 +125,10 @@ export function MessageBottomSection({
 
     let agentId: string;
 
-    if (selectedTemplateId) {
+    if (selectedExistingAgentId) {
+      // Use the selected existing agent directly
+      agentId = selectedExistingAgentId;
+    } else if (selectedTemplateId) {
       // Create agent from selected template
       const template = AGENT_TEMPLATES.find(t => t.id === selectedTemplateId);
       if (template) {
@@ -143,7 +147,7 @@ export function MessageBottomSection({
         agentId = ensureDefaultObserverAgent();
       }
     } else {
-      // No template selected — use default observer agent
+      // No template or agent selected — use default observer agent
       agentId = ensureDefaultObserverAgent();
     }
 
@@ -228,7 +232,16 @@ export function MessageBottomSection({
       onDurationChange={setSelectedDuration}
       templates={AGENT_TEMPLATES}
       selectedTemplateId={selectedTemplateId}
-      onTemplateSelect={setSelectedTemplateId}
+      onTemplateSelect={(id: string | null) => {
+        setSelectedTemplateId(id);
+        if (id) setSelectedExistingAgentId(null);
+      }}
+      existingAgents={agents}
+      selectedExistingAgentId={selectedExistingAgentId}
+      onExistingAgentSelect={(id: string | null) => {
+        setSelectedExistingAgentId(id);
+        if (id) setSelectedTemplateId(null);
+      }}
       onInviteAgent={handleInviteAgent}
       // Active agent overlay
       agentActive={isAutopilotActive}

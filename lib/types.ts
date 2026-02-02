@@ -498,6 +498,7 @@ export interface HistoryLoadProgress {
   totalBatchesProcessed: number;
   isComplete: boolean; // true = reached end of history
   lastProcessedAt: string; // ISO timestamp
+  nextCursor?: string | null; // cursor for resuming pagination
 }
 
 /**

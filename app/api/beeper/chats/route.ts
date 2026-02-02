@@ -39,7 +39,9 @@ export async function GET(request: NextRequest) {
   const limit = parseInt(searchParams.get('limit') || '20', 10);
   const sinceHours = parseFloat(searchParams.get('sinceHours') || '0');
   const minMessages = parseInt(searchParams.get('minMessages') || '0', 10);
-  // For deep history loading: skip the first N messages (already processed)
+  // Cursor-based pagination: pass the sortKey of the last message to continue from there
+  const cursor = searchParams.get('cursor') || undefined;
+  // Legacy skip-based pagination (used by history loader)
   const skip = parseInt(searchParams.get('skip') || '0', 10);
 
   try {
@@ -50,19 +52,21 @@ export async function GET(request: NextRequest) {
     if (chatId) {
       const messages: BeeperMessage[] = [];
       let skipped = 0;
+      let lastSortKey: string | null = null;
 
       // Calculate cutoff time if sinceHours is specified
       const cutoffTime = sinceHours > 0
         ? new Date(Date.now() - sinceHours * 60 * 60 * 1000)
         : null;
 
-      // When skip is used (deep history loading), raise the safety cap
-      const safetyLimit = skip > 0 ? skip + limit : 200;
+      // Use cursor-based pagination when a cursor is provided — this lets the
+      // Beeper server jump directly to the right position instead of iterating
+      const listQuery = cursor ? { cursor } : {};
 
       // Iterate until we have enough messages or hit the time cutoff
-      for await (const msg of client.messages.list(chatId)) {
-        // Skip already-processed messages (newest first, so skip the first N)
-        if (skipped < skip) {
+      for await (const msg of client.messages.list(chatId, listQuery)) {
+        // Legacy skip support (for history loader compatibility)
+        if (!cursor && skipped < skip) {
           skipped++;
           continue;
         }
@@ -77,6 +81,9 @@ export async function GET(request: NextRequest) {
 
         // Extract attachments
         const attachments = msg.attachments?.map(mapAttachment);
+
+        // Track the sortKey for cursor-based pagination
+        lastSortKey = msg.sortKey || null;
 
         messages.push({
           id: msg.id,
@@ -95,12 +102,9 @@ export async function GET(request: NextRequest) {
 
         // If not using time-based filtering, use limit
         if (!cutoffTime && messages.length >= limit) break;
-
-        // Safety limit to prevent runaway fetches
-        if (skipped + messages.length >= safetyLimit) break;
       }
 
-      return NextResponse.json({ data: messages });
+      return NextResponse.json({ data: messages, nextCursor: lastSortKey });
     }
 
     // Otherwise, list all chats
