@@ -15,7 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { CrmContactProfile, CrmTag, CrmPlatformLink, ChatKnowledge, ChatFact, ChatFactCategory, ChatFactEntity, ContactAttachment } from '@/lib/types';
+import { CrmContactProfile, CrmTag, CrmPlatformLink, ContactAttachment } from '@/lib/types';
 import { getPlatformInfo } from '@/lib/beeper-client';
 import { getAvatarSrc } from '@/components/message-panel/utils';
 import { cn } from '@/lib/utils';
@@ -35,19 +35,17 @@ import {
   Clock,
   ArrowUpRight,
   ArrowDownLeft,
-  Brain,
-  Eye,
-  Lightbulb,
   ChevronDown,
   ChevronRight,
-  Pencil,
   Paperclip,
   FileText,
   Image as ImageIcon,
   File,
   Download,
+  Brain,
 } from 'lucide-react';
 import { ContactMergeDialog } from '@/components/contact-merge-dialog';
+import { ContactKnowledgeGraph } from '@/components/intelligence/contact-knowledge-graph';
 
 interface ContactProfilePanelProps {
   contact: CrmContactProfile | null;
@@ -62,9 +60,6 @@ interface ContactProfilePanelProps {
   onUnlinkPlatform?: (contactId: string, chatId: string) => void;
   onMerge?: (targetContactId: string, sourceContactId: string) => void;
   onLinkPlatform?: (contactId: string, chatId: string, platform: string, accountId: string, displayName: string, avatarUrl?: string) => void;
-  knowledge?: ChatKnowledge | null;
-  onAddFact?: (content: string, aboutEntity: ChatFactEntity, category: ChatFactCategory) => void;
-  onRemoveFact?: (factId: string, aboutEntity: ChatFactEntity) => void;
   onAddAttachments?: () => void;
   onRemoveAttachment?: (attachmentId: string) => void;
 }
@@ -88,9 +83,6 @@ export function ContactProfilePanel({
   onUnlinkPlatform,
   onMerge,
   onLinkPlatform,
-  knowledge,
-  onAddFact,
-  onRemoveFact,
   onAddAttachments,
   onRemoveAttachment,
 }: ContactProfilePanelProps) {
@@ -103,12 +95,6 @@ export function ContactProfilePanel({
   const [newTagName, setNewTagName] = useState('');
   const [isDirty, setIsDirty] = useState(false);
   const [isMergeDialogOpen, setIsMergeDialogOpen] = useState(false);
-  const [expandedKnowledgeGroups, setExpandedKnowledgeGroups] = useState<Set<string>>(
-    new Set(['contactFacts', 'conversationFacts'])
-  );
-  const [newFactContent, setNewFactContent] = useState('');
-  const [newFactEntity, setNewFactEntity] = useState<ChatFactEntity>('contact');
-  const [newFactCategory, setNewFactCategory] = useState<ChatFactCategory>('personal');
 
   // Sync form state when contact changes
   useEffect(() => {
@@ -351,6 +337,25 @@ export function ContactProfilePanel({
               </>
             )}
 
+            {/* AI Knowledge Graph */}
+            {contact.platformLinks.length > 0 && (
+              <>
+                <div className="space-y-3">
+                  <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+                    <Brain className="h-3 w-3" />
+                    AI Knowledge
+                  </h3>
+
+                  <ContactKnowledgeGraph
+                    chatId={contact.platformLinks[0].chatId}
+                    contactName={contact.displayName}
+                  />
+                </div>
+
+                <Separator />
+              </>
+            )}
+
             {/* Tags */}
             <div className="space-y-3">
               <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
@@ -491,190 +496,6 @@ export function ContactProfilePanel({
                   <Link2 className="h-3 w-3 mr-2" />
                   Link another platform
                 </Button>
-              )}
-            </div>
-
-            {/* Knowledge */}
-            <Separator />
-
-            <div className="space-y-3">
-              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
-                <Brain className="h-3 w-3" />
-                Memory
-              </h3>
-
-              {/* Add note */}
-              {onAddFact && (
-                <div className="space-y-2">
-                  <div className="flex gap-1.5">
-                    <Input
-                      value={newFactContent}
-                      onChange={(e) => setNewFactContent(e.target.value)}
-                      placeholder="Add a note..."
-                      className="h-8 text-sm flex-1"
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' && newFactContent.trim()) {
-                          e.preventDefault();
-                          onAddFact(newFactContent.trim(), newFactEntity, newFactCategory);
-                          setNewFactContent('');
-                        }
-                      }}
-                    />
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        if (!newFactContent.trim()) return;
-                        onAddFact(newFactContent.trim(), newFactEntity, newFactCategory);
-                        setNewFactContent('');
-                      }}
-                      disabled={!newFactContent.trim()}
-                      className="h-8"
-                    >
-                      <Plus className="h-3 w-3" />
-                    </Button>
-                  </div>
-                  <div className="flex gap-1.5">
-                    <Select value={newFactEntity} onValueChange={(v) => setNewFactEntity(v as ChatFactEntity)}>
-                      <SelectTrigger className="h-7 text-xs flex-1">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="contact">About them</SelectItem>
-                        <SelectItem value="user">About me</SelectItem>
-                        <SelectItem value="conversation">Conversation</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <Select value={newFactCategory} onValueChange={(v) => setNewFactCategory(v as ChatFactCategory)}>
-                      <SelectTrigger className="h-7 text-xs flex-1">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="personal">Personal</SelectItem>
-                        <SelectItem value="professional">Professional</SelectItem>
-                        <SelectItem value="preference">Preference</SelectItem>
-                        <SelectItem value="schedule">Schedule</SelectItem>
-                        <SelectItem value="relationship">Relationship</SelectItem>
-                        <SelectItem value="communication">Communication</SelectItem>
-                        <SelectItem value="topic">Topic</SelectItem>
-                        <SelectItem value="sentiment">Sentiment</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              )}
-
-              {!knowledge || (
-                !knowledge.contactFacts?.length &&
-                !knowledge.conversationFacts?.length &&
-                !knowledge.userFacts?.length &&
-                !knowledge.conversationTone &&
-                !knowledge.relationshipType &&
-                !knowledge.topicHistory?.length
-              ) ? (
-                <p className="text-xs text-muted-foreground">No knowledge extracted yet. Activate an agent in observer mode to start learning.</p>
-              ) : (
-                <div className="space-y-3">
-                  {/* Conversation metadata */}
-                  {(knowledge.conversationTone || knowledge.primaryLanguage || knowledge.relationshipType) && (
-                    <div className="flex flex-wrap gap-1.5">
-                      {knowledge.relationshipType && (
-                        <Badge variant="secondary" className="text-xs">
-                          {knowledge.relationshipType}
-                        </Badge>
-                      )}
-                      {knowledge.conversationTone && (
-                        <Badge variant="outline" className="text-xs">
-                          {knowledge.conversationTone}
-                        </Badge>
-                      )}
-                      {knowledge.primaryLanguage && (
-                        <Badge variant="outline" className="text-xs">
-                          {knowledge.primaryLanguage}
-                        </Badge>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Topic history */}
-                  {knowledge.topicHistory?.length > 0 && (
-                    <div className="space-y-1.5">
-                      <span className="text-xs text-muted-foreground">Recent topics</span>
-                      <div className="flex flex-wrap gap-1.5">
-                        {knowledge.topicHistory.slice(-5).map((topic, i) => (
-                          <Badge key={i} variant="outline" className="text-xs font-normal">
-                            {topic}
-                          </Badge>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Fact groups */}
-                  {([
-                    { key: 'contactFacts', label: 'About them', facts: knowledge.contactFacts },
-                    { key: 'conversationFacts', label: 'Conversation', facts: knowledge.conversationFacts },
-                    { key: 'userFacts', label: 'About me', facts: knowledge.userFacts },
-                  ] as const).map(({ key, label, facts }) => {
-                    if (!facts?.length) return null;
-                    const isExpanded = expandedKnowledgeGroups.has(key);
-
-                    return (
-                      <div key={key} className="space-y-2">
-                        <button
-                          onClick={() => {
-                            setExpandedKnowledgeGroups(prev => {
-                              const next = new Set(prev);
-                              if (next.has(key)) next.delete(key);
-                              else next.add(key);
-                              return next;
-                            });
-                          }}
-                          className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors w-full text-left"
-                        >
-                          {isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-                          <span className="font-medium">{label}</span>
-                          <span className="text-muted-foreground">({facts.length})</span>
-                        </button>
-
-                        {isExpanded && (
-                          <div className="space-y-1.5 pl-1">
-                            {facts
-                              .sort((a, b) => b.confidence - a.confidence)
-                              .map(fact => (
-                                <div key={fact.id} className="group/fact p-2 rounded-lg bg-muted/50 space-y-0.5">
-                                  <div className="flex items-start gap-1">
-                                    <p className="text-xs leading-relaxed flex-1">{fact.content}</p>
-                                    {onRemoveFact && (
-                                      <button
-                                        onClick={() => onRemoveFact(fact.id, key === 'contactFacts' ? 'contact' : key === 'userFacts' ? 'user' : 'conversation')}
-                                        className="shrink-0 opacity-0 group-hover/fact:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
-                                        title="Remove"
-                                      >
-                                        <X className="h-3 w-3" />
-                                      </button>
-                                    )}
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    <div className="flex items-center gap-1 text-muted-foreground" title={fact.source}>
-                                      {fact.source === 'observed' && <Eye className="h-3 w-3" />}
-                                      {fact.source === 'stated' && <MessageSquare className="h-3 w-3" />}
-                                      {fact.source === 'inferred' && <Lightbulb className="h-3 w-3" />}
-                                      {fact.source === 'manual' && <Pencil className="h-3 w-3" />}
-                                      <span className="text-[10px] capitalize">{fact.source}</span>
-                                    </div>
-                                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 capitalize">
-                                      {fact.category}
-                                    </Badge>
-                                  </div>
-                                </div>
-                              ))}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
               )}
             </div>
 

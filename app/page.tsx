@@ -1,42 +1,28 @@
 'use client';
 
 import { useState, useCallback, useEffect, useMemo } from 'react';
-import { logger } from '@/lib/logger';
 import Link from 'next/link';
-import { Settings } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import { MessageBoard } from '@/components/kanban/message-board';
 import { OnboardingChecklist } from '@/components/onboarding/onboarding-checklist';
-import { MessageDetail } from '@/components/message-detail';
-import { DraftComposer } from '@/components/draft-composer';
 import { MessagePanel } from '@/components/message-panel';
-import { AiChatPanel } from '@/components/ai-chat-panel';
-import { ContactProfilePanel } from '@/components/contact-profile-panel';
 import { ContactsDialog } from '@/components/contacts-dialog';
 import { useCrm } from '@/hooks/use-crm';
-import { HandoffSummaryCard } from '@/components/autopilot/handoff-summary-card';
 import { ErrorState } from '@/components/dashboard/error-state';
 import { LoadingState } from '@/components/dashboard/loading-state';
 import { BottomNavigation, MainView } from '@/components/dashboard/bottom-navigation';
+import { GlobalStream } from '@/components/intelligence/global-stream';
 import { ContactsView } from '@/components/contacts-view';
 import { FilterDialog } from '@/components/filter-dialog';
 import { GroupByDialog } from '@/components/group-by-dialog';
 import type { Contact } from '@/app/api/beeper/contacts/route';
 import { useSettingsContext } from '@/contexts/settings-context';
 import { useAuth } from '@/contexts/auth-context';
-import { useMessages } from '@/hooks/use-messages';
-import { useArchived } from '@/hooks/use-archived';
+import { useBeeperData } from '@/hooks/use-beeper-data';
 import { useDrafts } from '@/hooks/use-drafts';
-import { useAiChatHistory } from '@/hooks/use-ai-chat-history';
-import { useBatchDraftGenerator } from '@/hooks/use-batch-draft-generator';
 import { useBatchSend } from '@/hooks/use-batch-send';
 import { useSendMessage } from '@/hooks/use-send-message';
-import { useAutopilot } from '@/contexts/autopilot-context';
-import { KanbanCard, ColumnId, BeeperMessage, BeeperAttachment, Draft } from '@/lib/types';
-import { useAiPipeline } from '@/hooks/use-ai-pipeline';
-import { useHistoryLoader } from '@/hooks/use-history-loader';
-import { loadHiddenChats, addHiddenChat, getChatAutopilotConfig, getChatKnowledge, mergeChatFacts, saveChatKnowledge } from '@/lib/storage';
-import { ChatKnowledge, ChatFact, ChatFactEntity, ChatFactCategory, ContactAttachment } from '@/lib/types';
+import { KanbanCard, BeeperMessage, Draft, ContactAttachment } from '@/lib/types';
+import { loadHiddenChats, addHiddenChat } from '@/lib/storage';
 import { getBeeperHeaders } from '@/lib/api-headers';
 import { toast } from 'sonner';
 
@@ -44,42 +30,39 @@ export default function Home() {
   const { settings, isLoaded: settingsLoaded, updateSettings, toggleAccount, selectAllAccounts, deselectAllAccounts } = useSettingsContext();
   const { subscription } = useAuth();
 
-  // Hidden chats state - load on mount
-  const [hiddenChats, setHiddenChats] = useState<Set<string>>(() => {
-    if (typeof window === 'undefined') return new Set();
-    return loadHiddenChats();
-  });
-
-  // Optimistically archived chats (for immediate UI feedback)
-  const [archivedChats, setArchivedChats] = useState<Set<string>>(new Set());
-
+  // Use unified Beeper data hook
   const {
     unreadMessages,
     sentMessages,
+    archivedMessages,
     isLoading,
     isLoadingMore,
     error,
     hasMore,
     loadMore,
     refetch,
-    poll,
     avatars,
     chatInfo,
-  } = useMessages(settings.selectedAccountIds, hiddenChats);
+    hiddenChatIds: hiddenChats,
+    setHiddenChatIds: setHiddenChats,
+    setSelectedAccountIds,
+  } = useBeeperData();
 
-  // Fetch archived messages only when showArchivedColumn is enabled
-  const {
-    archivedMessages,
-    refetch: refetchArchived,
-  } = useArchived(settings.selectedAccountIds, settings.showArchivedColumn);
+  // Optimistically archived chats (for immediate UI feedback)
+  const [archivedChats, setArchivedChats] = useState<Set<string>>(new Set());
+
+  // Sync selected account IDs with context
+  useEffect(() => {
+    setSelectedAccountIds(settings.selectedAccountIds);
+  }, [settings.selectedAccountIds, setSelectedAccountIds]);
+
+  // Load hidden chats on mount
+  useEffect(() => {
+    const stored = loadHiddenChats();
+    setHiddenChats(stored);
+  }, [setHiddenChats]);
 
   const { drafts, createDraft, updateDraft, deleteDraft } = useDrafts();
-
-  // Autopilot integration
-  const { processNewMessages, handoffSummaries, dismissHandoff, configVersion } = useAutopilot();
-
-  // Background history loader: fetches full chat history for agent-enabled chats
-  useHistoryLoader(configVersion);
 
   // Send message hook
   const { sendMessage } = useSendMessage({
@@ -87,102 +70,29 @@ export default function Home() {
     refetch,
   });
 
-  const { generateDraft: pipelineGenerateDraft } = useAiPipeline();
-
-  // Process new messages through autopilot when they arrive
-  useEffect(() => {
-    if (unreadMessages.length > 0) {
-      processNewMessages(unreadMessages);
-    }
-  }, [unreadMessages, processNewMessages]);
-
-  // Auto-poll for new messages every 10 seconds (silent background poll)
-  useEffect(() => {
-    const interval = setInterval(() => {
-      poll();
-    }, 10000); // Poll every 10 seconds
-
-    return () => clearInterval(interval);
-  }, [poll]);
-
   // Filter out optimistically archived chats and messages that have drafts
   // Memoize the Set to avoid recreating it on every render
   const draftChatIds = useMemo(() => new Set(drafts.map(d => d.chatId)), [drafts]);
 
-  // Collect autopilot chats from ALL message sources (unread + sent)
-  // The autopilot column should show chats with active autopilot regardless of their other state
-  const { autopilotMessages, filteredUnreadMessages, filteredSentMessages } = useMemo(() => {
-    const autopilotChatIds = new Set<string>();
-    const autopilot: BeeperMessage[] = [];
+  // Filter messages
+  const { filteredUnreadMessages, filteredSentMessages } = useMemo(() => {
     const regularUnread: BeeperMessage[] = [];
 
-    // First, identify all chats with active autopilot (only manual-approval/self-driving modes)
     for (const m of unreadMessages) {
       if (archivedChats.has(m.chatId)) continue;
-      const config = getChatAutopilotConfig(m.chatId);
-      if (config?.enabled && config.status === 'active' && (config.mode === 'manual-approval' || config.mode === 'self-driving')) {
-        autopilotChatIds.add(m.chatId);
-        autopilot.push(m);
-      } else if (!draftChatIds.has(m.chatId)) {
+      if (!draftChatIds.has(m.chatId)) {
         regularUnread.push(m);
       }
     }
 
-    // Also check sent messages for active autopilot (only manual-approval/self-driving modes)
-    for (const m of sentMessages) {
-      if (archivedChats.has(m.chatId)) continue;
-      if (autopilotChatIds.has(m.chatId)) continue; // Already added from unread
-      const config = getChatAutopilotConfig(m.chatId);
-      if (config?.enabled && config.status === 'active' && (config.mode === 'manual-approval' || config.mode === 'self-driving')) {
-        autopilotChatIds.add(m.chatId);
-        autopilot.push(m);
-      }
-    }
-
-    // Filter sent messages to exclude autopilot chats (they show in autopilot column)
-    const regularSent = sentMessages.filter(m => !autopilotChatIds.has(m.chatId));
+    // Filter sent messages to exclude chats with drafts
+    const regularSent = sentMessages.filter(m => !draftChatIds.has(m.chatId));
 
     return {
-      autopilotMessages: autopilot,
       filteredUnreadMessages: regularUnread,
       filteredSentMessages: regularSent,
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [unreadMessages, sentMessages, archivedChats, draftChatIds, configVersion]);
-
-  // Batch draft generation
-  const handleDraftGenerated = useCallback((message: BeeperMessage, draftText: string) => {
-    const avatarUrl = chatInfo?.[message.chatId]?.isGroup
-      ? undefined
-      : (avatars?.[message.chatId] || message.senderAvatarUrl);
-    const isGroup = chatInfo?.[message.chatId]?.isGroup;
-    createDraft(message, draftText, avatarUrl, isGroup);
-  }, [createDraft, avatars, chatInfo]);
-
-  const {
-    isGenerating: isGeneratingDrafts,
-    progress: generatingProgress,
-    generateAllDrafts,
-    cancelGeneration,
-  } = useBatchDraftGenerator({
-    onDraftGenerated: handleDraftGenerated,
-  });
-
-  const handleGenerateAllDrafts = useCallback(() => {
-    // Filter out messages that already have drafts
-    const existingDraftChatIds = new Set(drafts.map(d => d.chatId));
-    const messagesWithoutDrafts = filteredUnreadMessages.filter(
-      m => !existingDraftChatIds.has(m.chatId)
-    );
-
-    if (messagesWithoutDrafts.length === 0) {
-      toast.info('All messages already have drafts');
-      return;
-    }
-
-    toast.info(`Generating drafts for ${messagesWithoutDrafts.length} messages...`);
-    generateAllDrafts(messagesWithoutDrafts);
-  }, [filteredUnreadMessages, drafts, generateAllDrafts]);
+  }, [unreadMessages, sentMessages, archivedChats, draftChatIds]);
 
   // Batch send drafts
   const handleDraftSent = useCallback((draft: Draft) => {
@@ -210,17 +120,6 @@ export default function Home() {
 
   // UI state
   const [selectedCard, setSelectedCard] = useState<KanbanCard | null>(null);
-  const [detailOpen, setDetailOpen] = useState(false);
-  const [composerOpen, setComposerOpen] = useState(false);
-  const [composerMode, setComposerMode] = useState<'new' | 'edit'>('new');
-  const [composerMessage, setComposerMessage] = useState<BeeperMessage | null>(null);
-  const [composerDraft, setComposerDraft] = useState<Draft | null>(null);
-
-  // AI Chat panel state
-  const [isAiChatOpen, setIsAiChatOpen] = useState(false);
-  const [messageContext, setMessageContext] = useState('');
-  const [senderName, setSenderName] = useState('');
-  const [draftTextFromAi, setDraftTextFromAi] = useState<string | undefined>(undefined);
 
   // View state - toggle between kanban and contacts
   const [currentView, setCurrentView] = useState<MainView>('kanban');
@@ -237,12 +136,10 @@ export default function Home() {
   // Group by dialog state
   const [groupByDialogOpen, setGroupByDialogOpen] = useState(false);
 
-  // Get the current chat ID from selected card (for per-thread AI chat)
+  // Get the current chat ID from selected card (for per-thread context)
   const currentChatId = selectedCard?.message?.chatId || selectedCard?.draft?.chatId || null;
-  const { messages: aiChatMessages, setMessages: setAiChatMessages } = useAiChatHistory(currentChatId);
 
   // CRM state
-  const [isContactProfileOpen, setIsContactProfileOpen] = useState(false);
   const {
     contacts: crmContacts,
     tags: crmTags,
@@ -262,48 +159,58 @@ export default function Home() {
   } = useCrm();
 
   // Auto-create contacts for all messages when they load
+  // We use unreadCount from the API to show accurate received message counts
   useEffect(() => {
     // Only auto-create contacts if we have chatInfo populated (ensures isGroup is available)
     if (!isLoading && (unreadMessages.length > 0 || sentMessages.length > 0) && Object.keys(chatInfo).length > 0) {
       const allMessages = [...unreadMessages, ...sentMessages];
+      const seenChatIds = new Set<string>();
 
-      // Group messages by chatId for stats calculation
-      const messagesByChatId = new Map<string, BeeperMessage[]>();
-      allMessages.forEach(msg => {
-        if (!messagesByChatId.has(msg.chatId)) {
-          messagesByChatId.set(msg.chatId, []);
-        }
-        messagesByChatId.get(msg.chatId)!.push(msg);
-      });
+      // Create contacts for unique chats
+      for (const msg of allMessages) {
+        if (seenChatIds.has(msg.chatId)) continue;
+        seenChatIds.add(msg.chatId);
 
-      // Create contacts for unique chats and update their stats
-      messagesByChatId.forEach((messages, chatId) => {
-        const firstMsg = messages[0];
         // Extract platform from chatId (format: "platform:roomId")
-        const platform = firstMsg.platform || chatId.split(':')[0] || 'unknown';
+        const platform = msg.platform || msg.chatId.split(':')[0] || 'unknown';
         // Get chat name and avatar from chatInfo if available
-        const chat = chatInfo[chatId];
-        const displayName = chat?.title || firstMsg.chatName || firstMsg.senderName;
-        const avatarUrl = avatars[chatId] || firstMsg.senderAvatarUrl;
+        const chat = chatInfo[msg.chatId];
+        const displayName = chat?.title || msg.chatName || msg.senderName;
+        const avatarUrl = avatars[msg.chatId] || msg.senderAvatarUrl;
         // chatInfo is the authoritative source for isGroup
         const isGroup = chat?.isGroup;
 
-        const contact = getOrCreateContactForChat(chatId, displayName, platform, firstMsg.accountId, avatarUrl, isGroup);
+        const contact = getOrCreateContactForChat(msg.chatId, displayName, platform, msg.accountId, avatarUrl, isGroup);
 
-        // Update existing contact if isGroup is defined but contact doesn't have it set
-        if (isGroup !== undefined && contact.isGroup !== isGroup) {
-          updateCrmContact(contact.id, { isGroup });
+        // Update contact stats using available data:
+        // - unreadCount: number of unread messages received from this contact
+        // - isFromMe: whether the most recent message is from me
+        const messagesReceived = msg.unreadCount || 0;
+        const messagesSent = msg.isFromMe ? 1 : 0;
+        const totalMessageCount = messagesReceived + messagesSent;
+
+        // Only update if we have meaningful data AND it's different from current
+        const needsUpdate =
+          (isGroup !== undefined && contact.isGroup !== isGroup) ||
+          (totalMessageCount > 0 && (
+            contact.messagesReceived !== messagesReceived ||
+            contact.messagesSent !== messagesSent
+          ));
+
+        if (needsUpdate) {
+          updateCrmContact(contact.id, {
+            ...(isGroup !== undefined && { isGroup }),
+            ...(totalMessageCount > 0 && {
+              totalMessageCount,
+              messagesReceived,
+              messagesSent,
+              lastInteractionAt: msg.timestamp,
+            }),
+          });
         }
-
-        // Update interaction stats with all messages from this chat
-        const statsMessages = messages.map(msg => ({
-          timestamp: msg.timestamp,
-          isFromMe: msg.isFromMe,
-        }));
-        updateInteractionStats(contact.id, statsMessages);
-      });
+      }
     }
-  }, [unreadMessages, sentMessages, isLoading, getOrCreateContactForChat, chatInfo, avatars, updateCrmContact, updateInteractionStats]);
+  }, [unreadMessages, sentMessages, isLoading, getOrCreateContactForChat, chatInfo, avatars, updateCrmContact]);
 
   // Contact selected from the contacts list view (separate from card-based selection)
   const [selectedListContactId, setSelectedListContactId] = useState<string | null>(null);
@@ -311,74 +218,6 @@ export default function Home() {
 
   // Get the current contact profile — from list selection or selected card
   const currentContact = selectedListContact || (currentChatId ? getContactForChat(currentChatId) : null);
-
-  // Load knowledge for current contact (aggregated across all platform links)
-  // Re-reads periodically while panel is open so background extraction results appear
-  const [currentKnowledge, setCurrentKnowledge] = useState<ChatKnowledge | null>(null);
-  // Use contact ID as a stable dependency instead of the contact object
-  const currentContactId = currentContact?.id || null;
-  useEffect(() => {
-    const loadKnowledge = () => {
-      // Look up the contact fresh each time (for polling)
-      const contact = (selectedListContactId ? crmContacts[selectedListContactId] : null)
-        || (currentChatId ? getContactForChat(currentChatId) : null);
-      if (!contact || !isContactProfileOpen) {
-        setCurrentKnowledge(null);
-        return;
-      }
-
-      const links = contact.platformLinks;
-      if (links.length === 0) {
-        setCurrentKnowledge(null);
-        return;
-      }
-
-      if (links.length === 1) {
-        setCurrentKnowledge(getChatKnowledge(links[0].chatId));
-        return;
-      }
-
-      // Aggregate knowledge from all linked chats
-      const allKnowledge = links
-        .map(link => getChatKnowledge(link.chatId))
-        .filter((k): k is ChatKnowledge => k !== null);
-
-      if (allKnowledge.length === 0) { setCurrentKnowledge(null); return; }
-      if (allKnowledge.length === 1) { setCurrentKnowledge(allKnowledge[0]); return; }
-
-      const dedup = (facts: ChatFact[]) => {
-        const seen = new Map<string, ChatFact>();
-        for (const f of facts) {
-          const key = f.content.toLowerCase();
-          const existing = seen.get(key);
-          if (!existing || f.confidence > existing.confidence) {
-            seen.set(key, f);
-          }
-        }
-        return Array.from(seen.values());
-      };
-
-      const merged: ChatKnowledge = {
-        chatId: links[0].chatId,
-        contactFacts: dedup(allKnowledge.flatMap(k => k.contactFacts || [])),
-        userFacts: dedup(allKnowledge.flatMap(k => k.userFacts || [])),
-        conversationFacts: dedup(allKnowledge.flatMap(k => k.conversationFacts || [])),
-        topicHistory: [...new Set(allKnowledge.flatMap(k => k.topicHistory || []))].slice(-20),
-        conversationTone: allKnowledge.find(k => k.conversationTone)?.conversationTone,
-        primaryLanguage: allKnowledge.find(k => k.primaryLanguage)?.primaryLanguage,
-        relationshipType: allKnowledge.find(k => k.relationshipType)?.relationshipType,
-        updatedAt: new Date().toISOString(),
-        createdAt: allKnowledge[0].createdAt,
-      };
-      setCurrentKnowledge(merged);
-    };
-
-    loadKnowledge();
-    if (!currentContactId || !isContactProfileOpen) return;
-    // Poll every 10s to pick up background knowledge extraction results
-    const interval = setInterval(loadKnowledge, 10_000);
-    return () => clearInterval(interval);
-  }, [currentContactId, isContactProfileOpen, currentChatId, selectedListContactId, getContactForChat]);
 
   // Filter helper - check if message passes filter
   const messagePassesFilter = useCallback((message: BeeperMessage) => {
@@ -410,11 +249,6 @@ export default function Home() {
     [filteredUnreadMessages, messagePassesFilter]
   );
 
-  const displayedAutopilotMessages = useMemo(() =>
-    autopilotMessages.filter(messagePassesFilter),
-    [autopilotMessages, messagePassesFilter]
-  );
-
   const displayedSentMessages = useMemo(() =>
     filteredSentMessages.filter(messagePassesFilter),
     [filteredSentMessages, messagePassesFilter]
@@ -425,56 +259,6 @@ export default function Home() {
     // Toggle selection - if clicking same card, deselect it
     setSelectedCard(prev => prev?.id === card.id ? null : card);
   }, []);
-
-  // Handle reply from detail panel
-  const handleReply = useCallback((card: KanbanCard) => {
-    if (card.type === 'message' && card.message) {
-      setComposerMessage(card.message);
-      setComposerDraft(null);
-      setComposerMode('new');
-      setDetailOpen(false);
-      setComposerOpen(true);
-    } else if (card.type === 'draft' && card.draft) {
-      setComposerMessage(null);
-      setComposerDraft(card.draft);
-      setComposerMode('edit');
-      setDetailOpen(false);
-      setComposerOpen(true);
-    }
-  }, []);
-
-  // Handle dragging card to drafts column - auto-generate draft with optimistic UI
-  const handleMoveToColumn = useCallback(async (card: KanbanCard, fromColumn: ColumnId, toColumn: ColumnId) => {
-    if (fromColumn === 'unread' && toColumn === 'drafts' && card.type === 'message' && card.message) {
-      const message = card.message;
-
-      // Immediately create an optimistic draft with placeholder text
-      const avatarUrl = chatInfo?.[message.chatId]?.isGroup
-        ? undefined
-        : (avatars?.[message.chatId] || message.senderAvatarUrl);
-      const isGroup = chatInfo?.[message.chatId]?.isGroup;
-      const optimisticDraft = createDraft(message, 'Generating response...', avatarUrl, isGroup);
-
-      // Show loading toast
-      const toastId = toast.loading('Generating draft...');
-
-      try {
-        const result = await pipelineGenerateDraft(message.chatId, message.text, message.senderName);
-
-        if (result.text) {
-          updateDraft(optimisticDraft.id, { draftText: result.text });
-          toast.success('Draft created', { id: toastId });
-        } else {
-          updateDraft(optimisticDraft.id, { draftText: '' });
-          toast.error('Failed to generate draft', { id: toastId });
-        }
-      } catch (error) {
-        logger.error('Failed to generate draft:', error instanceof Error ? error : String(error));
-        updateDraft(optimisticDraft.id, { draftText: '' });
-        toast.error('Failed to generate draft', { id: toastId });
-      }
-    }
-  }, [pipelineGenerateDraft, avatars, chatInfo, createDraft, updateDraft]);
 
   // Handle archive chat
   const handleArchive = useCallback(async (card: KanbanCard) => {
@@ -506,10 +290,8 @@ export default function Home() {
       }
 
       toast.success('Chat archived');
-      // Refresh archived list if showing
-      if (settings.showArchivedColumn) {
-        refetchArchived();
-      }
+      // Refresh to update archived list
+      refetch();
     } catch {
       // Revert optimistic update on error
       setArchivedChats(prev => {
@@ -519,7 +301,7 @@ export default function Home() {
       });
       toast.error('Failed to archive chat');
     }
-  }, [settings.beeperAccessToken, settings.showArchivedColumn, refetchArchived]);
+  }, [settings.beeperAccessToken, refetch]);
 
   // Handle unarchive chat
   const handleUnarchive = useCallback(async (card: KanbanCard) => {
@@ -542,13 +324,12 @@ export default function Home() {
       }
 
       toast.success('Chat unarchived');
-      // Refresh both lists
+      // Refresh to update both regular and archived lists
       refetch();
-      refetchArchived();
     } catch {
       toast.error('Failed to unarchive chat');
     }
-  }, [settings.beeperAccessToken, refetch, refetchArchived]);
+  }, [settings.beeperAccessToken, refetch]);
 
   // Handle hide chat (local only)
   const handleHide = useCallback((card: KanbanCard) => {
@@ -565,70 +346,55 @@ export default function Home() {
     toast.success('Chat hidden. You can unhide chats in Settings.');
   }, []);
 
-  // Handle save draft (from DraftComposer)
-  const handleSaveDraft = useCallback((draftText: string) => {
-    if (composerMode === 'new' && composerMessage) {
-      // Get avatar from the avatars map or the message itself
-      const avatarUrl = chatInfo?.[composerMessage.chatId]?.isGroup
-        ? undefined
-        : (avatars?.[composerMessage.chatId] || composerMessage.senderAvatarUrl);
-      const isGroup = chatInfo?.[composerMessage.chatId]?.isGroup;
-      createDraft(composerMessage, draftText, avatarUrl, isGroup);
-      toast.success('Draft saved');
-    } else if (composerMode === 'edit' && composerDraft) {
-      updateDraft(composerDraft.id, { draftText });
-      toast.success('Draft updated');
-    }
-  }, [composerMode, composerMessage, composerDraft, createDraft, updateDraft, avatars, chatInfo]);
-
   // Handle save draft from MessagePanel
   const handleSaveDraftFromPanel = useCallback((draftText: string) => {
     // If viewing a draft, update it
     if (selectedCard?.type === 'draft' && selectedCard.draft) {
       updateDraft(selectedCard.draft.id, { draftText });
-      toast.success('Draft updated');
       return;
     }
 
-    // If viewing a message, create a new draft
+    // If viewing a message, check if a draft already exists for this chat
     const message = selectedCard?.message;
     if (!message) return;
 
+    const existingDraft = drafts.find(d => d.chatId === message.chatId);
+    if (existingDraft) {
+      // Update the existing draft
+      updateDraft(existingDraft.id, { draftText });
+      return;
+    }
+
+    // Create a new draft only if none exists
     const avatarUrl = chatInfo?.[message.chatId]?.isGroup
       ? undefined
       : (avatars?.[message.chatId] || message.senderAvatarUrl);
     const isGroup = chatInfo?.[message.chatId]?.isGroup;
     createDraft(message, draftText, avatarUrl, isGroup);
-    toast.success('Draft saved');
-  }, [selectedCard, createDraft, updateDraft, avatars, chatInfo]);
+  }, [selectedCard, drafts, createDraft, updateDraft, avatars, chatInfo]);
+
+  // Handle clearing draft from MessagePanel (when text becomes empty)
+  const handleClearDraftFromPanel = useCallback(() => {
+    if (selectedCard?.type === 'draft' && selectedCard.draft) {
+      deleteDraft(selectedCard.draft.id);
+      return;
+    }
+
+    // If viewing a message, check if a draft exists for this chat and delete it
+    const message = selectedCard?.message;
+    if (message) {
+      const existingDraft = drafts.find(d => d.chatId === message.chatId);
+      if (existingDraft) {
+        deleteDraft(existingDraft.id);
+      }
+    }
+  }, [selectedCard, drafts, deleteDraft]);
 
   // Handle closing the message panel
   const handleClosePanel = useCallback(() => {
     setSelectedCard(null);
     setSelectedListContactId(null);
-    setIsAiChatOpen(false);
-    setIsContactProfileOpen(false);
   }, []);
-
-  // Toggle AI chat panel
-  const handleToggleAiChat = useCallback(() => {
-    setIsAiChatOpen(prev => !prev);
-  }, []);
-
-  // Toggle contact profile panel
-  const handleToggleContactProfile = useCallback(() => {
-    // If opening and no contact exists yet, create one
-    if (!isContactProfileOpen && !currentContact && selectedCard) {
-      const card = selectedCard;
-      const chatId = card.message?.chatId || card.draft?.chatId;
-      const platform = card.message?.platform || card.draft?.platform || 'unknown';
-      const accountId = card.message?.accountId || card.draft?.accountId || '';
-      if (chatId) {
-        getOrCreateContactForChat(chatId, card.title, platform, accountId, card.avatarUrl);
-      }
-    }
-    setIsContactProfileOpen(prev => !prev);
-  }, [isContactProfileOpen, currentContact, selectedCard, getOrCreateContactForChat]);
 
   // CRM handlers
   const handleSaveCrmContact = useCallback((contactId: string, updates: Partial<import('@/lib/types').CrmContactProfile>) => {
@@ -659,43 +425,7 @@ export default function Home() {
   const handleMergeCrmContacts = useCallback((targetContactId: string, sourceContactId: string) => {
     mergeCrmContacts(targetContactId, sourceContactId);
     toast.success('Contacts merged successfully');
-    // Close the panel if the current contact was merged away
-    if (currentContact?.id === sourceContactId) {
-      setIsContactProfileOpen(false);
-    }
-  }, [mergeCrmContacts, currentContact]);
-
-  // Knowledge manual entry handlers
-  const handleAddFact = useCallback((content: string, aboutEntity: ChatFactEntity, category: ChatFactCategory) => {
-    const contact = currentContact;
-    if (!contact || contact.platformLinks.length === 0) return;
-    const chatId = contact.platformLinks[0].chatId;
-    const now = new Date().toISOString();
-    const fact: ChatFact = {
-      id: `manual-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-      category,
-      content,
-      confidence: 100,
-      source: 'manual',
-      aboutEntity,
-      firstObserved: now,
-      lastObserved: now,
-      mentions: 1,
-    };
-    mergeChatFacts(chatId, [fact]);
-  }, [currentContact]);
-
-  const handleRemoveFact = useCallback((factId: string, aboutEntity: ChatFactEntity) => {
-    const contact = currentContact;
-    if (!contact || contact.platformLinks.length === 0) return;
-    const chatId = contact.platformLinks[0].chatId;
-    const knowledge = getChatKnowledge(chatId);
-    if (!knowledge) return;
-    const bucketKey = aboutEntity === 'contact' ? 'contactFacts' : aboutEntity === 'user' ? 'userFacts' : 'conversationFacts';
-    knowledge[bucketKey] = knowledge[bucketKey].filter(f => f.id !== factId);
-    knowledge.updatedAt = new Date().toISOString();
-    saveChatKnowledge(knowledge);
-  }, [currentContact]);
+  }, [mergeCrmContacts]);
 
   // Attachment handlers
   const mimeTypes: Record<string, string> = {
@@ -808,65 +538,6 @@ export default function Home() {
     });
   }, [currentContact, updateCrmContact]);
 
-  // Save a chat attachment to the current contact's memory
-  const handleSaveAttachmentToMemory = useCallback(async (attachment: BeeperAttachment) => {
-    const contact = currentContact;
-    if (!contact) {
-      toast.error('No contact selected');
-      return;
-    }
-    if (!attachment.srcURL) {
-      toast.error('Attachment has no source URL');
-      return;
-    }
-
-    try {
-      // Download the media file via the /api/media proxy
-      const mediaUrl = attachment.srcURL.startsWith('file://') || attachment.srcURL.startsWith('http')
-        ? `/api/media?url=${encodeURIComponent(attachment.srcURL)}`
-        : attachment.srcURL;
-
-      const response = await fetch(mediaUrl);
-      if (!response.ok) throw new Error('Failed to download attachment');
-
-      const blob = await response.blob();
-      const fileName = attachment.fileName || `attachment-${Date.now()}`;
-      const ext = fileName.includes('.') ? `.${fileName.split('.').pop()?.toLowerCase()}` : '';
-      const id = `att-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-      const storedName = `${id}${ext}`;
-
-      // Upload to attachments storage
-      const formData = new FormData();
-      formData.append('file', blob, storedName);
-      formData.append('storedName', storedName);
-      const uploadRes = await fetch('/api/attachments', { method: 'POST', body: formData });
-      if (!uploadRes.ok) throw new Error('Failed to save attachment');
-
-      const mimeType = attachment.mimeType || blob.type || 'application/octet-stream';
-
-      const newAttachment: ContactAttachment = {
-        id,
-        fileName,
-        storedName,
-        mimeType,
-        fileSize: attachment.fileSize || blob.size,
-        addedAt: new Date().toISOString(),
-      };
-
-      const existing = contact.attachments || [];
-      updateCrmContact(contact.id, { attachments: [...existing, newAttachment] });
-      toast.success(`Saved "${fileName}" to ${contact.displayName}'s memory`);
-    } catch (err) {
-      toast.error('Failed to save attachment to memory');
-    }
-  }, [currentContact, updateCrmContact]);
-
-  // Handle message context change from MessagePanel
-  const handleMessageContextChange = useCallback((context: string, sender: string) => {
-    setMessageContext(context);
-    setSenderName(sender);
-  }, []);
-
   // Handle messages loaded - update CRM contact interaction stats
   const handleMessagesLoaded = useCallback((chatId: string, messages: Array<{ timestamp: string; isFromMe: boolean }>) => {
     const contact = getContactForChat(chatId);
@@ -874,16 +545,6 @@ export default function Home() {
       updateInteractionStats(contact.id, messages);
     }
   }, [getContactForChat, updateInteractionStats]);
-
-  // Handle using a draft from AI chat
-  const handleUseDraftFromAi = useCallback((draft: string) => {
-    setDraftTextFromAi(draft);
-  }, []);
-
-  // Clear draft text from AI after it's consumed
-  const handleDraftTextFromAiConsumed = useCallback(() => {
-    setDraftTextFromAi(undefined);
-  }, []);
 
   // Handle contact selection from contacts dialog
   const handleContactSelect = useCallback((contact: Contact) => {
@@ -920,34 +581,6 @@ export default function Home() {
     // Open the side panel with this card
     setSelectedCard(card);
   }, []);
-
-  // Handle send message
-  const handleSend = useCallback(async (draftText: string) => {
-    const chatId = composerDraft?.chatId || composerMessage?.chatId;
-
-    if (!chatId) {
-      throw new Error('Cannot send: missing chat ID');
-    }
-
-    const result = await sendMessage(chatId, draftText);
-
-    if (!result.success) {
-      throw new Error(result.error || 'Failed to send message');
-    }
-
-    // Delete draft if it exists
-    if (composerDraft) {
-      deleteDraft(composerDraft.id);
-    }
-  }, [composerDraft, composerMessage, deleteDraft, sendMessage]);
-
-  // Handle delete draft (from composer)
-  const handleDeleteDraft = useCallback(() => {
-    if (composerDraft) {
-      deleteDraft(composerDraft.id);
-      toast.success('Draft deleted');
-    }
-  }, [composerDraft, deleteDraft]);
 
   // Handle delete draft from card (in kanban board)
   const handleDeleteDraftFromCard = useCallback((card: KanbanCard) => {
@@ -1058,9 +691,6 @@ export default function Home() {
 
   const isPanelOpen = selectedCard !== null || selectedListContactId !== null;
 
-  // Check if AI features are enabled (default to true for backwards compatibility)
-  const aiEnabled = settings.aiEnabled !== false;
-
   return (
     <div className="flex h-screen">
       {/* Main content area */}
@@ -1076,7 +706,6 @@ export default function Home() {
                 <MessageBoard
                   groupBy={settings.kanbanGroupBy ?? 'status'}
                   unreadMessages={displayedUnreadMessages}
-                  autopilotMessages={aiEnabled ? displayedAutopilotMessages : []}
                   drafts={drafts}
                   sentMessages={displayedSentMessages}
                   archivedMessages={archivedMessages}
@@ -1085,7 +714,6 @@ export default function Home() {
                   avatars={avatars}
                   chatInfo={chatInfo}
                   onCardClick={handleCardClick}
-                  onMoveToColumn={aiEnabled ? handleMoveToColumn : undefined}
                   onArchive={handleArchive}
                   onUnarchive={handleUnarchive}
                   onHide={handleHide}
@@ -1093,15 +721,10 @@ export default function Home() {
                   hasMore={hasMore}
                   isLoadingMore={isLoadingMore}
                   onLoadMore={loadMore}
-                  onGenerateAllDrafts={aiEnabled ? handleGenerateAllDrafts : undefined}
-                  isGeneratingDrafts={aiEnabled ? isGeneratingDrafts : undefined}
-                  generatingProgress={aiEnabled ? (generatingProgress ?? undefined) : undefined}
-                  onCancelGeneration={aiEnabled ? cancelGeneration : undefined}
-                  onSendAllDrafts={aiEnabled ? handleSendAllDrafts : undefined}
-                  isSendingAllDrafts={aiEnabled ? isSendingAllDrafts : undefined}
-                  sendingProgress={aiEnabled ? (sendingProgress ?? undefined) : undefined}
-                  onCancelSending={aiEnabled ? cancelSending : undefined}
-                  aiEnabled={aiEnabled}
+                  onSendAllDrafts={handleSendAllDrafts}
+                  isSendingAllDrafts={isSendingAllDrafts}
+                  sendingProgress={sendingProgress ?? undefined}
+                  onCancelSending={cancelSending}
                 />
               </div>
             )
@@ -1120,7 +743,6 @@ export default function Home() {
                 showHeader={false}
                 onContactClick={(contact) => {
                   setSelectedListContactId(contact.id);
-                  setIsContactProfileOpen(true);
                 }}
               />
             </div>
@@ -1168,118 +790,62 @@ export default function Home() {
             onGroupByChange={(groupBy) => updateSettings({ kanbanGroupBy: groupBy })}
           />
 
-          {/* Bottom nav */}
-          <BottomNavigation
-            onNewContact={() => {
-              setFilterDialogOpen(false);
-              setGroupByDialogOpen(false);
-              setContactsDialogOpen(true);
-            }}
-            groupBy={settings.kanbanGroupBy ?? 'status'}
-            onGroupByChange={(groupBy) => updateSettings({ kanbanGroupBy: groupBy })}
-            currentView={currentView}
-            onViewChange={setCurrentView}
-            onFilterClick={() => {
-              setContactsDialogOpen(false);
-              setGroupByDialogOpen(false);
-              setFilterDialogOpen(true);
-            }}
-            onGroupByClick={() => {
-              setContactsDialogOpen(false);
-              setFilterDialogOpen(false);
-              setGroupByDialogOpen(true);
-            }}
-            hasActiveFilters={selectedTagFilters.size > 0 || selectedTypeFilters.size > 0 || selectedChannelFilters.size > 0}
-          />
+          {/* Bottom nav with AI stream on top */}
+          <div className="flex flex-col items-center gap-2">
+            <GlobalStream />
+            <BottomNavigation
+              onNewContact={() => {
+                setFilterDialogOpen(false);
+                setGroupByDialogOpen(false);
+                setContactsDialogOpen(true);
+              }}
+              groupBy={settings.kanbanGroupBy ?? 'status'}
+              onGroupByChange={(groupBy) => updateSettings({ kanbanGroupBy: groupBy })}
+              currentView={currentView}
+              onViewChange={setCurrentView}
+              onFilterClick={() => {
+                setContactsDialogOpen(false);
+                setGroupByDialogOpen(false);
+                setFilterDialogOpen(true);
+              }}
+              onGroupByClick={() => {
+                setContactsDialogOpen(false);
+                setFilterDialogOpen(false);
+                setGroupByDialogOpen(true);
+              }}
+              hasActiveFilters={selectedTagFilters.size > 0 || selectedTypeFilters.size > 0 || selectedChannelFilters.size > 0}
+            />
+          </div>
         </div>
       </div>
 
 
       {/* Floating panels - fixed position on right side */}
       <div className={`fixed top-4 right-4 bottom-4 flex gap-4 transition-all duration-300 ease-in-out z-20 ${isPanelOpen ? 'pointer-events-auto' : 'pointer-events-none'}`}>
-        <ContactProfilePanel
+        <MessagePanel
+          card={isPanelOpen ? selectedCard : null}
+          onClose={handleClosePanel}
+          onSend={handleSendFromPanel}
+          onSaveDraft={handleSaveDraftFromPanel}
+          onClearDraft={handleClearDraftFromPanel}
+          onMessagesLoaded={handleMessagesLoaded}
+          // Auto-open side panel when viewing from contacts list
+          defaultSidePanelOpen={selectedListContactId !== null}
+          // Contact profile props
           contact={currentContact}
           allContacts={crmContacts}
           tags={crmTags}
-          knowledge={currentKnowledge}
-          isOpen={isPanelOpen && isContactProfileOpen}
-          onClose={() => { setIsContactProfileOpen(false); setSelectedListContactId(null); }}
-          onSave={handleSaveCrmContact}
+          onSaveContact={handleSaveCrmContact}
           onCreateTag={handleCreateCrmTag}
           onAddTag={handleAddCrmTag}
           onRemoveTag={handleRemoveCrmTag}
           onUnlinkPlatform={handleUnlinkPlatform}
           onMerge={handleMergeCrmContacts}
           onLinkPlatform={handleLinkPlatform}
-          onAddFact={handleAddFact}
-          onRemoveFact={handleRemoveFact}
           onAddAttachments={handleAddAttachments}
           onRemoveAttachment={handleRemoveAttachment}
         />
-        <MessagePanel
-          card={isPanelOpen ? selectedCard : null}
-          onClose={handleClosePanel}
-          onSend={handleSendFromPanel}
-          onSaveDraft={handleSaveDraftFromPanel}
-          isAiChatOpen={aiEnabled ? isAiChatOpen : false}
-          onToggleAiChat={aiEnabled ? handleToggleAiChat : undefined}
-          isContactProfileOpen={isContactProfileOpen}
-          onToggleContactProfile={handleToggleContactProfile}
-          draftTextFromAi={aiEnabled ? draftTextFromAi : undefined}
-          onDraftTextFromAiConsumed={aiEnabled ? handleDraftTextFromAiConsumed : undefined}
-          onMessageContextChange={aiEnabled ? handleMessageContextChange : undefined}
-          onMessagesLoaded={handleMessagesLoaded}
-          aiEnabled={aiEnabled}
-          onSaveAttachmentToMemory={handleSaveAttachmentToMemory}
-        />
-        {aiEnabled && (
-          <AiChatPanel
-            isOpen={isPanelOpen && isAiChatOpen}
-            onClose={() => setIsAiChatOpen(false)}
-            chatId={currentChatId}
-            messageContext={messageContext}
-            senderName={senderName}
-            onUseDraft={handleUseDraftFromAi}
-            messages={aiChatMessages}
-            onMessagesChange={setAiChatMessages}
-          />
-        )}
       </div>
-
-      {/* Autopilot notifications - floating in bottom left (only when AI enabled) */}
-      {aiEnabled && handoffSummaries.size > 0 && (
-        <div className="fixed bottom-20 left-6 z-30 w-80 space-y-3 max-h-[calc(100vh-160px)] overflow-y-auto">
-          {/* Handoff summaries */}
-          {Array.from(handoffSummaries.values()).map((summary) => (
-            <HandoffSummaryCard
-              key={summary.chatId}
-              summary={summary}
-              onDismiss={dismissHandoff}
-            />
-          ))}
-        </div>
-      )}
-
-      {/* Message detail panel (for drafts) */}
-      <MessageDetail
-        card={selectedCard}
-        open={detailOpen}
-        onOpenChange={setDetailOpen}
-        onReply={handleReply}
-      />
-
-      {/* Draft composer dialog - only shown when AI is enabled */}
-      {aiEnabled && (
-        <DraftComposer
-          open={composerOpen}
-          onOpenChange={setComposerOpen}
-          originalMessage={composerMessage}
-          existingDraft={composerDraft}
-          onSave={handleSaveDraft}
-          onSend={handleSend}
-          onDelete={composerMode === 'edit' ? handleDeleteDraft : undefined}
-        />
-      )}
     </div>
   );
 }

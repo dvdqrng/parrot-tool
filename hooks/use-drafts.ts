@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback } from 'react';
 import { Draft, BeeperMessage } from '@/lib/types';
 import {
   loadDrafts,
-  saveDrafts,
   addDraft as addDraftToStorage,
   updateDraft as updateDraftInStorage,
   deleteDraft as deleteDraftFromStorage,
@@ -58,22 +57,11 @@ export function useDrafts() {
     setDrafts(updated);
   }, []);
 
-  const getDraftByMessageId = useCallback((messageId: string): Draft | undefined => {
-    return drafts.find(d => d.originalMessageId === messageId);
-  }, [drafts]);
-
-  const syncDrafts = useCallback(() => {
-    const stored = loadDrafts();
-    setDrafts(stored);
-  }, []);
-
   return {
     drafts,
     isLoaded,
     createDraft,
     updateDraft,
     deleteDraft,
-    getDraftByMessageId,
-    syncDrafts,
   };
 }

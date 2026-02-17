@@ -102,7 +102,6 @@ function getDraftsKey(drafts: Draft[]): string {
 interface MessageBoardProps {
   groupBy?: KanbanGroupBy;
   unreadMessages: BeeperMessage[];
-  autopilotMessages?: BeeperMessage[];
   drafts: Draft[];
   sentMessages: BeeperMessage[];
   archivedMessages?: BeeperMessage[];
@@ -127,12 +126,11 @@ interface MessageBoardProps {
   isSendingAllDrafts?: boolean;
   sendingProgress?: { current: number; total: number };
   onCancelSending?: () => void;
-  aiEnabled?: boolean;
 }
 
 // Check if a column ID is a status column
 function isStatusColumnId(id: string): id is StatusColumnId {
-  return ['unread', 'autopilot', 'drafts', 'sent', 'archived'].includes(id);
+  return ['unread', 'drafts', 'sent', 'archived'].includes(id);
 }
 
 // Compute platform-based columns from messages and drafts
@@ -228,7 +226,6 @@ function draftToCard(draft: Draft): KanbanCard {
 export function MessageBoard({
   groupBy = 'status',
   unreadMessages,
-  autopilotMessages = [],
   drafts,
   sentMessages,
   archivedMessages = [],
@@ -253,13 +250,11 @@ export function MessageBoard({
   isSendingAllDrafts,
   sendingProgress,
   onCancelSending,
-  aiEnabled = true,
 }: MessageBoardProps) {
   const isPlatformMode = groupBy === 'platform';
   // Store previous column arrays to reuse when content hasn't changed
   const prevColumnsRef = useRef<KanbanColumns>({
     unread: [],
-    autopilot: [],
     drafts: [],
     sent: [],
     archived: [],
@@ -268,7 +263,6 @@ export function MessageBoard({
   // Store previous keys to detect changes
   const prevKeysRef = useRef({
     unread: '',
-    autopilot: '',
     drafts: '',
     sent: '',
     archived: '',
@@ -277,11 +271,10 @@ export function MessageBoard({
   // Compute stable keys for each column's data
   const currentKeys = useMemo(() => ({
     unread: getMessagesKey(unreadMessages),
-    autopilot: getMessagesKey(autopilotMessages),
     drafts: getDraftsKey(drafts),
     sent: getMessagesKey(sentMessages.slice(0, 20)),
     archived: getMessagesKey(archivedMessages.slice(0, 20)),
-  }), [unreadMessages, autopilotMessages, drafts, sentMessages, archivedMessages]);
+  }), [unreadMessages, drafts, sentMessages, archivedMessages]);
 
   // Only rebuild column arrays when their content actually changes
   const columns: KanbanColumns = useMemo(() => {
@@ -293,13 +286,12 @@ export function MessageBoard({
     // Status mode: use existing logic with optimization
     // Check if ANY column changed
     const unreadChanged = currentKeys.unread !== prevKeysRef.current.unread;
-    const autopilotChanged = currentKeys.autopilot !== prevKeysRef.current.autopilot;
     const draftsChanged = currentKeys.drafts !== prevKeysRef.current.drafts;
     const sentChanged = currentKeys.sent !== prevKeysRef.current.sent;
     const archivedChanged = currentKeys.archived !== prevKeysRef.current.archived;
 
     // If nothing changed, return the exact same object reference
-    if (!unreadChanged && !autopilotChanged && !draftsChanged && !sentChanged && !archivedChanged) {
+    if (!unreadChanged && !draftsChanged && !sentChanged && !archivedChanged) {
       return prevColumnsRef.current;
     }
 
@@ -308,9 +300,6 @@ export function MessageBoard({
       unread: unreadChanged
         ? unreadMessages.map(m => messageToCard(m, avatars, chatInfo))
         : prevColumnsRef.current.unread || [],
-      autopilot: autopilotChanged
-        ? autopilotMessages.map(m => messageToCard(m, avatars, chatInfo))
-        : prevColumnsRef.current.autopilot || [],
       drafts: draftsChanged
         ? drafts.map(draftToCard)
         : prevColumnsRef.current.drafts || [],
@@ -324,14 +313,13 @@ export function MessageBoard({
 
     // Update the keys for changed columns
     if (unreadChanged) prevKeysRef.current.unread = currentKeys.unread;
-    if (autopilotChanged) prevKeysRef.current.autopilot = currentKeys.autopilot;
     if (draftsChanged) prevKeysRef.current.drafts = currentKeys.drafts;
     if (sentChanged) prevKeysRef.current.sent = currentKeys.sent;
     if (archivedChanged) prevKeysRef.current.archived = currentKeys.archived;
 
     prevColumnsRef.current = newColumns;
     return newColumns;
-  }, [isPlatformMode, currentKeys, unreadMessages, autopilotMessages, drafts, sentMessages, archivedMessages, avatars, chatInfo]);
+  }, [isPlatformMode, currentKeys, unreadMessages, drafts, sentMessages, archivedMessages, avatars, chatInfo]);
 
   // Determine which columns to show
   const visibleColumns: ColumnId[] = useMemo(() => {
@@ -344,19 +332,12 @@ export function MessageBoard({
     }
 
     // Status mode: show fixed columns
-    const cols: ColumnId[] = ['unread'];
-    // Show autopilot column if AI is enabled and there are any autopilot messages
-    if (aiEnabled && autopilotMessages.length > 0) {
-      cols.push('autopilot');
-    }
-    // Always show drafts column (manual drafts work without AI)
-    cols.push('drafts');
-    cols.push('sent');
+    const cols: ColumnId[] = ['unread', 'drafts', 'sent'];
     if (showArchivedColumn) {
       cols.push('archived');
     }
     return cols;
-  }, [isPlatformMode, columns, showArchivedColumn, autopilotMessages.length, aiEnabled]);
+  }, [isPlatformMode, columns, showArchivedColumn]);
 
   // Track starting column for drag operations
   const dragStartColumnRef = useRef<ColumnId | null>(null);
@@ -393,7 +374,7 @@ export function MessageBoard({
 
     // Determine the target column - it could be the column id itself or an item in the column
     let targetColumn: ColumnId | null = null;
-    if (['unread', 'autopilot', 'drafts', 'sent', 'archived'].includes(overId)) {
+    if (['unread', 'drafts', 'sent', 'archived'].includes(overId)) {
       targetColumn = overId as ColumnId;
     } else {
       // Find which column the over item is in
@@ -459,7 +440,6 @@ export function MessageBoard({
                     <div className="rounded-lg border-2 border-dashed border-muted p-4 text-center text-sm text-muted-foreground">
                       {/* Status mode empty states */}
                       {!isPlatformMode && columnId === 'unread' && 'No unread messages'}
-                      {!isPlatformMode && columnId === 'autopilot' && 'No chats on autopilot'}
                       {!isPlatformMode && columnId === 'drafts' && 'Drag messages here to create drafts'}
                       {!isPlatformMode && columnId === 'sent' && 'No sent messages'}
                       {!isPlatformMode && columnId === 'archived' && 'No archived chats'}

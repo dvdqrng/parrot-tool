@@ -8,8 +8,6 @@ import { Button } from '@/components/ui/button';
 import { KanbanItem } from '@/components/ui/kanban';
 import { KanbanCard, MediaType } from '@/lib/types';
 import { PlatformIcon } from '@/components/platform-icon';
-import { AutopilotStatusBadge } from '@/components/autopilot/autopilot-status-badge';
-import { getChatAutopilotConfig, getAutopilotAgentById, getPendingActionsForChat } from '@/lib/storage';
 import { cn } from '@/lib/utils';
 
 // Get icon for media type
@@ -61,51 +59,6 @@ function MessageCardComponent({ card, onClick, onArchive, onUnarchive, onHide, o
       return '';
     }
   })();
-
-  // Get autopilot config for this chat
-  const chatId = card.message?.chatId || card.draft?.chatId;
-  const autopilotConfig = chatId ? getChatAutopilotConfig(chatId) : null;
-  const autopilotAgent = autopilotConfig?.agentId ? getAutopilotAgentById(autopilotConfig.agentId) : null;
-
-  // Check if there are pending scheduled actions (indicates waiting state)
-  const hasPendingActions = chatId ? getPendingActionsForChat(chatId).length > 0 : false;
-
-  // Calculate time remaining for self-driving mode
-  const getTimeRemaining = () => {
-    if (!autopilotConfig?.selfDrivingExpiresAt) return null;
-    const expiresAt = new Date(autopilotConfig.selfDrivingExpiresAt).getTime();
-    const now = Date.now();
-    const remaining = Math.max(0, Math.floor((expiresAt - now) / 1000));
-    return remaining > 0 ? remaining : null;
-  };
-
-  // Map status to glow class
-  const getAutopilotGlowClass = () => {
-    if (!autopilotConfig?.enabled || !autopilotConfig.status) return null;
-
-    // Observer and suggest modes: no glow, just a passive indicator
-    if (autopilotConfig.mode === 'observer' || autopilotConfig.mode === 'suggest') return null;
-
-    // If status is active but has pending scheduled actions, show waiting state
-    if (autopilotConfig.status === 'active' && hasPendingActions) {
-      return 'autopilot-glow-waiting';
-    }
-
-    switch (autopilotConfig.status) {
-      case 'active':
-        return 'autopilot-glow-active';
-      case 'paused':
-        return 'autopilot-glow-paused';
-      case 'error':
-        return 'autopilot-glow-error';
-      case 'goal-completed':
-        return 'autopilot-glow-completed';
-      case 'inactive':
-        return null;
-      default:
-        return 'autopilot-glow-active';
-    }
-  };
 
   const initials = card.title
     .split(' ')
@@ -168,8 +121,7 @@ function MessageCardComponent({ card, onClick, onArchive, onUnarchive, onHide, o
       <KanbanItem value={card.id} asHandle className="w-80">
         <div
           className={cn(
-            "group flex gap-3 p-3 cursor-pointer rounded-2xl bg-card hover:shadow-md transition-all overflow-hidden",
-            getAutopilotGlowClass()
+            "group flex gap-3 p-3 cursor-pointer rounded-2xl bg-card hover:shadow-md transition-all overflow-hidden"
           )}
           onClick={onClick}
         >
@@ -230,8 +182,7 @@ function MessageCardComponent({ card, onClick, onArchive, onUnarchive, onHide, o
     <KanbanItem value={card.id} asHandle className="w-80">
       <div
         className={cn(
-          "group flex gap-3 p-3 cursor-pointer rounded-2xl bg-card hover:shadow-md transition-all overflow-hidden",
-          getAutopilotGlowClass()
+          "group flex gap-3 p-3 cursor-pointer rounded-2xl bg-card hover:shadow-md transition-all overflow-hidden"
         )}
         onClick={onClick}
       >
@@ -292,14 +243,6 @@ function MessageCardComponent({ card, onClick, onArchive, onUnarchive, onHide, o
                     </Button>
                   )}
                 </div>
-              )}
-              {autopilotConfig && autopilotConfig.enabled && (
-                <AutopilotStatusBadge
-                  status={autopilotConfig.status}
-                  mode={autopilotConfig.mode}
-                  agentName={autopilotAgent?.name}
-                  timeRemaining={getTimeRemaining()}
-                />
               )}
               {unreadCount >= 1 && (
                 <span className="ml-1 shrink-0 h-5 min-w-5 flex items-center justify-center rounded-full bg-muted px-1.5 text-xs font-medium text-muted-foreground">

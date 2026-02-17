@@ -162,7 +162,9 @@
       "Bash(npx next build:*)",
       "Bash(gh release edit:*)",
       "Bash(npm version:*)",
-      "Bash(git stash:*)"
+      "Bash(git stash:*)",
+      "Bash(npm run lint:*)",
+      "WebFetch(domain:github.com)"
     ]
   }
 }

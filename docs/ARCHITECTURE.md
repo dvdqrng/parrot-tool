@@ -2,13 +2,13 @@
 
 ## Overview
 
-Parrot is built as a modern Next.js application with a client-side heavy architecture. The application follows React best practices with hooks, contexts, and component composition patterns.
+Beeper Kanban is built as a modern Next.js application with a unified data pipeline architecture. The application follows React best practices with hooks, contexts, and component composition patterns.
 
 ## System Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                        Browser/Electron                      │
+│                        Browser                               │
 │  ┌───────────────────────────────────────────────────────┐  │
 │  │              Next.js Frontend (React)                 │  │
 │  │  ┌─────────────┐  ┌──────────────┐  ┌─────────────┐  │  │
@@ -18,71 +18,85 @@ Parrot is built as a modern Next.js application with a client-side heavy archite
 │  │           │                │                │          │  │
 │  │  ┌────────┴────────────────┴────────────────┘          │  │
 │  │  │         Contexts & State Management                 │  │
-│  │  │   - Settings Context                                │  │
-│  │  │   - Autopilot Context                               │  │
-│  │  │   - Custom Hooks (Messages, Drafts, etc.)          │  │
+│  │  │   - BeeperDataProvider (unified data)              │  │
+│  │  │   - SettingsContext (app settings)                 │  │
+│  │  │   - AuthContext (authentication)                   │  │
 │  │  └────────────────────┬───────────────────────────────┘  │
 │  └───────────────────────┼───────────────────────────────┘  │
 │                          │                                   │
 │  ┌───────────────────────┼───────────────────────────────┐  │
 │  │         Next.js API Routes (Server-Side)              │  │
-│  │  ┌──────────────┐  ┌───────────────┐  ┌───────────┐  │  │
-│  │  │  Beeper API  │  │   AI API      │  │  Ollama   │  │  │
-│  │  │  Integration │  │  Integration  │  │  API      │  │  │
-│  │  └──────┬───────┘  └───────┬───────┘  └─────┬─────┘  │  │
-│  └─────────┼──────────────────┼────────────────┼────────┘  │
-└────────────┼──────────────────┼────────────────┼───────────┘
-             │                  │                │
-             ▼                  ▼                ▼
-    ┌────────────────┐  ┌──────────────┐  ┌──────────────┐
-    │  Beeper API    │  │ Anthropic/   │  │   Ollama     │
-    │  (Remote)      │  │ OpenAI API   │  │  (Local)     │
-    └────────────────┘  └──────────────┘  └──────────────┘
+│  │  ┌──────────────────────────────────────────────────┐ │  │
+│  │  │           /api/beeper/data (Unified)             │ │  │
+│  │  │  - BeeperDataService                             │ │  │
+│  │  │  - Server-side caching                           │ │  │
+│  │  │  - Shared transforms                             │ │  │
+│  │  └──────────────────────┬───────────────────────────┘ │  │
+│  └─────────────────────────┼─────────────────────────────┘  │
+└────────────────────────────┼────────────────────────────────┘
+                             │
+                             ▼
+                    ┌────────────────┐
+                    │  Beeper API    │
+                    │  (via SDK)     │
+                    └────────────────┘
 ```
 
-## Data Flow
+## Unified Data Pipeline
 
-### Message Loading Flow
+The application uses a centralized data pipeline that eliminates redundant API calls and provides a single source of truth for all Beeper data.
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        BEEPER SDK                                │
+│         (ONE call to chats.list, ONE to accounts.list)          │
+└──────────────────────────┬──────────────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────────┐
+│              BeeperDataService (Server-Side)                     │
+│  - Single entry point for all Beeper data                       │
+│  - In-memory cache with TTL                                     │
+│  - Shared transforms (participant names, avatars, etc.)         │
+└──────────────────────────┬──────────────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                /api/beeper/data (Unified Endpoint)              │
+│  GET ?slices=accounts,chats,messages&accountIds=...             │
+│  Returns: { accounts, messages, chatInfo, avatars, userInfo }   │
+└──────────────────────────┬──────────────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────────┐
+│              BeeperDataProvider (Client-Side)                    │
+│  - React Context for all Beeper data                            │
+│  - Polling with diff-based updates                              │
+│  - localStorage persistence                                      │
+│  - Computed views (unread, sent, archived)                      │
+└──────────────────────────┬──────────────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    Consumer Hooks                                │
+│  useBeeperData() - Full access to all data                      │
+│  useCrm()        - CRM contact management                       │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Data Flow
 
 ```
 1. User opens app
-2. Settings Context loads from LocalStorage
-3. useMessages hook fetches from /api/beeper/messages
-4. API route calls Beeper Desktop API
-5. Messages are processed and categorized
-6. UI renders Kanban board with columns
-```
-
-### Draft Generation Flow
-
-```
-1. User drags message to Drafts column (or clicks Generate All)
-2. Optimistic draft created with "Generating..." text
-3. POST to /api/ai/draft with message context
-4. API route:
-   - Loads tone settings and writing style from storage
-   - Calls selected AI provider (Anthropic/OpenAI/Ollama)
-   - Returns generated draft
-5. Draft updated in state
-6. UI reflects new draft
-```
-
-### Autopilot Flow
-
-```
-1. User enables autopilot for a chat
-2. ChatAutopilotConfig saved to LocalStorage
-3. AutopilotContext monitors for new messages
-4. When message arrives:
-   - AutopilotEngine processes message
-   - Applies agent's system prompt and goal
-   - Generates draft or schedules action
-   - Logs activity
-   - Updates UI
-5. Scheduler executes queued actions
-6. On goal completion:
-   - Generates handoff summary
-   - Updates status based on goal completion behavior
+2. BeeperDataProvider initializes
+3. Provider fetches from /api/beeper/data?slices=accounts,chats
+4. BeeperDataService calls Beeper SDK once
+5. Data cached server-side and returned
+6. Provider stores in React state + localStorage
+7. Components consume via useBeeperData() hook
+8. Polling updates at 10-second intervals
 ```
 
 ## Directory Structure
@@ -91,176 +105,143 @@ Parrot is built as a modern Next.js application with a client-side heavy archite
 
 #### `/app/page.tsx`
 Main kanban board interface. Handles:
-- Message loading and display
+- Message display in columns
 - Drag-and-drop functionality
-- Draft creation and management
-- Autopilot integration
-- UI state management
+- Message selection
+- CRM integration
 
 #### `/app/layout.tsx`
 Root layout with providers:
-- Settings Context Provider
-- Autopilot Context Provider
+- BeeperDataProvider (unified data)
+- SettingsContext Provider
+- AuthContext Provider
 - Theme Provider
 - Toast notifications (Sonner)
 
 #### `/app/api` - API Routes
 
-**Beeper Integration**:
-- `beeper/messages/route.ts` - Fetch unread messages
-- `beeper/user-messages/route.ts` - Fetch sent messages
-- `beeper/archived/route.ts` - Fetch archived messages
-- `beeper/send/route.ts` - Send messages
+**Unified Data Endpoint**:
+- `beeper/data/route.ts` - Single endpoint for all data (accounts, messages, archived)
+
+**Chat Operations**:
+- `beeper/chats/route.ts` - Fetch messages for a specific chat
 - `beeper/chats/[chatId]/archive/route.ts` - Archive chat
 - `beeper/chats/[chatId]/unarchive/route.ts` - Unarchive chat
-- `beeper/accounts/route.ts` - Get connected accounts
-- `beeper/contacts/route.ts` - Get contacts
 
-**AI Integration**:
-- `ai/draft/route.ts` - Generate draft replies
-- `ai/chat/route.ts` - AI chat assistant
-- `ai/conversation-summary/route.ts` - Generate summaries
+**Mutations**:
+- `beeper/send/route.ts` - Send messages
+- `beeper/contacts/route.ts` - Get contacts for new conversations
 
-**Other**:
+**Utilities**:
 - `avatar/route.ts` - Proxy avatar images
 - `media/route.ts` - Handle media attachments
-- `ollama/models/route.ts` - List Ollama models
+- `attachments/route.ts` - Attachment handling
 
 #### `/app/settings` - Settings Pages
 - `platforms/page.tsx` - Platform selection
-- `api-keys/page.tsx` - API key management
-- `tone/page.tsx` - Writing style configuration
 - `hidden-chats/page.tsx` - Hidden chat management
 - `data/page.tsx` - Data export/import
-- `autopilot/page.tsx` - Autopilot overview
-- `autopilot/agents/page.tsx` - Agent list
-- `autopilot/agents/new/page.tsx` - Create agent
-- `autopilot/agents/[id]/page.tsx` - Edit agent
-- `autopilot/activity/page.tsx` - Activity log
+- `account/page.tsx` - Account settings
 
 ### `/components` - React Components
 
 #### `/components/kanban`
 Kanban board components:
 - `message-board.tsx` - Main board with columns
-- `message-card.tsx` - Individual message/draft card
+- `message-card.tsx` - Individual message card
 - `column-header.tsx` - Column headers with actions
-
-#### `/components/autopilot`
-Autopilot-related components:
-- `agent-form.tsx` - Agent creation/editing form
-- `autopilot-status-badge.tsx` - Status indicator
-- `autopilot-activity-log.tsx` - Activity log display
-- `autopilot-controls-bar.tsx` - Control buttons
-- `autopilot-current-activity.tsx` - Current activity display
-- `autopilot-active-section.tsx` - Active autopilot section
-- `autopilot-header-status.tsx` - Header status display
-- `chat-autopilot-config.tsx` - Per-chat configuration
-- `handoff-summary-card.tsx` - Handoff notification card
 
 #### `/components/message-input`
 Message input components:
 - `manual-input-section.tsx` - Manual message input
-- `draft-approval-section.tsx` - Draft approval UI
-- `autopilot-status-display.tsx` - Autopilot status
-- `autopilot-config-form.tsx` - Configuration form
-- `autopilot-config-icons.tsx` - Icon components
 
 #### `/components/ui`
-Reusable UI components from Radix UI:
+Reusable UI components from shadcn/ui:
 - Button, Dialog, Input, Textarea, Select, etc.
-- `animated-gradient-sphere.tsx` - Animated background
 
 #### Other Components
 - `message-panel.tsx` - Right-side message detail panel
-- `ai-chat-panel.tsx` - AI chat assistant panel
-- `message-detail.tsx` - Message detail modal
-- `draft-composer.tsx` - Draft editing dialog
+- `message-modal.tsx` - Message detail modal
 - `contacts-dialog.tsx` - Contact selection
-- `tone-settings.tsx` - Tone configuration UI
+- `contacts-view.tsx` - CRM contacts view
+- `contact-profile-panel.tsx` - Contact profile display
 - `theme-toggle.tsx` - Dark/light mode toggle
 - `platform-icon.tsx` - Platform-specific icons
 
 ### `/contexts` - React Contexts
 
+#### `beeper-data-context.tsx`
+Unified data provider:
+- All messages (unread, sent, archived)
+- Accounts
+- Chat info and avatars
+- User info
+- Polling and refresh
+
 #### `settings-context.tsx`
 Global app settings:
 - Selected account IDs
-- API keys (Beeper, Anthropic, OpenAI)
-- AI provider selection
-- Ollama configuration
+- Beeper access token
 - UI preferences
 
-#### `autopilot-context.tsx`
-Autopilot state management:
-- Process new messages
-- Manage scheduled actions
-- Track activity
-- Generate handoff summaries
-- Configuration version tracking
+#### `auth-context.tsx`
+Authentication state:
+- User session
+- Login/logout
 
 ### `/hooks` - Custom React Hooks
 
-#### Message & Data Hooks
-- `use-messages.ts` - Fetch and manage messages
-- `use-archived.ts` - Fetch archived messages
+#### Data Hooks
+- `use-beeper-data.ts` - Access unified Beeper data context
+- `use-chat-history.ts` - Fetch full chat history with pagination
+- `use-crm.ts` - CRM contact management
 - `use-drafts.ts` - Draft management (CRUD)
-- `use-accounts.ts` - Account fetching
-- `use-ai-chat-history.ts` - Per-thread AI chat
+- `use-accounts.ts` - Account fetching (onboarding)
 
-#### Batch Operation Hooks
-- `use-batch-draft-generator.ts` - Generate multiple drafts
-- `use-batch-send.ts` - Send multiple drafts
+#### Action Hooks
+- `use-send-message.ts` - Send messages
+- `use-batch-send.ts` - Send multiple messages
 
-#### Autopilot Hooks
-- `use-autopilot-agents.ts` - Agent CRUD operations
-- `use-chat-autopilot.ts` - Per-chat autopilot config
-- `use-autopilot-engine.ts` - Core autopilot logic
-- `use-autopilot-scheduler.ts` - Action scheduling
-- `use-autopilot-events.ts` - Event handling
-- `use-pending-drafts.ts` - Pending draft management
-- `use-scheduler-status.ts` - Scheduler status
-- `use-last-activity.ts` - Last activity tracking
-
-#### Other Hooks
+#### Utility Hooks
 - `use-settings.ts` - Settings management
 
 ### `/lib` - Utility Libraries
+
+#### `/lib/beeper/` - Beeper Data Pipeline
+- `types.ts` - Data pipeline types
+- `cache.ts` - Server-side TTL cache
+- `transforms.ts` - Shared data transforms
+- `data-service.ts` - Core data service
+
+#### `beeper-client.ts`
+Beeper SDK client:
+- Client initialization
+- Platform detection
+- Token management
 
 #### `types.ts`
 TypeScript type definitions for:
 - Beeper API types (BeeperMessage, BeeperAccount, etc.)
 - App types (Draft, AppSettings, KanbanCard)
-- Autopilot types (AutopilotAgent, ChatAutopilotConfig, etc.)
-- Writing style types (ToneSettings, WritingStylePatterns)
+- CRM types (CrmContactProfile)
 
 #### `storage.ts`
 LocalStorage utilities for:
 - App settings
 - Drafts
 - Hidden chats
-- Tone settings and writing style
-- Autopilot configurations
-- Scheduled actions
-- Activity logs
-- AI chat history
+- CRM contacts and mappings
+- Message caching
 
-#### `ollama.ts`
-Ollama API integration:
-- Model listing
-- Chat completions
-- Error handling
-
-#### `autopilot-events.ts`
-Event system for autopilot:
-- Event emitter
-- Type-safe event handlers
+#### `constants.ts`
+Application constants:
+- Polling intervals
+- Storage keys
 
 #### `time-utils.ts`
 Time-related utilities:
-- Delay calculations
-- Activity hour checks
 - Timestamp formatting
+- Relative time display
 
 ## State Management
 
@@ -268,8 +249,8 @@ Time-related utilities:
 
 The app uses a combination of:
 
-1. **React Context**: For global state (Settings, Autopilot)
-2. **Custom Hooks**: For data fetching and management
+1. **React Context**: For global state (BeeperData, Settings, Auth)
+2. **Custom Hooks**: For data access and actions
 3. **Local Component State**: For UI-specific state
 4. **LocalStorage**: For persistence
 
@@ -278,49 +259,56 @@ The app uses a combination of:
 ```
 LocalStorage
     ↓
-Settings Context → Components
+BeeperDataProvider → useBeeperData() → Components
     ↓
-Custom Hooks (useMessages, useDrafts, etc.)
+Settings Context → useSettingsContext() → Components
     ↓
-API Routes → External APIs
+Auth Context → useAuth() → Components
 ```
 
 ### Key State Patterns
 
+**Single Source of Truth**:
+- All Beeper data flows through BeeperDataProvider
+- No duplicate fetching of the same data
+- Computed views derived from base data
+
+**Polling with Caching**:
+- Client polls every 10 seconds
+- Server caches data with TTL
+- Reduces redundant API calls
+
 **Optimistic Updates**:
-- Draft creation shows immediately with placeholder
 - Archive actions update UI before API call
 - Failed operations revert state
 
-**Polling**:
-- Messages auto-refresh every 10 seconds
-- Autopilot scheduler runs continuously
-
-**Event-Driven**:
-- Autopilot uses event emitter for coordination
-- Components subscribe to autopilot events
-
 ## API Design
 
-### Next.js API Routes
+### Unified Endpoint
 
-All API routes follow REST conventions:
+The `/api/beeper/data` endpoint consolidates all data fetching:
 
-**Request Flow**:
+**Request**:
 ```
-1. Client sends request with headers
-2. API route validates authentication
-3. Route calls external API or processes data
-4. Response formatted as { data, error }
-5. Client handles response
+GET /api/beeper/data?slices=accounts,chats,archived&accountIds=id1,id2
+Headers: x-beeper-token: <token>
 ```
 
-**Authentication**:
-- Beeper token passed via `x-beeper-token` header
-- Anthropic key via `x-anthropic-key` header
-- OpenAI key handled similarly
+**Response**:
+```json
+{
+  "accounts": [...],
+  "messages": [...],
+  "archivedMessages": [...],
+  "userInfo": {...},
+  "chatInfo": {...},
+  "avatars": {...},
+  "_meta": { "fetchedAt": "..." }
+}
+```
 
-**Error Handling**:
+### Error Handling
+
 ```typescript
 try {
   const result = await externalAPI()
@@ -341,121 +329,43 @@ try {
 - Container: `app/page.tsx` (logic)
 - Presentational: `components/kanban/message-board.tsx` (UI)
 
-**Composition**:
-- Small, focused components
-- Props for customization
-- Children for flexibility
+**Context Consumption**:
+```typescript
+export default function Home() {
+  const { messages, accounts, isLoading } = useBeeperData()
+  const { contacts, updateContact } = useCrm()
+
+  // Business logic
+
+  return <MessageBoard messages={messages} />
+}
+```
 
 **Hooks for Logic**:
 - Extract complex logic into custom hooks
 - Keep components focused on rendering
 
-### Example Component Structure
-
-```typescript
-// Container Component (app/page.tsx)
-export default function Home() {
-  const { messages } = useMessages()
-  const { drafts, createDraft } = useDrafts()
-
-  const handleDragDrop = async (card, toColumn) => {
-    // Business logic
-  }
-
-  return <MessageBoard onDrop={handleDragDrop} />
-}
-
-// Presentational Component
-export function MessageBoard({ onDrop }) {
-  return (
-    <DndContext onDragEnd={onDrop}>
-      {/* UI rendering */}
-    </DndContext>
-  )
-}
-```
-
-## Autopilot System Architecture
-
-### Core Components
-
-1. **AutopilotContext**: Global autopilot state
-2. **useAutopilotEngine**: Message processing logic
-3. **useAutopilotScheduler**: Action execution
-4. **ChatAutopilotConfig**: Per-chat configuration
-
-### Processing Pipeline
-
-```
-New Message
-    ↓
-AutopilotContext.processNewMessages()
-    ↓
-useAutopilotEngine.processMessage()
-    ↓
-├─ Check if autopilot enabled for chat
-├─ Load agent configuration
-├─ Generate response using AI
-├─ Apply human-like delays
-├─ Schedule action (if self-driving)
-└─ Log activity
-    ↓
-useAutopilotScheduler.executeActions()
-    ↓
-Send message (if time reached)
-    ↓
-Check goal completion
-    ↓
-Generate handoff (if needed)
-```
-
-### Human-Like Behavior Implementation
-
-**Reply Delays**:
-```typescript
-const delay = contextAware
-  ? calculateContextAwareDelay(recentMessages)
-  : randomBetween(min, max)
-```
-
-**Activity Hours**:
-```typescript
-const now = new Date()
-if (now.getHours() < startHour || now.getHours() > endHour) {
-  return // Don't respond outside hours
-}
-```
-
-**Typing Indicators**:
-```typescript
-const typingDuration = (words / wpm) * 60 * 1000
-scheduleAction('typing-indicator', now)
-scheduleAction('send-message', now + typingDuration)
-```
-
 ## Performance Considerations
 
-### Optimization Strategies
+### Current Optimizations
 
-1. **Virtualization**: Could be added for large message lists
-2. **Memoization**: Used in message filtering logic
-3. **Debouncing**: On search and filter inputs
-4. **Code Splitting**: Next.js automatic code splitting
-5. **Image Optimization**: Next.js Image component for avatars
+1. **Unified Data Fetching**: Single API call instead of multiple
+2. **Server-Side Caching**: TTL-based cache reduces Beeper API calls
+3. **Client-Side Caching**: localStorage persistence
+4. **Polling Efficiency**: Diff-based updates
+5. **Code Splitting**: Next.js automatic code splitting
 
-### Current Performance Characteristics
+### Performance Characteristics
 
 - Message polling: 10 second interval
-- Autopilot scheduler: Runs continuously
-- LocalStorage: Synchronous operations (potential bottleneck)
-- No real-time updates (polling-based)
+- Server cache TTL: 30 seconds for chats, 5 minutes for accounts
+- LocalStorage: Synchronous but fast for small data
 
 ### Future Improvements
 
 - WebSocket for real-time updates
+- Virtual scrolling for large message lists
 - IndexedDB for large data storage
-- Virtual scrolling for message lists
-- Service Worker for offline support
 
 ## Security Architecture
 
@@ -469,121 +379,30 @@ scheduleAction('send-message', now + typingDuration)
 **API Communication**:
 - HTTPS only
 - Tokens in headers (not URL params)
-- CORS properly configured
 
 **Beeper Integration**:
-- Uses official Beeper Desktop API
+- Uses official Beeper SDK
 - Access token required for all operations
-- No credential storage
 
 ### Privacy
 
 - No analytics or tracking
-- AI requests only to selected provider
-- Option for local Ollama (complete privacy)
+- All data stays local
 - No telemetry
 
-## Testing Strategy
-
-### Recommended Testing Approach
-
-**Unit Tests**:
-- Utility functions in `/lib`
-- Custom hooks (with React Testing Library)
-- Component logic
-
-**Integration Tests**:
-- API routes
-- Context + Hook interactions
-- Complete user flows
-
-**E2E Tests**:
-- Main workflows (message → draft → send)
-- Autopilot scenarios
-- Settings configuration
-
-### Test Structure
-
-```
-__tests__/
-├── lib/
-│   ├── storage.test.ts
-│   └── time-utils.test.ts
-├── hooks/
-│   ├── use-messages.test.ts
-│   └── use-drafts.test.ts
-├── components/
-│   └── kanban/
-│       └── message-card.test.tsx
-└── integration/
-    └── draft-flow.test.ts
-```
-
-## Deployment Architecture
-
-### Web Deployment
-
-**Vercel** (Recommended):
-```bash
-npm run build
-vercel deploy
-```
-
-**Other Platforms**:
-- Netlify
-- AWS Amplify
-- Self-hosted Node.js server
-
-### Electron Deployment
-
-**Build Process**:
-```bash
-npm run build
-electron-builder
-```
-
-**Distribution**:
-- macOS: `.dmg` installer
-- Windows: `.exe` installer
-- Linux: `.AppImage` or `.deb`
-
-### Environment Variables
-
-Not currently used, but could be added:
-```
-NEXT_PUBLIC_API_URL=https://api.example.com
-NEXT_PUBLIC_ENABLE_ANALYTICS=false
-```
-
-## Scalability Considerations
-
-### Current Limitations
-
-1. **LocalStorage Size**: 5-10MB limit
-2. **Polling Overhead**: Could become inefficient
-3. **Client-Side Processing**: Limited by browser
-
-### Scaling Solutions
-
-**For High Message Volume**:
-- Implement pagination
-- Add message search/filtering
-- Virtual scrolling
-- IndexedDB for storage
-
-**For Multiple Users** (future):
-- Backend database
-- Real-time sync
-- User authentication
-- Shared autopilot agents
-
-## Technology Choices Rationale
+## Technology Choices
 
 ### Why Next.js?
-- Server-side rendering capability
-- API routes for backend logic
+- Server-side API routes
 - Excellent developer experience
 - Built-in optimization
+- TypeScript support
+
+### Why Unified Data Pipeline?
+- Eliminates redundant API calls
+- Single source of truth
+- Easier to extend
+- Better caching
 
 ### Why LocalStorage?
 - Simple persistence
@@ -591,23 +410,7 @@ NEXT_PUBLIC_ENABLE_ANALYTICS=false
 - Fast access
 - Privacy-friendly
 
-### Why Beeper Desktop API?
+### Why Beeper SDK?
 - Official integration
 - Multi-platform support
-- Active development
-- Good documentation
-
-### Why Multiple AI Providers?
-- Flexibility for users
-- Cost optimization
-- Privacy options (Ollama)
-- Feature comparison
-
-## Future Architecture Plans
-
-1. **Real-Time Updates**: WebSocket integration
-2. **Backend Service**: Optional cloud sync
-3. **Mobile Apps**: React Native version
-4. **Plugin System**: Custom integrations
-5. **Advanced Analytics**: Message insights
-6. **Team Features**: Shared agents and templates
+- Type-safe API

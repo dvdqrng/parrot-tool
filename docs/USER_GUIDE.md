@@ -1,6 +1,6 @@
 # User Guide
 
-Complete guide to using Parrot effectively.
+Complete guide to using Beeper Kanban effectively.
 
 ## Table of Contents
 
@@ -8,7 +8,7 @@ Complete guide to using Parrot effectively.
 - [Basic Workflow](#basic-workflow)
 - [Managing Messages](#managing-messages)
 - [Working with Drafts](#working-with-drafts)
-- [Using AI Features](#using-ai-features)
+- [CRM & Contacts](#crm--contacts)
 - [Organizing Your Board](#organizing-your-board)
 - [Keyboard & Mouse Tips](#keyboard--mouse-tips)
 - [Tips & Tricks](#tips--tricks)
@@ -22,7 +22,6 @@ Complete guide to using Parrot effectively.
 
 1. **Launch the App**
    - Web: Open in browser at `http://localhost:3000`
-   - Desktop: Launch Electron app
 
 2. **Configure Beeper**
    - Click "Configure Platforms"
@@ -30,13 +29,7 @@ Complete guide to using Parrot effectively.
    - Select which platforms to show (WhatsApp, Telegram, etc.)
    - Click "Save Settings"
 
-3. **Set Up AI (Optional)**
-   - Go to Settings → API Keys
-   - Choose provider (Anthropic, OpenAI, or Ollama)
-   - Add your API key
-   - Save settings
-
-4. **Start Using**
+3. **Start Using**
    - Messages will appear in the Unread column
    - Click refresh to load messages
    - Begin managing conversations!
@@ -47,10 +40,10 @@ Complete guide to using Parrot effectively.
 ┌─────────────────────────────────────────────────────────────┐
 │                    Kanban Board                              │
 │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐   │
-│  │  Unread  │  │Autopilot │  │  Drafts  │  │   Sent   │   │
+│  │  Unread  │  │  Drafts  │  │   Sent   │  │ Archived │   │
 │  │          │  │          │  │          │  │          │   │
 │  │  [Card]  │  │  [Card]  │  │  [Card]  │  │  [Card]  │   │
-│  │  [Card]  │  │          │  │  [Card]  │  │  [Card]  │   │
+│  │  [Card]  │  │  [Card]  │  │  [Card]  │  │  [Card]  │   │
 │  │  [Card]  │  │          │  │          │  │          │   │
 │  └──────────┘  └──────────┘  └──────────┘  └──────────┘   │
 └─────────────────────────────────────────────────────────────┘
@@ -63,8 +56,6 @@ Bottom Bar: [+] [↻] [Archive] [☀/☾] [⚙]
 ### Kanban Columns
 
 **Unread**: New messages that need your attention
-
-**Autopilot**: Conversations being handled by autonomous agents
 
 **Drafts**: Prepared responses awaiting your review/sending
 
@@ -79,7 +70,7 @@ Bottom Bar: [+] [↻] [Archive] [☀/☾] [⚙]
 ### The Standard Flow
 
 1. **Message Arrives** → Appears in Unread column
-2. **Generate Draft** → Drag to Drafts or use "Generate All"
+2. **Create Draft** → Write your response
 3. **Review & Edit** → Click draft to review/modify
 4. **Send** → Click send button
 5. **Complete** → Moves to Sent column
@@ -90,13 +81,6 @@ Bottom Bar: [+] [↻] [Archive] [☀/☾] [⚙]
 2. **Click Message** → Opens side panel
 3. **Type Reply** → Use text area at bottom
 4. **Send** → Click send button
-
-### Batch Processing Flow
-
-1. **Multiple Messages** → All in Unread column
-2. **Generate All Drafts** → Click "Generate All Drafts" button
-3. **Review Each** → Click through drafts to review
-4. **Send All** → Click "Send All Drafts" button
 
 ---
 
@@ -121,31 +105,20 @@ Each card displays:
 - **Preview**: Message snippet
 - **Timestamp**: When message was received
 - **Platform Icon**: WhatsApp, Telegram, etc.
-- **Unread Badge**: Number of unread messages in chat (if grouped)
+- **Unread Badge**: Number of unread messages in chat
 
 ### Actions on Messages
 
 **Right-click** or **three-dot menu** for actions:
-- Generate Draft
 - Archive Chat
 - Hide Chat
-- Mark as Read (future)
-- Pin (future)
-
-### Filtering Messages
-
-Currently messages are filtered by:
-- Selected platforms (in settings)
-- Hidden chats (removed from view)
-- Archive status
-
-**Future**: Search and advanced filtering coming soon.
 
 ### Loading More Messages
 
-- Scroll to bottom of Unread column
+When viewing a conversation in the panel:
+- Scroll to top of message history
 - Click "Load More" button
-- Loads next batch of messages
+- Loads older messages
 
 ### Refreshing Messages
 
@@ -159,26 +132,16 @@ Click the **refresh icon** (↻) in bottom bar to fetch latest messages.
 
 ### Creating Drafts
 
-**Method 1: Drag & Drop**
-- Drag message card from Unread
-- Drop in Drafts column
-- AI generates draft automatically
-
-**Method 2: Batch Generation**
-- Click "Generate All Drafts" in Unread column header
-- AI generates drafts for all unread messages
-- Progress bar shows generation status
-
-**Method 3: Manual Draft**
+**From Message Panel**:
 - Click message to open panel
-- Type response in text area
-- Click "Save as Draft"
+- Type response in text area at bottom
+- Click "Save as Draft" or just send directly
 
 ### Reviewing Drafts
 
 1. Click draft card
 2. Message panel opens
-3. Review AI-generated text
+3. Review draft text
 4. Edit if needed
 5. Click "Send" when ready
 
@@ -197,11 +160,6 @@ In the message panel:
 - Review in panel
 - Click "Send" button
 
-**All Drafts**:
-- Click "Send All Drafts" in Drafts column header
-- Confirms before sending
-- Sends all prepared drafts
-
 ### Deleting Drafts
 
 **From Card**:
@@ -215,96 +173,31 @@ In the message panel:
 
 ---
 
-## Using AI Features
+## CRM & Contacts
 
-### AI Draft Generation
+### Contact Profiles
 
-**How it works**:
-1. AI reads the incoming message
-2. Considers your tone settings
-3. Matches your writing style
-4. Generates appropriate response
-5. Creates draft for your review
+Beeper Kanban includes CRM functionality to track your contacts:
 
-**Customizing Output**:
-- Settings → Tone → Adjust sliders
-- Brief ↔ Detailed: Response length
-- Formal ↔ Casual: Tone style
-- Add sample messages for style matching
+- **View Contact Profile**: Click the profile icon when viewing a conversation
+- **Activity Stats**: See total messages, received, sent, and response time
+- **Notes**: Add notes about the contact
+- **Tags**: Organize contacts with custom tags
 
-### AI Chat Assistant
+### Activity Tracking
 
-**Opening AI Chat**:
-1. Click any message card
-2. Message panel opens
-3. Click chat icon (💬) in top-right
-4. AI chat panel slides out
+The CRM tracks interaction stats automatically:
+- **Total Messages**: All messages in conversation
+- **Received**: Messages from the contact
+- **Sent**: Your messages to them
+- **Avg Response Time**: How quickly you typically respond (within 2-hour windows)
 
-**Using AI Chat**:
-- Ask questions about how to respond
-- Request rewrites in different tones
-- Brainstorm ideas
-- Get advice on conversation
+### Managing Contacts
 
-**Example Prompts**:
-```
-"How should I politely decline this?"
-"Make this sound more professional"
-"What are some good follow-up questions?"
-"Rewrite this to be more casual"
-```
-
-**Using Generated Text**:
-- AI provides response
-- Click "Use Draft" button
-- Text inserted into message input
-- Edit as needed
-- Send when ready
-
-**Chat History**:
-- Saved per conversation thread
-- Persists between sessions
-- Clear in Settings → Data
-
-### Writing Style Training
-
-**Setting Up Your Style**:
-
-1. Go to Settings → Tone
-2. Scroll to "Writing Style Patterns"
-3. Click "Add Sample Message"
-4. Paste 5-10 real messages you've written
-5. Click "Analyze Style"
-
-**What Gets Learned**:
-- Your common phrases
-- Emoji preferences
-- How you greet/sign off
-- Punctuation patterns
-- Capitalization style
-- Abbreviations you use
-
-**Result**: Future drafts will sound more like you!
-
-### AI Providers
-
-**Anthropic (Claude)**:
-- Best quality
-- Great for nuanced responses
-- Recommended default
-
-**OpenAI (ChatGPT)**:
-- Familiar interface
-- Good performance
-- Wide model selection
-
-**Ollama (Local)**:
-- Complete privacy
-- No API costs
-- Works offline
-- Requires local setup
-
-Configure in Settings → API Keys.
+- Contacts are automatically created from your conversations
+- Edit contact details in the profile panel
+- Merge duplicate contacts if needed
+- Search and filter contacts
 
 ---
 
@@ -356,15 +249,9 @@ Sent → [Auto-archive after time]
 ```
 
 **Keep Unread Clean**:
-- Generate drafts regularly
+- Process messages regularly
 - Archive conversations you don't need to respond to
 - Hide personal/off-topic chats
-
-**Batch Process**:
-- Set aside time for message review
-- Generate all drafts at once
-- Review and send in batch
-- Archive completed conversations
 
 ---
 
@@ -375,14 +262,12 @@ Sent → [Auto-archive after time]
 **Left Click**: Open message/draft panel
 
 **Right Click**: Open context menu
-- Generate Draft
 - Archive/Unarchive
 - Hide Chat
 - Delete Draft
 
 **Drag & Drop**:
-- Drag from Unread → Drafts (generates draft)
-- Drag between columns (future feature)
+- Drag cards between columns (future feature)
 
 ### Navigation Tips
 
@@ -392,16 +277,9 @@ Sent → [Auto-archive after time]
 - Press ESC to close
 - Click next message
 
-**Rapid Drafting**:
-- Click "Generate All Drafts"
-- Wait for completion
-- Click through drafts
-- Send approved ones
-
 **Panel Management**:
 - Panel stays open while clicking cards
 - Click X or click outside to close
-- AI chat panel toggles independently
 
 ---
 
@@ -409,50 +287,33 @@ Sent → [Auto-archive after time]
 
 ### Efficiency Tips
 
-**1. Use Batch Operations**
+**1. Process in Batches**
 ```
-Instead of: Generate → Review → Send (repeat)
-Do: Generate All → Review All → Send All
-```
-
-**2. Customize AI Tone Per Context**
-```
-Before important messages:
-- Go to Settings → Tone
-- Adjust sliders for that context
-- Generate draft
-- Reset sliders after
+Set aside time for message review
+Process all messages at once
+Archive completed conversations
 ```
 
-**3. Create Draft Templates**
+**2. Use Archive Aggressively**
 ```
-- Save common responses as drafts
-- Modify for specific recipient
-- Send
+If conversation is done → Archive immediately
+Keeps board clean and focused
 ```
 
-**4. Use AI Chat for Difficult Responses**
+**3. Hide Personal Chats**
 ```
-- Open AI chat
-- Describe situation
-- Ask for multiple options
-- Pick best one
+Keep personal separate from work
+Unhide when needed
 ```
 
 ### Quality Tips
 
-**1. Always Review AI Drafts**
-- AI is good but not perfect
-- Check for accuracy
+**1. Always Review Before Sending**
+- Double-check message content
 - Verify tone matches context
 - Add personal touches
 
-**2. Train Your Writing Style**
-- Better training = better drafts
-- Update samples periodically
-- Include variety of contexts
-
-**3. Use Manual Mode for Important Chats**
+**2. Use Manual Mode for Important Chats**
 - High-stakes conversations
 - Complex negotiations
 - Sensitive topics
@@ -469,43 +330,10 @@ Example schedule:
 - 7 PM: Final check
 ```
 
-**2. Use Autopilot for Routine**
-```
-Routine chats → Autopilot
-Important chats → Manual review
-```
-
-**3. Archive Aggressively**
+**2. Archive Aggressively**
 ```
 If conversation is done → Archive immediately
 Keeps board clean and focused
-```
-
-### Time-Saving Tips
-
-**1. Keyboard + Mouse Combo**
-```
-- Right-click → Generate Draft
-- Click next message while draft generates
-- Return to review when ready
-```
-
-**2. Use Auto-Refresh**
-```
-- Messages load automatically
-- No need to manually refresh
-- Stay in flow state
-```
-
-**3. Pre-Configure Settings**
-```
-Set up once:
-- Tone preferences
-- Writing style
-- Platform selection
-- Hidden chats
-
-Then forget about settings and just work.
 ```
 
 ---
@@ -520,31 +348,26 @@ Then forget about settings and just work.
    - Archive: No response needed
    - Draft: Need to respond
    - Hide: Off-topic/personal
-4. Generate all drafts
-5. Review and send throughout day
+4. Process each conversation
+5. Archive completed chats
 
 ### High-Volume Response
 
-1. Enable autopilot for routine chats
-2. Set to Manual Approval mode
-3. Let AI generate drafts
-4. Review in batches
-5. Send approved drafts
-6. Archive completed
+1. Review all messages quickly
+2. Process most urgent first
+3. Draft responses for each
+4. Send all drafts
+5. Archive completed
 
 ### Careful Important Response
 
 1. Click message to open panel
 2. Read full conversation history
-3. Open AI chat assistant
-4. Discuss with AI:
-   - "What are key points to address?"
-   - "How should I phrase this professionally?"
-   - "What questions should I ask?"
-5. Draft response manually or use AI suggestion
-6. Review carefully
-7. Edit as needed
-8. Send when perfect
+3. Think about your response
+4. Draft response carefully
+5. Review carefully
+6. Edit as needed
+7. Send when perfect
 
 ### End-of-Day Cleanup
 
@@ -552,29 +375,7 @@ Then forget about settings and just work.
 2. Archive completed conversations
 3. Review Drafts column
 4. Send or delete stale drafts
-5. Check Autopilot activity log
-6. Address any issues
-7. Plan for tomorrow
-
-### Customer Support Flow
-
-1. Create "Support" autopilot agent
-2. Enable for support chats
-3. Set to Manual Approval
-4. Agent generates initial responses
-5. You review and approve
-6. Agent handles follow-ups
-7. You step in for complex issues
-
-### Sales/Business Development
-
-1. Create specialized agents:
-   - "First Contact" (warm, friendly)
-   - "Discovery" (question-focused)
-   - "Closer" (professional, direct)
-2. Switch agents as conversation progresses
-3. Use handoff summaries between stages
-4. Manual approval for all final decisions
+5. Plan for tomorrow
 
 ### Personal + Work Mixed
 
@@ -601,19 +402,6 @@ Then forget about settings and just work.
 - Check Settings → Platforms
 - Verify token in Beeper Desktop
 - Check browser console for errors
-
-### Drafts Not Generating
-
-**Check**:
-- AI provider is configured
-- API key is valid
-- Provider has credits/access
-
-**Solution**:
-- Settings → API Keys
-- Verify provider selection
-- Check API key
-- Try different provider
 
 ### Panel Not Opening
 
@@ -651,7 +439,6 @@ Then forget about settings and just work.
 - **README.md**: Project overview and quick start
 - **CONFIGURATION.md**: Detailed setup instructions
 - **API.md**: API documentation for developers
-- **AUTOPILOT.md**: Complete autopilot guide
 - **ARCHITECTURE.md**: Technical architecture
 - **DEVELOPMENT.md**: Contributing guide
 
@@ -664,7 +451,6 @@ Then forget about settings and just work.
    - Steps to reproduce
    - Screenshots if helpful
    - Browser/OS info
-4. Join Discord (if available)
 
 ### Feedback
 
@@ -673,7 +459,6 @@ We love feedback! Please share:
 - Bug reports
 - Usability suggestions
 - Documentation improvements
-- Success stories
 
 Open an issue on GitHub or contribute directly!
 
@@ -683,28 +468,18 @@ Open an issue on GitHub or contribute directly!
 
 ### Do's
 
-✅ Review AI-generated drafts before sending
-✅ Train your writing style for better results
-✅ Use autopilot for routine conversations
+✅ Review messages before sending
 ✅ Archive completed conversations regularly
 ✅ Keep your Unread column clean
-✅ Batch process when possible
-✅ Test autopilot with Manual Approval first
-✅ Monitor activity logs
+✅ Process messages in batches when possible
 ✅ Update API keys if they expire
 ✅ Back up your data (Settings → Data → Export)
 
 ### Don'ts
 
-❌ Send AI drafts blindly without review
-❌ Use autopilot for high-stakes conversations without testing
-❌ Ignore activity log errors
 ❌ Let Unread column pile up indefinitely
 ❌ Share API keys or Beeper tokens
 ❌ Forget to archive completed chats
-❌ Skip writing style training (makes drafts generic)
-❌ Use same agent for all conversation types
-❌ Enable self-driving mode without testing first
 ❌ Neglect to check for updates
 
 ---
@@ -713,10 +488,9 @@ Open an issue on GitHub or contribute directly!
 
 Now that you know the basics:
 
-1. **Set up your first workflow**: Start simple with manual drafting
-2. **Train your writing style**: Add sample messages for personalization
-3. **Try autopilot**: Create an agent for routine tasks
-4. **Optimize your process**: Find what works for your use case
-5. **Share feedback**: Help improve Parrot!
+1. **Set up your workflow**: Start simple with manual processing
+2. **Organize contacts**: Use the CRM to track important contacts
+3. **Optimize your process**: Find what works for your use case
+4. **Share feedback**: Help improve Beeper Kanban!
 
-Happy messaging! 🎉
+Happy messaging!

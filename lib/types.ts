@@ -7,6 +7,12 @@ export interface BeeperAccount {
   avatarUrl?: string;
 }
 
+// The authenticated user's info from Beeper (from self participant in chats)
+export interface BeeperUserInfo {
+  name?: string;
+  avatarUrl?: string;
+}
+
 export interface BeeperChat {
   id: string;
   accountId: string;
@@ -69,22 +75,12 @@ export interface Draft {
   updatedAt: string;
 }
 
-export type AiProvider = 'anthropic' | 'ollama' | 'openai';
-
 // Grouping options for the kanban board
 export type KanbanGroupBy = 'status' | 'platform';
 
 export interface AppSettings {
   selectedAccountIds: string[];
   beeperAccessToken?: string;
-  anthropicApiKey?: string;
-  openaiApiKey?: string;
-  // AI provider settings
-  aiProvider?: AiProvider;
-  ollamaModel?: string;
-  ollamaBaseUrl?: string;
-  // AI features enabled (defaults to true for backwards compatibility)
-  aiEnabled?: boolean;
   // UI settings
   showArchivedColumn?: boolean;
   kanbanGroupBy?: KanbanGroupBy;
@@ -93,7 +89,7 @@ export interface AppSettings {
 // Kanban types
 
 // Status-based column IDs (used when groupBy='status')
-export type StatusColumnId = 'unread' | 'autopilot' | 'drafts' | 'sent' | 'archived';
+export type StatusColumnId = 'unread' | 'drafts' | 'sent' | 'archived';
 
 // ColumnId is a string to support both status columns and dynamic platform columns
 export type ColumnId = string;
@@ -124,236 +120,6 @@ export interface KanbanCard {
 
 // KanbanColumns uses string keys to support both status and platform grouping
 export type KanbanColumns = Record<string, KanbanCard[]>;
-
-// API response types
-
-export interface ApiResponse<T> {
-  data?: T;
-  error?: string;
-}
-
-// Personal tone of voice settings
-export interface ToneSettings {
-  // 0 = brief, 100 = detailed
-  briefDetailed: number;
-  // 0 = formal, 100 = casual
-  formalCasual: number;
-  // Sample messages used for analysis
-  analyzedMessageCount?: number;
-  lastAnalyzedAt?: string;
-}
-
-// Detailed writing style patterns extracted from user messages
-export interface WritingStylePatterns {
-  // Sample messages that exemplify the user's writing style
-  sampleMessages: string[];
-  // Common phrases/expressions the user uses
-  commonPhrases: string[];
-  // Emojis the user frequently uses
-  frequentEmojis: string[];
-  // Greeting patterns (how they start messages)
-  greetingPatterns: string[];
-  // Sign-off patterns (how they end messages)
-  signOffPatterns: string[];
-  // Punctuation style: multiple exclamation marks, ellipsis usage, etc.
-  punctuationStyle: {
-    usesMultipleExclamation: boolean;
-    usesEllipsis: boolean;
-    usesAllCaps: boolean;
-    endsWithPunctuation: boolean;
-  };
-  // Capitalization style
-  capitalizationStyle: 'proper' | 'lowercase' | 'mixed';
-  // Average words per message
-  avgWordsPerMessage: number;
-  // Common abbreviations used
-  abbreviations: string[];
-  // Language quirks (e.g., "haha" vs "lol", "u" vs "you")
-  languageQuirks: string[];
-}
-
-// ============================================
-// AUTOPILOT TYPES
-// ============================================
-
-// Agent goal completion behavior
-export type GoalCompletionBehavior = 'auto-disable' | 'maintenance' | 'handoff';
-
-// Human-like behavior settings for agents
-export interface AgentBehaviorSettings {
-  // Reply delay (seconds)
-  replyDelayMin: number;           // e.g., 30
-  replyDelayMax: number;           // e.g., 300
-  replyDelayContextAware: boolean; // faster in active convos
-
-  // Activity hours (24h format)
-  activityHoursEnabled: boolean;
-  activityHoursStart: number;      // e.g., 9
-  activityHoursEnd: number;        // e.g., 22
-  activityHoursTimezone: string;
-
-  // Typing simulation
-  typingIndicatorEnabled: boolean;
-  typingSpeedWpm: number;
-
-  // Read receipts
-  readReceiptEnabled: boolean;
-  readReceiptDelayMin: number;
-  readReceiptDelayMax: number;
-
-  // Multi-message (based on writing style)
-  multiMessageEnabled: boolean;
-  multiMessageDelayMin: number;    // seconds between messages
-  multiMessageDelayMax: number;
-
-  // Response rate - simulate being busy (0-100, 100 = always respond)
-  responseRate: number;
-
-  // Emoji-only responses - sometimes just react with emoji
-  emojiOnlyResponseEnabled: boolean;
-  emojiOnlyResponseChance: number; // 0-100, chance to respond with just emoji
-
-  // Conversation fatigue - reduce engagement over long convos
-  conversationFatigueEnabled: boolean;
-  fatigueTriggerMessages: number;  // After X messages, start reducing engagement
-  fatigueResponseReduction: number; // Reduce response rate by this % per additional message
-
-  // Natural conversation closing
-  conversationClosingEnabled: boolean;
-  closingTriggerIdleMinutes: number; // Suggest closing after X minutes idle
-}
-
-// Default behavior settings
-export const DEFAULT_AGENT_BEHAVIOR: AgentBehaviorSettings = {
-  replyDelayMin: 60,
-  replyDelayMax: 300,
-  replyDelayContextAware: true,
-  activityHoursEnabled: true,
-  activityHoursStart: 9,
-  activityHoursEnd: 22,
-  activityHoursTimezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-  typingIndicatorEnabled: true,
-  typingSpeedWpm: 40,
-  readReceiptEnabled: true,
-  readReceiptDelayMin: 5,
-  readReceiptDelayMax: 30,
-  multiMessageEnabled: true,
-  multiMessageDelayMin: 3,
-  multiMessageDelayMax: 10,
-  // Response rate - 85% means occasionally "busy"
-  responseRate: 85,
-  // Emoji-only responses - 10% chance for casual acknowledgments
-  emojiOnlyResponseEnabled: true,
-  emojiOnlyResponseChance: 10,
-  // Conversation fatigue
-  conversationFatigueEnabled: true,
-  fatigueTriggerMessages: 15,
-  fatigueResponseReduction: 5,
-  // Natural closing
-  conversationClosingEnabled: true,
-  closingTriggerIdleMinutes: 30,
-};
-
-// Agent definition (user-configurable)
-export interface AutopilotAgent {
-  id: string;
-  name: string;
-  description: string;
-  goal: string;                    // e.g., "Schedule a meeting"
-  systemPrompt: string;            // Custom personality/instructions
-  behavior: AgentBehaviorSettings;
-  goalCompletionBehavior: GoalCompletionBehavior;
-  createdAt: string;
-  updatedAt: string;
-}
-
-// Per-chat autopilot config
-export type AutopilotMode = 'observer' | 'suggest' | 'manual-approval' | 'self-driving';
-export type AutopilotStatus = 'inactive' | 'active' | 'paused' | 'goal-completed' | 'error';
-
-export interface ChatAutopilotConfig {
-  chatId: string;
-  enabled: boolean;
-  agentId: string;
-  mode: AutopilotMode;
-  status: AutopilotStatus;
-
-  // Self-driving time constraint
-  selfDrivingDurationMinutes?: number;  // e.g., 10, 30, 60
-  selfDrivingStartedAt?: string;
-  selfDrivingExpiresAt?: string;
-
-  // Goal override (optional)
-  goalCompletionBehaviorOverride?: GoalCompletionBehavior;
-
-  // Tracking
-  messagesHandled: number;
-  lastActivityAt?: string;
-  errorCount: number;
-  lastError?: string;
-
-  createdAt: string;
-  updatedAt: string;
-}
-
-// Scheduled action queue
-export interface ScheduledAutopilotAction {
-  id: string;
-  chatId: string;
-  agentId: string;
-  type: 'send-message' | 'send-read-receipt' | 'typing-indicator';
-  scheduledFor: string;           // ISO timestamp
-  createdAt: string;
-  messageText?: string;
-  messageId?: string;
-  status: 'pending' | 'executing' | 'completed' | 'cancelled' | 'failed';
-  attempts: number;
-  lastError?: string;
-}
-
-// Activity log
-export type AutopilotActivityType =
-  | 'draft-generated'
-  | 'message-sent'
-  | 'message-received'
-  | 'goal-detected'
-  | 'mode-changed'
-  | 'agent-changed'
-  | 'error'
-  | 'paused'
-  | 'resumed'
-  | 'handoff-triggered'
-  | 'time-expired'
-  | 'skipped-busy'           // Skipped due to response rate
-  | 'emoji-only-sent'        // Sent emoji-only response
-  | 'conversation-closing'   // Suggested closing
-  | 'fatigue-reduced'        // Response rate reduced due to fatigue
-  | 'history-loading'        // Loading message history batch
-  | 'history-complete'       // History loading finished
-  | 'knowledge-updated';     // Knowledge extracted from history
-
-export interface AutopilotActivityEntry {
-  id: string;
-  chatId: string;
-  agentId: string;
-  type: AutopilotActivityType;
-  timestamp: string;
-  messageText?: string;
-  draftText?: string;
-  errorMessage?: string;
-  metadata?: Record<string, unknown>;
-}
-
-// Handoff summary
-export interface ConversationHandoffSummary {
-  chatId: string;
-  agentId: string;
-  generatedAt: string;
-  summary: string;
-  keyPoints: string[];
-  suggestedNextSteps: string[];
-  goalStatus: 'achieved' | 'in-progress' | 'unclear';
-}
 
 // ============================================
 // CRM TYPES
@@ -432,80 +198,4 @@ export interface ContactAttachment {
   fileSize: number;       // Bytes
   addedAt: string;        // ISO timestamp
   note?: string;          // Optional user note about the attachment
-}
-
-/**
- * Simplified contact info for quick lookups
- * Maps chatId -> contactId for fast resolution
- */
-export interface CrmChatMapping {
-  chatId: string;
-  contactId: string;
-}
-
-// ============================================
-// KNOWLEDGE SYSTEM
-// ============================================
-
-export type ChatFactCategory =
-  | 'preference'
-  | 'schedule'
-  | 'relationship'
-  | 'topic'
-  | 'sentiment'
-  | 'communication'
-  | 'personal'
-  | 'professional';
-
-export type ChatFactSource = 'observed' | 'stated' | 'inferred' | 'manual';
-
-// Who this fact is about
-export type ChatFactEntity = 'contact' | 'user' | 'conversation';
-
-export interface ChatFact {
-  id: string;
-  category: ChatFactCategory;
-  content: string;
-  confidence: number; // 0-100
-  source: ChatFactSource;
-  aboutEntity: ChatFactEntity; // who this fact is about
-  firstObserved: string; // ISO timestamp
-  lastObserved: string; // ISO timestamp
-  mentions: number; // how many times this fact was reinforced
-}
-
-export interface ChatKnowledge {
-  chatId: string;
-  contactFacts: ChatFact[]; // facts about the other person
-  userFacts: ChatFact[]; // facts about me in context of this conversation
-  conversationFacts: ChatFact[]; // facts about the conversation/relationship itself
-  conversationTone?: string;
-  primaryLanguage?: string;
-  topicHistory: string[];
-  relationshipType?: string;
-  updatedAt: string;
-  createdAt: string;
-}
-
-// ============================================
-// HISTORY LOADING
-// ============================================
-
-export interface HistoryLoadProgress {
-  chatId: string;
-  oldestLoadedMessageId: string | null; // null = haven't started
-  totalMessagesProcessed: number;
-  totalBatchesProcessed: number;
-  isComplete: boolean; // true = reached end of history
-  lastProcessedAt: string; // ISO timestamp
-  nextCursor?: string | null; // cursor for resuming pagination
-}
-
-/**
- * CRM store state
- */
-export interface CrmStore {
-  contacts: Record<string, CrmContactProfile>;  // contactId -> profile
-  tags: Record<string, CrmTag>;                  // tagId -> tag
-  chatMappings: Record<string, string>;          // chatId -> contactId
 }

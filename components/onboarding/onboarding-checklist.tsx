@@ -5,13 +5,12 @@ import { ExternalLink, ArrowRight, Loader2, CheckCircle, XCircle, Eye, EyeOff, R
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Badge } from '@/components/ui/badge';
 import { OnboardingStep } from './onboarding-step';
 import { useAccounts } from '@/hooks/use-accounts';
 import { getPlatformInfo } from '@/lib/beeper-client';
 import { PlatformIcon } from '@/components/platform-icon';
 import { toast } from 'sonner';
-import { AppSettings, AiProvider } from '@/lib/types';
+import { AppSettings } from '@/lib/types';
 
 interface OnboardingChecklistProps {
   settings: AppSettings;
@@ -37,31 +36,17 @@ export function OnboardingChecklist({
   const [isTestingBeeper, setIsTestingBeeper] = useState(false);
   const [beeperStatus, setBeeperStatus] = useState<{ valid: boolean; error?: string } | null>(null);
 
-  // Step 3: AI key (optional)
-  const [aiProvider, setAiProvider] = useState<AiProvider>(settings.aiProvider || 'anthropic');
-  const [anthropicKey, setAnthropicKey] = useState(settings.anthropicApiKey || '');
-  const [openAiKey, setOpenAiKey] = useState(settings.openaiApiKey || '');
-  const [showApiKey, setShowApiKey] = useState(false);
-  const [isTestingAiKey, setIsTestingAiKey] = useState(false);
-  const [aiKeyStatus, setAiKeyStatus] = useState<{ valid: boolean; error?: string } | null>(null);
-
-  // Step 3 skip state
-  const [aiStepSkipped, setAiStepSkipped] = useState(false);
-
-  // Step 4: Platform selection
+  // Step 3: Platform selection
   const { accounts, isLoading: isLoadingAccounts, error: accountsError, refetch } = useAccounts();
 
   // Completion states
   const hasBeeperToken = !!settings.beeperAccessToken;
-  const hasAiKey = !!settings.anthropicApiKey || !!settings.openaiApiKey || settings.aiProvider === 'ollama';
   const hasPlatforms = settings.selectedAccountIds.length > 0;
 
   // Determine current step (sequential)
-  // Step 3 is optional - can be completed or skipped
   const currentStep = !beeperDownloaded ? 1
     : !hasBeeperToken ? 2
-    : (!hasAiKey && !aiStepSkipped) ? 3
-    : 4;
+    : 3;
 
   // Auto-fetch accounts when Beeper token is set
   useEffect(() => {
@@ -81,7 +66,7 @@ export function OnboardingChecklist({
     setBeeperStatus(null);
 
     try {
-      const response = await fetch('/api/beeper/accounts', {
+      const response = await fetch('/api/beeper/data?slices=accounts', {
         headers: { 'x-beeper-token': beeperToken },
       });
       const result = await response.json();
@@ -100,67 +85,6 @@ export function OnboardingChecklist({
     } finally {
       setIsTestingBeeper(false);
     }
-  };
-
-  // Handle AI key testing
-  const handleTestAiKey = async () => {
-    const key = aiProvider === 'anthropic' ? anthropicKey : openAiKey;
-    if (!key.trim()) {
-      toast.error('Please enter an API key first');
-      return;
-    }
-
-    setIsTestingAiKey(true);
-    setAiKeyStatus(null);
-
-    try {
-      const response = await fetch('/api/ai/test-key', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ provider: aiProvider, apiKey: key }),
-      });
-      const result = await response.json();
-
-      setAiKeyStatus(result);
-      if (result.valid) {
-        toast.success('API key is valid!');
-      } else {
-        toast.error(result.error || 'Invalid API key');
-      }
-    } catch {
-      setAiKeyStatus({ valid: false, error: 'Failed to test API key' });
-      toast.error('Failed to test API key');
-    } finally {
-      setIsTestingAiKey(false);
-    }
-  };
-
-  // Handle AI key save
-  const handleSaveAiKey = () => {
-    if (aiProvider === 'anthropic') {
-      updateSettings({ aiProvider: 'anthropic', anthropicApiKey: anthropicKey || undefined, aiEnabled: true });
-      toast.success('Anthropic API key saved');
-    } else if (aiProvider === 'openai') {
-      updateSettings({ aiProvider: 'openai', openaiApiKey: openAiKey || undefined, aiEnabled: true });
-      toast.success('OpenAI API key saved');
-    } else {
-      updateSettings({ aiProvider: 'ollama', aiEnabled: true });
-      toast.success('Using Ollama (local)');
-    }
-  };
-
-  // Handle skip AI key (still want AI, just configure later)
-  const handleSkipAiKey = () => {
-    setAiStepSkipped(true);
-    updateSettings({ aiEnabled: true });
-    toast.info('AI features can be configured later in Settings');
-  };
-
-  // Handle "Use without AI" - completely disable AI features
-  const handleDisableAi = () => {
-    setAiStepSkipped(true);
-    updateSettings({ aiEnabled: false });
-    toast.info('AI features disabled. You can enable them later in Settings.');
   };
 
   return (
@@ -271,147 +195,13 @@ export function OnboardingChecklist({
           </div>
         </OnboardingStep>
 
-        {/* Step 3: AI Key (Optional) */}
+        {/* Step 3: Select Platforms */}
         <OnboardingStep
           stepNumber={3}
-          title="Add AI Key (Optional)"
-          description="Enable AI-powered draft replies"
-          isComplete={hasAiKey || aiStepSkipped}
-          isActive={currentStep === 3}
-        >
-          <div className="space-y-4">
-            <div className="flex gap-1">
-              <Button
-                variant={aiProvider === 'anthropic' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setAiProvider('anthropic')}
-                className="flex-1 text-xs"
-              >
-                Anthropic
-              </Button>
-              <Button
-                variant={aiProvider === 'openai' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setAiProvider('openai')}
-                className="flex-1 text-xs"
-              >
-                OpenAI
-              </Button>
-              <Button
-                variant={aiProvider === 'ollama' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setAiProvider('ollama')}
-                className="flex-1 text-xs"
-              >
-                Ollama
-              </Button>
-            </div>
-
-            {aiProvider !== 'ollama' && (
-              <div className="space-y-2">
-                <p className="text-xs text-muted-foreground">
-                  {aiProvider === 'anthropic' ? (
-                    <>Get from <a href="https://console.anthropic.com/" target="_blank" rel="noopener noreferrer" className="underline">console.anthropic.com</a></>
-                  ) : (
-                    <>Get from <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" className="underline">platform.openai.com</a></>
-                  )}
-                </p>
-                <div className="flex gap-2">
-                  <div className="relative flex-1">
-                    <Input
-                      type={showApiKey ? 'text' : 'password'}
-                      placeholder={aiProvider === 'anthropic' ? 'sk-ant-...' : 'sk-...'}
-                      value={aiProvider === 'anthropic' ? anthropicKey : openAiKey}
-                      onChange={(e) => aiProvider === 'anthropic' ? setAnthropicKey(e.target.value) : setOpenAiKey(e.target.value)}
-                      className="pr-10 text-xs"
-                    />
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="absolute right-0 top-0 h-full px-3"
-                      onClick={() => setShowApiKey(!showApiKey)}
-                    >
-                      {showApiKey ? (
-                        <EyeOff className="h-3 w-3" strokeWidth={2} />
-                      ) : (
-                        <Eye className="h-3 w-3" strokeWidth={2} />
-                      )}
-                    </Button>
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleTestAiKey}
-                    disabled={isTestingAiKey || !(aiProvider === 'anthropic' ? anthropicKey : openAiKey)}
-                  >
-                    {isTestingAiKey ? (
-                      <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2} />
-                    ) : (
-                      'Test'
-                    )}
-                  </Button>
-                  <Button
-                    size="sm"
-                    onClick={handleSaveAiKey}
-                    disabled={!(aiProvider === 'anthropic' ? anthropicKey : openAiKey)}
-                  >
-                    <ArrowRight className="h-3 w-3" strokeWidth={2} />
-                  </Button>
-                </div>
-                {aiKeyStatus && (
-                  <div className={`flex items-center gap-2 text-xs ${aiKeyStatus.valid ? 'text-green-600' : 'text-red-500'}`}>
-                    {aiKeyStatus.valid ? (
-                      <CheckCircle className="h-3 w-3" strokeWidth={2} />
-                    ) : (
-                      <XCircle className="h-3 w-3" strokeWidth={2} />
-                    )}
-                    <span>{aiKeyStatus.valid ? 'API key is valid' : aiKeyStatus.error}</span>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {aiProvider === 'ollama' && (
-              <div className="space-y-2">
-                <p className="text-xs text-muted-foreground">
-                  Use local AI with Ollama - no API key needed
-                </p>
-                <Button size="sm" onClick={handleSaveAiKey} className="w-full">
-                  Use Ollama
-                  <ArrowRight className="h-3 w-3 ml-2" strokeWidth={2} />
-                </Button>
-              </div>
-            )}
-
-            <div className="flex gap-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleSkipAiKey}
-                className="flex-1 text-xs text-muted-foreground"
-              >
-                Skip for now
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleDisableAi}
-                className="flex-1 text-xs text-muted-foreground"
-              >
-                Use without AI
-              </Button>
-            </div>
-          </div>
-        </OnboardingStep>
-
-        {/* Step 4: Select Platforms */}
-        <OnboardingStep
-          stepNumber={4}
           title="Select Platforms"
           description="Choose which messaging platforms to show"
           isComplete={hasPlatforms}
-          isActive={currentStep === 4}
+          isActive={currentStep === 3}
         >
           <div className="space-y-4">
             {accountsError ? (

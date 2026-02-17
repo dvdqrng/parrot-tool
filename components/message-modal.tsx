@@ -1,7 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
-import { logger } from '@/lib/logger';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { formatDistanceToNow } from 'date-fns';
 import {
   Dialog,
@@ -12,17 +11,14 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { KanbanCard } from '@/lib/types';
 import { getPlatformInfo } from '@/lib/beeper-client';
-import { useAiPipeline } from '@/hooks/use-ai-pipeline';
 import { useChatHistory } from '@/hooks/use-chat-history';
 import { Loader2, ChevronUp, Users } from 'lucide-react';
-import { toast } from 'sonner';
 import { MessageBottomSection } from '@/components/message-bottom-section';
 
 interface MessageModalProps {
@@ -31,7 +27,7 @@ interface MessageModalProps {
   card: KanbanCard | null;
   onSend?: (text: string) => Promise<void>;
   onSaveDraft?: (text: string) => void;
-  aiEnabled?: boolean;
+  onClearDraft?: () => void;
 }
 
 // Convert file:// URLs to proxied API URLs
@@ -49,11 +45,12 @@ export function MessageModal({
   card,
   onSend,
   onSaveDraft,
-  aiEnabled = true,
+  onClearDraft,
 }: MessageModalProps) {
   const [draftText, setDraftText] = useState('');
-  const [isGenerating, setIsGenerating] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const lastSavedDraftRef = useRef<string>('');
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const message = card?.message;
   const chatId = message?.chatId || null;
@@ -63,35 +60,15 @@ export function MessageModal({
   const history = useChatHistory(open ? chatId : null, {
     initialLimit: 2,
     pollInterval: 0, // No polling in modal
-    senderName: message?.senderName,
   });
 
   // Reset draft when modal opens
   useEffect(() => {
     if (open && chatId) {
       setDraftText('');
+      lastSavedDraftRef.current = '';
     }
   }, [open, chatId]);
-
-  const { generateDraft } = useAiPipeline();
-
-  // Generate AI suggestion
-  const generateAISuggestion = useCallback(async () => {
-    if (!message || !chatId) return;
-
-    setIsGenerating(true);
-    try {
-      const result = await generateDraft(chatId, message.text, message.senderName);
-      if (result.text) {
-        setDraftText(result.text);
-      }
-    } catch (error) {
-      logger.error('Failed to generate suggestion:', error instanceof Error ? error : String(error));
-      toast.error('Failed to generate AI suggestion');
-    } finally {
-      setIsGenerating(false);
-    }
-  }, [message, chatId, generateDraft]);
 
   // Send message
   const handleSend = useCallback(async () => {
@@ -110,12 +87,40 @@ export function MessageModal({
     }
   }, [draftText, onSend, history]);
 
-  // Save draft
-  const handleSaveDraft = useCallback(() => {
-    if (!draftText.trim() || !onSaveDraft) return;
-    onSaveDraft(draftText);
-    onOpenChange(false);
-  }, [draftText, onSaveDraft, onOpenChange]);
+  // Auto-save draft with debounce (clear immediately when empty)
+  useEffect(() => {
+    if (!chatId) return;
+
+    const trimmedDraft = draftText.trim();
+
+    // Only save/clear if the value actually changed
+    if (trimmedDraft === lastSavedDraftRef.current) return;
+
+    // Clear any pending save timeout
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+      saveTimeoutRef.current = null;
+    }
+
+    // Clear draft immediately when empty (for instant UI feedback)
+    if (!trimmedDraft) {
+      lastSavedDraftRef.current = trimmedDraft;
+      onClearDraft?.();
+      return;
+    }
+
+    // Debounce saves (500ms) to avoid lag while typing
+    saveTimeoutRef.current = setTimeout(() => {
+      lastSavedDraftRef.current = trimmedDraft;
+      onSaveDraft?.(draftText);
+    }, 500);
+
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+    };
+  }, [draftText, chatId, onSaveDraft, onClearDraft]);
 
   if (!card || card.type !== 'message' || !message) {
     return null;
@@ -224,16 +229,11 @@ export function MessageModal({
         <MessageBottomSection
           chatId={chatId}
           chatName={title}
-          latestMessage={message}
           draftText={draftText}
           onDraftTextChange={setDraftText}
-          isGenerating={isGenerating}
-          onGenerateAI={generateAISuggestion}
           isSending={isSending}
           sendSuccess={false}
           onSend={handleSend}
-          onSaveDraft={handleSaveDraft}
-          aiEnabled={aiEnabled}
         />
       </DialogContent>
     </Dialog>

@@ -13,13 +13,9 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { BeeperMessage, BeeperAttachment } from '@/lib/types';
-import {
-  loadSettings,
-  updateThreadContextWithNewMessages,
-  getThreadContext,
-  ThreadContextMessage,
-} from '@/lib/storage';
+import { loadSettings, saveCachedMessages, loadCachedMessages } from '@/lib/storage';
 import { logger } from '@/lib/logger';
+import { eventBus } from '@/lib/intelligence/event-bus';
 
 // ─── Shared types ────────────────────────────────────────────────────
 
@@ -80,8 +76,6 @@ export interface UseChatHistoryOptions {
   pollInterval?: number;
   /** Called after each batch of messages is loaded. */
   onMessagesLoaded?: (chatId: string, msgs: Array<{ timestamp: string; isFromMe: boolean }>) => void;
-  /** Sender name used for thread context persistence. */
-  senderName?: string;
 }
 
 export interface UseChatHistoryReturn {
@@ -120,7 +114,6 @@ export function useChatHistory(
     initialLimit = 20,
     pollInterval = 5000,
     onMessagesLoaded,
-    senderName = 'Unknown',
   } = options;
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -136,8 +129,6 @@ export function useChatHistory(
   // Stable ref for callback to avoid re-renders
   const onMessagesLoadedRef = useRef(onMessagesLoaded);
   onMessagesLoadedRef.current = onMessagesLoaded;
-  const senderNameRef = useRef(senderName);
-  senderNameRef.current = senderName;
 
   // ── Merge helper ──────────────────────────────────────────────────
 
@@ -154,33 +145,28 @@ export function useChatHistory(
       nextCursorRef.current = nextCursor;
     }
 
+    let allMessages: ChatMessage[] = [];
+
     setMessages(prev => {
       const existingIds = new Set(prev.map(m => m.id));
       const unique = newMessages.filter(m => !existingIds.has(m.id));
-      if (unique.length === 0) return prev;
+      if (unique.length === 0) {
+        allMessages = prev;
+        return prev;
+      }
       const merged = [...prev, ...unique];
-      return merged.sort((a, b) =>
+      allMessages = merged.sort((a, b) =>
         new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
       );
+      return allMessages;
     });
 
     setHasMore(newMessages.length >= requestedLimit);
 
-    // Thread context persistence
-    if (chatId) {
-      const contextMsgs: ThreadContextMessage[] = newMessages.map(m => ({
-        id: m.id,
-        text: m.text,
-        isFromMe: m.isFromMe,
-        senderName: m.senderName,
-        timestamp: m.timestamp,
-      }));
-      updateThreadContextWithNewMessages(chatId, senderNameRef.current, contextMsgs);
-    }
-
-    // Notify parent
-    if (chatId && onMessagesLoadedRef.current && newMessages.length > 0) {
-      onMessagesLoadedRef.current(chatId, newMessages.map(m => ({
+    // Notify parent with ALL accumulated messages (not just new ones)
+    // This ensures stats are calculated correctly across all loaded messages
+    if (chatId && onMessagesLoadedRef.current && allMessages.length > 0) {
+      onMessagesLoadedRef.current(chatId, allMessages.map(m => ({
         timestamp: m.timestamp,
         isFromMe: m.isFromMe,
       })));
@@ -228,20 +214,6 @@ export function useChatHistory(
     setIsAutoLoading(false);
     setInitialLoadDone(false);
     nextCursorRef.current = null;
-
-    // Load persisted messages from ThreadContext for instant display
-    const ctx = getThreadContext(chatId);
-    if (ctx && ctx.messages.length > 0) {
-      setMessages(ctx.messages.map(m => ({
-        id: m.id,
-        text: m.text,
-        timestamp: m.timestamp,
-        isFromMe: m.isFromMe,
-        senderName: m.senderName,
-        senderAvatarUrl: undefined,
-        attachments: undefined,
-      })));
-    }
 
     // Fetch newest messages from API
     setIsLoading(true);
@@ -315,6 +287,7 @@ export function useChatHistory(
 
     const BATCH_SIZE = 50;
     const BATCH_DELAY_MS = 500;
+    let totalLoaded = 0;
 
     const run = async () => {
       logger.debug(`[ChatHistory] Auto-loading full history for ${chatId}`);
@@ -338,6 +311,31 @@ export function useChatHistory(
           }
 
           mergeMessages(chatMessages, true, nextCursor, BATCH_SIZE);
+          totalLoaded += chatMessages.length;
+
+          // Also save to local cache for extraction
+          // The background worker can then extract from cached messages
+          const cachedMessages = loadCachedMessages();
+          const existingIds = new Set(cachedMessages.map(m => m.id));
+          const newMessages = chatMessages
+            .filter(m => !existingIds.has(m.id))
+            .map(m => ({
+              id: m.id,
+              chatId: chatId,
+              text: m.text,
+              timestamp: m.timestamp,
+              isFromMe: m.isFromMe,
+              senderName: m.senderName,
+              senderAvatarUrl: m.senderAvatarUrl,
+              attachments: m.attachments,
+              accountId: '',
+              senderId: '',
+              isRead: true,
+            } as BeeperMessage));
+
+          if (newMessages.length > 0) {
+            saveCachedMessages([...cachedMessages, ...newMessages]);
+          }
 
           if (chatMessages.length < BATCH_SIZE) {
             setHasMore(false);
@@ -360,7 +358,16 @@ export function useChatHistory(
       }
 
       setIsAutoLoading(false);
-      logger.debug(`[ChatHistory] Auto-load finished for ${chatId}`);
+      logger.debug(`[ChatHistory] Auto-load finished for ${chatId}, total loaded: ${totalLoaded}`);
+
+      // Emit event so background worker can trigger extraction on the now-loaded history
+      if (totalLoaded > 0 && !controller.signal.aborted) {
+        eventBus.emit({
+          type: 'messages_loaded',
+          chatId,
+          count: totalLoaded,
+        });
+      }
     };
 
     run();

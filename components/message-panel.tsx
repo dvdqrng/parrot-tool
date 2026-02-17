@@ -2,46 +2,47 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useChatHistory } from '@/hooks/use-chat-history';
+import { useCompanion } from '@/hooks/use-companion';
 import { formatDistanceToNow } from 'date-fns';
 import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { KanbanCard, BeeperAttachment } from '@/lib/types';
+import { KanbanCard, CrmContactProfile, CrmTag } from '@/lib/types';
 import { getPlatformInfo } from '@/lib/beeper-client';
-import {
-  getThreadContext,
-  formatThreadContextForPrompt,
-  getPendingActionsForChat,
-} from '@/lib/storage';
-import { useAiPipeline } from '@/hooks/use-ai-pipeline';
-import { logger } from '@/lib/logger';
-import { Loader2, ChevronUp, Users, X, MessagesSquare, User } from 'lucide-react';
+import { Loader2, ChevronUp, Users, X, PanelRight } from 'lucide-react';
 import { MessageBottomSection } from '@/components/message-bottom-section';
 import { MediaAttachments } from '@/components/message-panel/media-attachments';
 import { TextWithLinks } from '@/components/message-panel/text-with-links';
 import { getAvatarSrc } from '@/components/message-panel/utils';
-import { toast } from 'sonner';
+import { SidePanel, SidePanelTab } from '@/components/side-panel';
+import { ContactProfileContent } from '@/components/contact-profile-content';
+import { AiChatContent } from '@/components/intelligence/ai-chat-content';
 import { cn } from '@/lib/utils';
-import { useChatAutopilot } from '@/hooks/use-chat-autopilot';
-import { useAutopilot } from '@/contexts/autopilot-context';
+
 interface MessagePanelProps {
   card: KanbanCard | null;
   onClose: () => void;
   onSend?: (text: string) => Promise<void>;
   onSaveDraft?: (text: string) => void;
-  isAiChatOpen?: boolean;
-  onToggleAiChat?: () => void;
-  isContactProfileOpen?: boolean;
-  onToggleContactProfile?: () => void;
-  draftTextFromAi?: string;
-  onDraftTextFromAiConsumed?: () => void;
-  onMessageContextChange?: (context: string, senderName: string) => void;
+  onClearDraft?: () => void;
   onMessagesLoaded?: (chatId: string, messages: Array<{ timestamp: string; isFromMe: boolean }>) => void;
-  aiEnabled?: boolean;
-  onSaveAttachmentToMemory?: (attachment: BeeperAttachment) => void;
+  // Side panel control - allows parent to request opening the contact tab
+  defaultSidePanelOpen?: boolean;
+  // Contact profile props
+  contact?: CrmContactProfile | null;
+  allContacts?: Record<string, CrmContactProfile>;
+  tags?: Record<string, CrmTag>;
+  onSaveContact?: (contactId: string, updates: Partial<CrmContactProfile>) => void;
+  onCreateTag?: (name: string) => CrmTag;
+  onAddTag?: (contactId: string, tagId: string) => void;
+  onRemoveTag?: (contactId: string, tagId: string) => void;
+  onUnlinkPlatform?: (contactId: string, chatId: string) => void;
+  onMerge?: (targetContactId: string, sourceContactId: string) => void;
+  onLinkPlatform?: (contactId: string, chatId: string, platform: string, accountId: string, displayName: string, avatarUrl?: string) => void;
+  onAddAttachments?: () => void;
+  onRemoveAttachment?: (attachmentId: string) => void;
 }
 
 export function MessagePanel({
@@ -49,22 +50,49 @@ export function MessagePanel({
   onClose,
   onSend,
   onSaveDraft,
-  isAiChatOpen,
-  onToggleAiChat,
-  isContactProfileOpen,
-  onToggleContactProfile,
-  draftTextFromAi,
-  onDraftTextFromAiConsumed,
-  onMessageContextChange,
+  onClearDraft,
   onMessagesLoaded,
-  aiEnabled = true,
-  onSaveAttachmentToMemory,
+  // Side panel control
+  defaultSidePanelOpen = false,
+  // Contact profile props
+  contact,
+  allContacts = {},
+  tags = {},
+  onSaveContact,
+  onCreateTag,
+  onAddTag,
+  onRemoveTag,
+  onUnlinkPlatform,
+  onMerge,
+  onLinkPlatform,
+  onAddAttachments,
+  onRemoveAttachment,
 }: MessagePanelProps) {
   const [draftText, setDraftText] = useState('');
-  const [isGenerating, setIsGenerating] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [sendSuccess, setSendSuccess] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const lastSavedDraftRef = useRef<string>('');
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Side panel state - unified panel for Contact and AI Chat
+  const [isSidePanelOpen, setIsSidePanelOpen] = useState(defaultSidePanelOpen);
+  const [sidePanelTab, setSidePanelTab] = useState<SidePanelTab>('contact');
+
+  // Sync side panel open state with prop
+  useEffect(() => {
+    if (defaultSidePanelOpen) {
+      setIsSidePanelOpen(true);
+      setSidePanelTab('contact');
+    }
+  }, [defaultSidePanelOpen]);
+
+  // Reset side panel when card changes (don't persist across conversations)
+  useEffect(() => {
+    if (!defaultSidePanelOpen) {
+      setIsSidePanelOpen(false);
+    }
+  }, [card?.id, defaultSidePanelOpen]);
 
   const isOpen = card !== null;
   const message = card?.message;
@@ -73,102 +101,53 @@ export function MessagePanel({
   const platform = message?.platform || draft?.platform || 'unknown';
   const platformData = getPlatformInfo(platform);
 
-  const { generateDraft } = useAiPipeline();
+  // AI Companion state - need to declare before chat history
+  // because autoLoadAll depends on whether AI is enabled
+  const [aiEnabledForHistory, setAiEnabledForHistory] = useState(false);
 
-  // Get autopilot context to listen for config changes
-  const { configVersion } = useAutopilot();
-
-  // Check if autopilot is active for this chat
-  const { config: autopilotConfig } = useChatAutopilot(chatId || null, { configVersion });
-  const isAutopilotActive = autopilotConfig?.enabled;
-  const autopilotStatus = autopilotConfig?.status;
-
-  // Check if there are pending scheduled actions (indicates waiting state)
-  const [hasPendingActions, setHasPendingActions] = useState(false);
-
-  useEffect(() => {
-    if (!chatId) {
-      setHasPendingActions(false);
-      return;
-    }
-
-    const checkPendingActions = () => {
-      const pendingActions = getPendingActionsForChat(chatId);
-      const hasPending = pendingActions.length > 0;
-      logger.debug('[MessagePanel] Checking pending actions:', {
-        chatId,
-        pendingActionsCount: pendingActions.length,
-        actions: pendingActions,
-      });
-      // Only update state if value changed to avoid re-renders
-      setHasPendingActions(prev => prev === hasPending ? prev : hasPending);
-    };
-
-    checkPendingActions();
-
-    // Check periodically for updates
-    const interval = setInterval(checkPendingActions, 1000);
-    return () => clearInterval(interval);
-  }, [chatId]);
-
-  // Map status to glow class
-  const getAutopilotGlowClass = () => {
-    if (!isAutopilotActive || !autopilotStatus) return null;
-
-    // Observer and suggest modes: no glow, just a passive indicator
-    if (autopilotConfig?.mode === 'observer' || autopilotConfig?.mode === 'suggest') return null;
-
-    // If status is active but has pending scheduled actions, show waiting state
-    if (autopilotStatus === 'active' && hasPendingActions) {
-      return 'autopilot-glow-waiting';
-    }
-
-    switch (autopilotStatus) {
-      case 'active':
-        return 'autopilot-glow-active';
-      case 'paused':
-        return 'autopilot-glow-paused';
-      case 'error':
-        return 'autopilot-glow-error';
-      case 'goal-completed':
-        return 'autopilot-glow-completed';
-      case 'inactive':
-        return null;
-      default:
-        return 'autopilot-glow-active';
-    }
-  };
-
-  // Debug logging
-  useEffect(() => {
-    if (chatId) {
-      logger.debug('[MessagePanel] Autopilot glow state:', {
-        chatId,
-        isAutopilotActive,
-        status: autopilotStatus,
-        hasPendingActions,
-        glowClass: getAutopilotGlowClass(),
-      });
-    }
-  }, [chatId, autopilotConfig, isAutopilotActive, autopilotStatus, hasPendingActions]);
-
-  // Unified chat history: handles initial load, polling, load-more, and auto-load
+  // Unified chat history: handles initial load, polling, load-more
+  // When AI is enabled, autoLoadAll=true fetches full history in batches
   const history = useChatHistory(chatId, {
-    autoLoadAll: !!isAutopilotActive,
+    autoLoadAll: aiEnabledForHistory,
     initialLimit: 20,
     pollInterval: isOpen ? 5000 : 0,
-    senderName: message?.senderName || draft?.recipientName || 'Unknown',
     onMessagesLoaded,
   });
+
+  const title = card?.title || '';
+
+  // AI Companion hook
+  const companion = useCompanion({
+    chatId: chatId || null,
+    contactName: title,
+    platform,
+    recentMessages: history.messages.map((m) => ({
+      id: m.id,
+      text: m.text || '',
+      isFromMe: m.isFromMe,
+      timestamp: m.timestamp,
+      senderName: m.senderName,
+    })),
+    draftText,
+    onApplyDraft: setDraftText,
+  });
+
+  // Sync AI enabled state with history loader
+  // When AI is enabled, trigger full history loading for extraction
+  useEffect(() => {
+    setAiEnabledForHistory(companion.isEnabled);
+  }, [companion.isEnabled]);
 
   // Initialize draft text when panel opens
   useEffect(() => {
     if (isOpen && chatId) {
-      setDraftText(draft?.draftText || '');
+      const initialDraft = draft?.draftText || '';
+      setDraftText(initialDraft);
+      lastSavedDraftRef.current = initialDraft.trim();
     }
   }, [isOpen, chatId, draft?.draftText, draft?.updatedAt, message?.id]);
 
-  // Auto-scroll to bottom when messages change, but NOT during batch auto-loading
+  // Auto-scroll to bottom when messages change
   useEffect(() => {
     if (history.isAutoLoading) return;
     if (scrollRef.current && history.messages.length > 0) {
@@ -180,27 +159,6 @@ export function MessagePanel({
       });
     }
   }, [history.messages, history.isAutoLoading]);
-
-  // Generate AI suggestion
-  const generateAISuggestion = useCallback(async () => {
-    if (!message && !draft || !chatId) return;
-
-    setIsGenerating(true);
-    try {
-      const senderName = message?.senderName || draft?.recipientName || 'Unknown';
-      const originalText = message?.text || draft?.originalText || '';
-
-      const result = await generateDraft(chatId, originalText, senderName);
-      if (result.text) {
-        setDraftText(result.text);
-      }
-    } catch (error) {
-      logger.error('Failed to generate suggestion:', error instanceof Error ? error : String(error));
-      toast.error('Failed to generate AI suggestion');
-    } finally {
-      setIsGenerating(false);
-    }
-  }, [message, draft, chatId, generateDraft]);
 
   // Send message
   const handleSend = useCallback(async () => {
@@ -224,35 +182,41 @@ export function MessagePanel({
     }
   }, [draftText, onSend, chatId, history]);
 
-  // Save draft
-  const handleSaveDraft = useCallback(() => {
-    if (!draftText.trim() || !onSaveDraft) return;
-    onSaveDraft(draftText);
-    onClose();
-  }, [draftText, onSaveDraft, onClose]);
-
-  // Apply draft text from AI when provided
+  // Auto-save draft with debounce (clear immediately when empty)
   useEffect(() => {
-    if (draftTextFromAi) {
-      setDraftText(draftTextFromAi);
-      onDraftTextFromAiConsumed?.();
+    if (!chatId) return;
+
+    const trimmedDraft = draftText.trim();
+
+    // Only save/clear if the value actually changed
+    if (trimmedDraft === lastSavedDraftRef.current) return;
+
+    // Clear any pending save timeout
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+      saveTimeoutRef.current = null;
     }
-  }, [draftTextFromAi, onDraftTextFromAiConsumed]);
 
-  // Notify parent about message context changes for AI chat
-  useEffect(() => {
-    if (onMessageContextChange && chatId && (message || draft)) {
-      // Use persistent thread context instead of just current chatHistory
-      const threadContext = getThreadContext(chatId);
-      const context = formatThreadContextForPrompt(threadContext);
-      const senderName = message?.senderName || draft?.recipientName || 'Unknown';
-      if (context) {
-        onMessageContextChange(context, senderName);
+    // Clear draft immediately when empty (for instant UI feedback)
+    if (!trimmedDraft) {
+      lastSavedDraftRef.current = trimmedDraft;
+      onClearDraft?.();
+      return;
+    }
+
+    // Debounce saves (500ms) to avoid lag while typing
+    saveTimeoutRef.current = setTimeout(() => {
+      lastSavedDraftRef.current = trimmedDraft;
+      onSaveDraft?.(draftText);
+    }, 500);
+
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
       }
-    }
-  }, [history.messages, chatId, message, draft, onMessageContextChange]);
+    };
+  }, [draftText, chatId, onSaveDraft, onClearDraft]);
 
-  const title = card?.title || '';
   const initials = title
     .split(' ')
     .map(n => n[0])
@@ -263,14 +227,12 @@ export function MessagePanel({
   return (
     <div
       className={cn(
-        'h-full transition-all duration-300 ease-in-out',
-        isOpen ? 'w-96' : 'w-0'
+        'h-full transition-all duration-300 ease-in-out flex gap-2',
+        isOpen ? (isSidePanelOpen ? 'w-[776px]' : 'w-96') : 'w-0'
       )}
     >
-      <div className={cn(
-        'h-full bg-card rounded-2xl flex flex-col overflow-hidden shadow-lg dark:border',
-        getAutopilotGlowClass()
-      )}>
+      {/* Main Message Panel */}
+      <div className="h-full w-96 bg-card rounded-2xl flex flex-col overflow-hidden shadow-lg dark:border shrink-0">
       {isOpen && card && (message || draft) && (
         <>
           {/* Header */}
@@ -297,26 +259,15 @@ export function MessagePanel({
               </div>
             </div>
             <div className="flex items-center gap-1 shrink-0">
-              {onToggleContactProfile && (
-                <Button
-                  variant={isContactProfileOpen ? 'secondary' : 'ghost'}
-                  size="icon"
-                  onClick={onToggleContactProfile}
-                  title="Contact Profile"
-                >
-                  <User className="h-4 w-4" strokeWidth={2} />
-                </Button>
-              )}
-              {onToggleAiChat && (
-                <Button
-                  variant={isAiChatOpen ? 'secondary' : 'ghost'}
-                  size="icon"
-                  onClick={onToggleAiChat}
-                  title="AI Chat"
-                >
-                  <MessagesSquare className="h-4 w-4" strokeWidth={2} />
-                </Button>
-              )}
+              {/* Side panel toggle - single button */}
+              <Button
+                variant={isSidePanelOpen ? 'secondary' : 'ghost'}
+                size="icon"
+                onClick={() => setIsSidePanelOpen(!isSidePanelOpen)}
+                title={isSidePanelOpen ? 'Close Panel' : 'Open Panel'}
+              >
+                <PanelRight className="h-4 w-4" strokeWidth={2} />
+              </Button>
               <Button variant="ghost" size="icon" onClick={onClose}>
                 <X className="h-4 w-4" strokeWidth={2} />
               </Button>
@@ -377,7 +328,7 @@ export function MessagePanel({
                         {/* Media attachments */}
                         {hasMedia && (
                           <div className={hasText ? "mb-2" : ""}>
-                            <MediaAttachments attachments={msg.attachments!} isFromMe={msg.isFromMe} onSaveToMemory={onSaveAttachmentToMemory} />
+                            <MediaAttachments attachments={msg.attachments!} isFromMe={msg.isFromMe} />
                           </div>
                         )}
                         {/* Text content */}
@@ -404,21 +355,60 @@ export function MessagePanel({
             <MessageBottomSection
               chatId={chatId || null}
               chatName={title}
-              latestMessage={message}
               draftText={draftText}
               onDraftTextChange={setDraftText}
-              isGenerating={isGenerating}
-              onGenerateAI={generateAISuggestion}
               isSending={isSending}
               sendSuccess={sendSuccess}
               onSend={handleSend}
-              onSaveDraft={handleSaveDraft}
-              aiEnabled={aiEnabled}
+              // AI Companion - orb button inline with send
+              isAiEnabled={companion.isEnabled}
+              hasCompanionActivity={companion.hasActivity}
+              onToggleEnabled={companion.toggleEnabled}
             />
           </div>
         </>
       )}
       </div>
+
+      {/* Unified Side Panel - Contact Profile or AI Chat */}
+      {isOpen && isSidePanelOpen && (
+        <SidePanel
+          isOpen={true}
+          activeTab={sidePanelTab}
+          onTabChange={setSidePanelTab}
+          onClose={() => setIsSidePanelOpen(false)}
+          showAiTab={companion.isEnabled}
+          contactContent={
+            <ContactProfileContent
+              contact={contact || null}
+              allContacts={allContacts}
+              tags={tags}
+              onSave={onSaveContact || (() => {})}
+              onCreateTag={onCreateTag || (() => ({ id: '', name: '', color: '', createdAt: new Date().toISOString() }))}
+              onAddTag={onAddTag || (() => {})}
+              onRemoveTag={onRemoveTag || (() => {})}
+              onUnlinkPlatform={onUnlinkPlatform}
+              onMerge={onMerge}
+              onLinkPlatform={onLinkPlatform}
+              onAddAttachments={onAddAttachments}
+              onRemoveAttachment={onRemoveAttachment}
+            />
+          }
+          aiChatContent={
+            <AiChatContent
+              messages={companion.messages}
+              onSendMessage={companion.sendMessage}
+              onApplyDraft={companion.applyDraft}
+              onDismissInsight={companion.dismissInsight}
+              isLoading={companion.isLoading}
+              isThinking={companion.isThinking}
+              chatId={chatId}
+              error={companion.error}
+              onClearError={companion.clearError}
+            />
+          }
+        />
+      )}
     </div>
   );
 }

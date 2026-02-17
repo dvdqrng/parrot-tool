@@ -7,14 +7,13 @@ import {
   loadCrmTags,
   getCrmContactByChatId,
   createCrmContact,
-  updateCrmContact,
-  deleteCrmContact,
+  updateCrmContact as updateCrmContactStorage,
+  deleteCrmContact as deleteCrmContactStorage,
   addPlatformLinkToContact,
   removePlatformLinkFromContact,
-  mergeCrmContacts,
-  createCrmTag,
-  updateCrmTag,
-  deleteCrmTag,
+  mergeCrmContacts as mergeCrmContactsStorage,
+  createCrmTag as createCrmTagStorage,
+  deleteCrmTag as deleteCrmTagStorage,
   searchCrmContacts,
   updateContactInteractionStats,
 } from '@/lib/storage';
@@ -53,36 +52,25 @@ export function useCrm() {
     return getCrmContactByChatId(chatId);
   }, []);
 
-  // Create a new contact from a chat
-  const createContactFromChat = useCallback((
-    displayName: string,
-    chatId: string,
-    platform: string,
-    accountId: string,
-    avatarUrl?: string,
-    isGroup?: boolean
-  ): CrmContactProfile => {
-    const contact = createCrmContact(displayName, chatId, platform, accountId, avatarUrl, isGroup);
-    setContacts(loadCrmContacts());
-    return contact;
-  }, []);
-
-  // Update contact
+  // Update contact with surgical state update
   const updateContact = useCallback((
     contactId: string,
     updates: Partial<CrmContactProfile>
   ): CrmContactProfile | null => {
-    const updated = updateCrmContact(contactId, updates);
+    const updated = updateCrmContactStorage(contactId, updates);
     if (updated) {
-      setContacts(loadCrmContacts());
+      setContacts(prev => ({ ...prev, [contactId]: updated }));
     }
     return updated;
   }, []);
 
-  // Delete contact
+  // Delete contact with surgical state update
   const deleteContact = useCallback((contactId: string): void => {
-    deleteCrmContact(contactId);
-    setContacts(loadCrmContacts());
+    deleteCrmContactStorage(contactId);
+    setContacts(prev => {
+      const { [contactId]: _, ...rest } = prev;
+      return rest;
+    });
   }, []);
 
   // Link a platform chat to an existing contact
@@ -96,7 +84,7 @@ export function useCrm() {
   ): CrmContactProfile | null => {
     const updated = addPlatformLinkToContact(contactId, chatId, platform, accountId, displayName, avatarUrl);
     if (updated) {
-      setContacts(loadCrmContacts());
+      setContacts(prev => ({ ...prev, [contactId]: updated }));
     }
     return updated;
   }, []);
@@ -108,7 +96,7 @@ export function useCrm() {
   ): CrmContactProfile | null => {
     const updated = removePlatformLinkFromContact(contactId, chatId);
     if (updated) {
-      setContacts(loadCrmContacts());
+      setContacts(prev => ({ ...prev, [contactId]: updated }));
     }
     return updated;
   }, []);
@@ -118,32 +106,32 @@ export function useCrm() {
     targetContactId: string,
     sourceContactId: string
   ): CrmContactProfile | null => {
-    const merged = mergeCrmContacts(targetContactId, sourceContactId);
+    const merged = mergeCrmContactsStorage(targetContactId, sourceContactId);
     if (merged) {
-      setContacts(loadCrmContacts());
+      // Update target and remove source in one state update
+      setContacts(prev => {
+        const { [sourceContactId]: _, ...rest } = prev;
+        return { ...rest, [targetContactId]: merged };
+      });
     }
     return merged;
   }, []);
 
   // Tag operations
   const createTag = useCallback((name: string, color?: string): CrmTag => {
-    const tag = createCrmTag(name, color);
-    setTags(loadCrmTags());
+    const tag = createCrmTagStorage(name, color);
+    setTags(prev => ({ ...prev, [tag.id]: tag }));
     return tag;
   }, []);
 
-  const updateTag = useCallback((tagId: string, updates: Partial<CrmTag>): CrmTag | null => {
-    const updated = updateCrmTag(tagId, updates);
-    if (updated) {
-      setTags(loadCrmTags());
-    }
-    return updated;
-  }, []);
-
   const deleteTag = useCallback((tagId: string): void => {
-    deleteCrmTag(tagId);
-    setTags(loadCrmTags());
-    setContacts(loadCrmContacts()); // Contacts may have been updated
+    deleteCrmTagStorage(tagId);
+    setTags(prev => {
+      const { [tagId]: _, ...rest } = prev;
+      return rest;
+    });
+    // Contacts are updated in storage by deleteCrmTagStorage, reload to sync
+    setContacts(loadCrmContacts());
   }, []);
 
   // Add tag to contact
@@ -184,8 +172,10 @@ export function useCrm() {
     const existing = getCrmContactByChatId(chatId);
     if (existing) return existing;
 
-    return createContactFromChat(displayName, chatId, platform, accountId, avatarUrl, isGroup);
-  }, [createContactFromChat]);
+    const contact = createCrmContact(displayName, chatId, platform, accountId, avatarUrl, isGroup);
+    setContacts(prev => ({ ...prev, [contact.id]: contact }));
+    return contact;
+  }, []);
 
   // Update interaction stats for a contact
   const updateInteractionStats = useCallback((
@@ -194,7 +184,7 @@ export function useCrm() {
   ): CrmContactProfile | null => {
     const updated = updateContactInteractionStats(contactId, messages);
     if (updated) {
-      setContacts(loadCrmContacts());
+      setContacts(prev => ({ ...prev, [contactId]: updated }));
     }
     return updated;
   }, []);
@@ -207,7 +197,6 @@ export function useCrm() {
 
     // Contact operations
     getContactForChat,
-    createContactFromChat,
     updateContact,
     deleteContact,
     linkChatToContact,
@@ -218,7 +207,6 @@ export function useCrm() {
 
     // Tag operations
     createTag,
-    updateTag,
     deleteTag,
     addTagToContact,
     removeTagFromContact,

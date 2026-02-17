@@ -1,18 +1,16 @@
-# Parrot - First Time Setup Guide
+# Beeper Kanban - First Time Setup Guide
 
-Welcome to **Parrot**, a Kanban-style message management interface for Beeper with AI-powered features. This guide will walk you through setting up Parrot for the first time.
+Welcome to **Beeper Kanban**, a Kanban-style message management interface for Beeper. This guide will walk you through setting up the app for the first time.
 
 ---
 
-## What is Parrot?
+## What is Beeper Kanban?
 
-Parrot transforms how you handle conversations across multiple messaging platforms (WhatsApp, Telegram, Instagram, Discord, etc.) connected through Beeper. Key features include:
+Beeper Kanban transforms how you handle conversations across multiple messaging platforms (WhatsApp, Telegram, Instagram, Discord, etc.) connected through Beeper. Key features include:
 
 - **Kanban Board**: Organize messages across columns (Unread, Drafts, Sent, Archived)
-- **AI Draft Generation**: Generate contextual replies using Claude, ChatGPT, or local Ollama models
-- **Per-Thread AI Assistant**: Get help crafting responses with a dedicated AI chat panel
-- **Writing Style Analysis**: Train AI to match your personal communication style
-- **Autopilot Agents**: Create autonomous AI agents to handle conversations
+- **CRM Integration**: Track contacts with activity stats and interaction history
+- **Multi-Platform**: Works with any messaging service connected to Beeper
 
 ---
 
@@ -23,37 +21,40 @@ Before getting started, ensure you have:
 | Requirement | Details |
 |-------------|---------|
 | **Beeper Desktop** | Must be running and logged in ([download](https://www.beeper.com/)) |
-
-### Optional
-- **API Keys** for AI providers (Anthropic, OpenAI)
+| **Node.js 18+** | For running the development server |
 
 ---
 
-## Download & Install
+## Installation Options
 
-### Step 1: Download Parrot
+### Option 1: Run from Source
 
-Go to the [Parrot Releases page](https://github.com/yourusername/parrot/releases) and download the latest version for your operating system:
+1. **Clone the repository**:
+```bash
+git clone https://github.com/yourusername/beeper-kanban.git
+cd beeper-kanban
+```
 
-- **macOS**: Download the `.dmg` file
-- **Windows**: Download the `.exe` installer
-- **Linux**: Download the `.AppImage` or `.deb` file
+2. **Install dependencies**:
+```bash
+npm install
+```
 
-### Step 2: Install
+3. **Start the app**:
+```bash
+npm run dev
+```
 
-- **macOS**: Open the `.dmg` file and drag Parrot to your Applications folder
-- **Windows**: Run the `.exe` installer and follow the prompts
-- **Linux**: Run the `.AppImage` directly or install the `.deb` package
-
-### Step 3: Launch Parrot
-
-Open Parrot from your Applications folder (macOS), Start Menu (Windows), or application launcher (Linux).
+4. **Open in browser**:
+```
+http://localhost:3000
+```
 
 ---
 
 ## Required Setup: Beeper Connection
 
-Parrot needs your Beeper access token to fetch and send messages.
+Beeper Kanban needs your Beeper access token to fetch and send messages.
 
 ### Getting Your Beeper Token
 
@@ -65,9 +66,9 @@ Parrot needs your Beeper access token to fetch and send messages.
 4. Look for `beeperAccessToken`, `token`, or `authToken`
 5. Copy the entire token value
 
-### Configure in Parrot
+### Configure in Beeper Kanban
 
-1. Open Parrot
+1. Open Beeper Kanban
 2. Click **Settings** (gear icon) in the bottom toolbar
 3. Go to **Platforms** section
 4. Paste your Beeper access token
@@ -79,88 +80,28 @@ You should now see messages appearing in the "Unread" column.
 
 ---
 
-## Optional: AI Configuration
-
-Configure at least one AI provider to use draft generation features.
-
-### Option 1: Anthropic Claude (Recommended)
-
-1. Get an API key from [console.anthropic.com](https://console.anthropic.com/)
-2. In Parrot: Settings → **API Keys**
-3. Select "Anthropic" as provider
-4. Paste your API key
-5. Click **Test Key** → **Save Settings**
-
-### Option 2: OpenAI ChatGPT
-
-1. Get an API key from [platform.openai.com](https://platform.openai.com/)
-2. In Parrot: Settings → **API Keys**
-3. Select "OpenAI" as provider
-4. Paste your API key
-5. Click **Test Key** → **Save Settings**
-
----
-
 ## Basic Workflow
 
 ### Handling Messages
 
 1. See a message in the **Unread** column
 2. Click to open the **Message Panel**
-3. Either:
-   - **Write manually**: Type and click Send
-   - **Generate AI draft**: Click "Generate Draft" → review → Send
-4. Or drag to **Drafts** to review later
+3. Read the full conversation history
+4. Type your response in the text area
+5. Click **Send**
 
-### Batch Operations
+### Organizing Messages
 
-- **Generate All Drafts**: Create AI responses for all unread messages
-- **Send All Drafts**: Send all prepared drafts at once
+- **Archive**: Right-click → Archive Chat (for completed conversations)
+- **Hide**: Right-click → Hide Chat (for chats you don't want to see)
+- **Unhide**: Settings → Hidden Chats → Unhide
 
-### AI Chat Assistant
+### Using CRM Features
 
-1. Open any message in the Message Panel
-2. Click the **chat bubble icon**
-3. Ask for help: "Make this more professional"
-4. Click **Use Draft** to apply suggestions
-
----
-
-## Customizing AI Responses
-
-### Tone Settings
-
-Go to Settings → **Tone**:
-- Adjust **Brief ↔ Detailed** slider
-- Adjust **Formal ↔ Casual** slider
-
-### Writing Style Training
-
-1. Settings → **Tone** → scroll to "Writing Style Patterns"
-2. Click **Add Sample Message**
-3. Paste 5-10 messages you've written
-4. Click **Analyze Style**
-
-AI will learn your patterns (phrases, emojis, greetings, punctuation).
-
----
-
-## Autopilot Agents (Advanced)
-
-Create autonomous AI agents to handle conversations:
-
-1. Settings → **Autopilot** → **Agents** → **New Agent**
-2. Configure:
-   - **Name**: e.g., "Support Assistant"
-   - **Goal**: What the agent should accomplish
-   - **System Prompt**: Personality and instructions
-   - **Behavior**: Reply delays, activity hours
-3. Enable on a chat:
-   - Open message → click **sparkles icon**
-   - Select agent → choose mode:
-     - **Manual Approval**: Review before sending
-     - **Self-Driving**: Fully autonomous
-4. Monitor in Settings → **Autopilot** → **Activity**
+1. Click on a message to open the panel
+2. Click the **profile icon** to view contact details
+3. See activity stats (messages received, sent, response time)
+4. Add notes and tags to contacts
 
 ---
 
@@ -169,12 +110,9 @@ Create autonomous AI agents to handle conversations:
 | Section | Purpose |
 |---------|---------|
 | **Platforms** | Beeper token, account selection |
-| **API Keys** | AI provider configuration |
-| **Tone** | Response style, writing samples |
-| **Autopilot** | Agents, activity log |
 | **Hidden Chats** | Manage hidden conversations |
-| **Contacts** | Contact details, interaction history |
 | **Data** | Export, import, reset |
+| **Account** | User account settings |
 
 ---
 
@@ -185,20 +123,22 @@ Create autonomous AI agents to handle conversations:
 - Ensure Beeper Desktop is running
 - Verify your access token is correct
 - Click **Refresh** in Platforms settings
+- Check that at least one platform is selected
 
-### AI Draft Generation Failing
+### Messages Not Sending
 
-- Verify API key is correct and has credits
-- Test with **Test Key** button
-- Try a different AI provider
+- Verify Beeper Desktop is running
+- Check your internet connection
+- Verify your token is valid (try refreshing it)
 
 ---
 
 ## Data & Storage
 
-All data is stored locally:
-- Settings, drafts, tone preferences
-- AI chat history, autopilot configs
+All data is stored locally in your browser:
+- Settings and preferences
+- Drafts
+- CRM contacts and profiles
 
 **Backup**: Settings → Data → **Export All Data**
 
@@ -211,11 +151,10 @@ All data is stored locally:
 | Task | How To |
 |------|--------|
 | Get Beeper token | Beeper DevTools → LocalStorage |
-| Configure AI | Settings → API Keys |
-| Generate draft | Click message → Generate Draft |
-| AI chat help | Message Panel → chat bubble icon |
-| Customize tone | Settings → Tone |
-| Create agent | Settings → Autopilot → Agents → New |
+| Select platforms | Settings → Platforms |
+| Archive chat | Right-click → Archive |
+| Hide chat | Right-click → Hide Chat |
+| View CRM | Message Panel → Profile icon |
 | Export data | Settings → Data → Export |
 | Dark mode | Bottom toolbar → sun/moon icon |
 
@@ -224,11 +163,10 @@ All data is stored locally:
 ## Next Steps
 
 1. **Connect Beeper** - Get your token and configure platforms
-2. **Add AI** (optional) - Choose an AI provider for draft generation
-3. **Try It** - Generate your first AI draft
-4. **Customize** - Set your tone and add writing samples
-5. **Explore** - Try Autopilot for routine conversations
+2. **Explore the Board** - Click through messages, try archiving
+3. **Set Up CRM** - View contact profiles, add notes
+4. **Customize** - Hide unwanted chats, adjust settings
 
 ---
 
-Happy messaging with Parrot!
+Happy messaging with Beeper Kanban!

@@ -4,6 +4,11 @@ import { useState, useEffect, useCallback } from 'react';
 import { BeeperAccount } from '@/lib/types';
 import { loadSettings, loadCachedAccounts, saveCachedAccounts } from '@/lib/storage';
 
+/**
+ * Hook to fetch accounts directly.
+ * Used primarily for onboarding before the main BeeperDataProvider is active.
+ * For most use cases, prefer useBeeperData() from the context.
+ */
 export function useAccounts() {
   const [accounts, setAccounts] = useState<BeeperAccount[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -35,7 +40,8 @@ export function useAccounts() {
         headers['x-beeper-token'] = settings.beeperAccessToken;
       }
 
-      const response = await fetch('/api/beeper/accounts', { headers });
+      // Use the unified data endpoint
+      const response = await fetch('/api/beeper/data?slices=accounts', { headers });
       const result = await response.json();
 
       if (result.error) {
@@ -48,12 +54,12 @@ export function useAccounts() {
           setAccounts([]);
         }
       } else {
-        const newAccounts = result.data || [];
+        const newAccounts = result.accounts || [];
         setAccounts(newAccounts);
         saveCachedAccounts(newAccounts);
         setIsFromCache(false);
       }
-    } catch (err) {
+    } catch {
       setError('Failed to connect to Beeper Desktop');
       // Keep cached accounts on error if we have them
       if (cached.length > 0) {

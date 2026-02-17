@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { SettingsProvider } from "@/contexts/settings-context";
-import { AutopilotProvider } from "@/contexts/autopilot-context";
 import { AuthProvider } from "@/contexts/auth-context";
+import { BeeperDataProvider } from "@/contexts/beeper-data-context";
+import { IntelligenceProvider } from "@/contexts/intelligence-context";
 import { ThemeProvider } from "@/components/theme-provider";
 import { AuthGuard } from "@/components/auth";
 import { Toaster } from "@/components/ui/sonner";
@@ -42,10 +43,12 @@ export default function RootLayout({
           <AuthProvider>
             <AuthGuard>
               <SettingsProvider>
-                <AutopilotProvider>
-                  {children}
-                  <Toaster />
-                </AutopilotProvider>
+                <BeeperDataProvider>
+                  <IntelligenceProvider>
+                    {children}
+                    <Toaster />
+                  </IntelligenceProvider>
+                </BeeperDataProvider>
               </SettingsProvider>
             </AuthGuard>
           </AuthProvider>

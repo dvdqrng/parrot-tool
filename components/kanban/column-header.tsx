@@ -1,6 +1,6 @@
 'use client';
 
-import { Inbox, Edit, Send, Archive, Brain, Sparkles, Square, LucideIcon, EyeOff } from 'lucide-react';
+import { Inbox, Edit, Send, Archive, Square, LucideIcon, EyeOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ColumnId, StatusColumnId, KanbanGroupBy } from '@/lib/types';
 import { PlatformIcon } from '@/components/platform-icon';
@@ -27,10 +27,6 @@ const statusColumnConfig: Record<StatusColumnId, { title: string; icon: LucideIc
     title: 'Unread',
     icon: Inbox,
   },
-  autopilot: {
-    title: 'Autopilot',
-    icon: Brain,
-  },
   drafts: {
     title: 'Drafts',
     icon: Edit,
@@ -47,7 +43,7 @@ const statusColumnConfig: Record<StatusColumnId, { title: string; icon: LucideIc
 
 // Check if a column ID is a status column
 function isStatusColumnId(id: string): id is StatusColumnId {
-  return ['unread', 'autopilot', 'drafts', 'sent', 'archived'].includes(id);
+  return ['unread', 'drafts', 'sent', 'archived'].includes(id);
 }
 
 export function ColumnHeader({

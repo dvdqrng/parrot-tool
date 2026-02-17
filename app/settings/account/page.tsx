@@ -7,8 +7,7 @@ import { getStripeCheckoutUrl, getStripePortalUrl } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Switch } from '@/components/ui/switch'
-import { Loader2, Download, CheckCircle, Sparkles, RefreshCw } from 'lucide-react'
+import { Loader2, Download, CheckCircle, RefreshCw } from 'lucide-react'
 
 export default function AccountPage() {
   const { user, subscription, signOut } = useAuth()
@@ -53,9 +52,6 @@ export default function AccountPage() {
       window.electron.installUpdate()
     }
   }
-
-  // AI features enabled (default to true for backwards compatibility)
-  const aiEnabled = settings.aiEnabled !== false
 
   const handleManageSubscription = () => {
     const portalUrl = getStripePortalUrl()
@@ -123,37 +119,6 @@ export default function AccountPage() {
             <span className="text-sm text-muted-foreground">User ID</span>
             <span className="text-sm font-mono text-muted-foreground">{user?.id.slice(0, 8)}...</span>
           </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <Sparkles className="h-4 w-4" />
-            AI Features
-          </CardTitle>
-          <CardDescription>Enable AI-powered drafts, autopilot, and chat assistant</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <span className="text-sm font-medium">Enable AI features</span>
-              <p className="text-xs text-muted-foreground">
-                {aiEnabled
-                  ? 'AI-powered drafts, autopilot, and chat assistant are enabled'
-                  : 'Turn on to use AI-powered features'}
-              </p>
-            </div>
-            <Switch
-              checked={aiEnabled}
-              onCheckedChange={(checked) => updateSettings({ aiEnabled: checked })}
-            />
-          </div>
-          {!aiEnabled && (
-            <p className="text-xs text-muted-foreground border-t pt-4">
-              When enabled, you can configure your AI provider and API keys in the settings sidebar.
-            </p>
-          )}
         </CardContent>
       </Card>
 
