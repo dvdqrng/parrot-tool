@@ -23,6 +23,37 @@ const port = process.env.PORT || 31415;
 let mainWindow;
 let nextServer;
 
+// =============================================================================
+// Deep Link Protocol (parrot://)
+// =============================================================================
+
+const PROTOCOL = 'parrot';
+
+if (process.defaultApp) {
+  // During development, need to register with the full path
+  if (process.argv.length >= 2) {
+    app.setAsDefaultProtocolClient(PROTOCOL, process.execPath, [path.resolve(process.argv[1])]);
+  }
+} else {
+  app.setAsDefaultProtocolClient(PROTOCOL);
+}
+
+// macOS: handle deep link when app is already running
+app.on('open-url', (event, url) => {
+  event.preventDefault();
+  handleDeepLink(url);
+});
+
+function handleDeepLink(url) {
+  // Focus/restore the main window when a deep link is received
+  if (mainWindow) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.focus();
+    // Navigate to root so the auth state change triggers a refresh
+    mainWindow.webContents.loadURL(`http://localhost:${port}`);
+  }
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1200,
@@ -217,6 +248,24 @@ function startNextServer() {
     } catch (err) {
       console.error('Failed to start Next.js server:', err);
       reject(err);
+    }
+  });
+}
+
+// Windows/Linux: ensure single instance and handle deep links via second-instance
+const gotTheLock = app.requestSingleInstanceLock();
+
+if (!gotTheLock) {
+  app.quit();
+} else {
+  app.on('second-instance', (event, commandLine) => {
+    // The deep link URL is the last argument
+    const deepLinkUrl = commandLine.find(arg => arg.startsWith(`${PROTOCOL}://`));
+    if (deepLinkUrl) {
+      handleDeepLink(deepLinkUrl);
+    } else if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
     }
   });
 }

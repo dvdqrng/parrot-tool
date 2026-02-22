@@ -4,17 +4,17 @@ import { ReactNode } from 'react'
 import { usePathname } from 'next/navigation'
 import { useAuth } from '@/contexts/auth-context'
 import { AuthScreen } from './auth-screen'
-import { Paywall } from './paywall'
+import { EmailConfirmation } from './email-confirmation'
 
 interface AuthGuardProps {
   children: ReactNode
 }
 
 // Routes that bypass authentication
-const PUBLIC_ROUTES = ['/demo', '/sidequest']
+const PUBLIC_ROUTES = ['/demo', '/sidequest', '/auth']
 
 export function AuthGuard({ children }: AuthGuardProps) {
-  const { isLoading, isAuthenticated, hasAccess } = useAuth()
+  const { isLoading, isAuthenticated, user } = useAuth()
   const pathname = usePathname()
 
   // Skip auth for public routes (e.g., /demo)
@@ -36,11 +36,11 @@ export function AuthGuard({ children }: AuthGuardProps) {
     return <AuthScreen />
   }
 
-  // TODO: Paywall temporarily disabled
-  // if (!hasAccess) {
-  //   return <Paywall />
-  // }
+  // Email not confirmed - show confirmation screen
+  if (user && !user.emailConfirmed) {
+    return <EmailConfirmation />
+  }
 
-  // Authenticated and has access
+  // Authenticated and confirmed
   return <>{children}</>
 }

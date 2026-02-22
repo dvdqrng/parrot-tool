@@ -19,4 +19,5 @@ export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey)
 export type AuthUser = {
   id: string
   email: string
+  emailConfirmed: boolean
 }

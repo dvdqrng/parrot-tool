@@ -3,7 +3,9 @@
     "allow": [
       "Bash(git clone:*)",
       "Bash(npx next dev -p 3099)",
-      "Bash(npx vercel:*)"
+      "Bash(npx vercel:*)",
+      "WebFetch(domain:parrot-gv19mqg5n-dvdqrngs-projects.vercel.app)",
+      "Bash(# Search for Vercel auth token location find ~ -name \"\"auth.json\"\" -path \"\"*vercel*\"\")"
     ],
     "additionalDirectories": [
       "/Users/davidquiring/Projects/beeper-kanban/app",

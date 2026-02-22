@@ -7,6 +7,12 @@
     "owner": "dvdqrng",
     "repo": "parrot-tool"
   },
+  "protocols": [
+    {
+      "name": "Parrot",
+      "schemes": ["parrot"]
+    }
+  ],
   "directories": {
     "output": "dist",
     "buildResources": "build"
