@@ -430,6 +430,8 @@ function scoreRelationshipTypes(
 /**
  * Classify the relationship with a contact
  */
+const LOG_PREFIX = '[RelClassifier]';
+
 export function classifyRelationship(
   messages: BeeperMessage[],
   tier1Results: Tier1ExtractionResult[],
@@ -438,7 +440,7 @@ export function classifyRelationship(
   const now = new Date().toISOString();
 
   if (messages.length < 3) {
-    // Not enough data
+    console.log(`${LOG_PREFIX} Too few messages (${messages.length}) for classification`);
     return existingClassification || {
       type: 'unknown',
       confidence: 0,
@@ -448,10 +450,24 @@ export function classifyRelationship(
   }
 
   const signals = extractClassificationSignals(messages, tier1Results);
+  console.log(`${LOG_PREFIX} Signals from ${messages.length} messages:`, {
+    frequency: signals.messageFrequency,
+    responseTime: signals.responseTime,
+    formality: signals.formality,
+    emojiUsage: signals.emojiUsage,
+    topicDiversity: signals.topicDiversity,
+    familyTerms: signals.familyTerms,
+    romanticIndicators: signals.romanticIndicators,
+    professionalTerms: signals.professionalTerms,
+    platform: signals.platform,
+  });
+
   const scores = scoreRelationshipTypes(signals);
 
   const topScore = scores[0];
   const secondScore = scores[1];
+
+  console.log(`${LOG_PREFIX} Top scores:`, scores.slice(0, 3).map(s => `${s.type}: ${s.score.toFixed(2)} [${s.reasons.join(', ')}]`));
 
   // Calculate confidence based on score gap and sample size
   let confidence = topScore.score;

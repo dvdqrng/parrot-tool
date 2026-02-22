@@ -43,6 +43,8 @@ export interface ContactFact {
   isActive: boolean;
   sourceContext?: string; // Original message context for display
   extractedAt?: string; // Convenience alias for source.extractedAt
+  userVerified?: boolean; // Manually verified by user — survives re-extraction
+  userEdited?: boolean; // Content was manually edited by user
 }
 
 // Alias for backward compatibility

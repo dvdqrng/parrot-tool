@@ -1,6 +1,7 @@
 /**
  * Tier 2 LLM Extraction API Route
  * Extracts semantic facts, relationships, and action items from messages
+ * Also handles soul trait extraction (mode: 'soul')
  * Supports both Anthropic and OpenAI providers
  */
 
@@ -10,6 +11,11 @@ import {
   buildExtractionPrompt,
   parseExtractionResponse,
 } from '@/lib/intelligence/extraction/tier2-llm';
+import {
+  SoulExtractionRequest,
+  buildSoulExtractionPrompt,
+  parseSoulExtractionResponse,
+} from '@/lib/intelligence/extraction/soul-extractor';
 import { LLMClient, LLMProvider } from '@/lib/intelligence/llm-client';
 
 // Cost-efficient models for extraction
@@ -32,17 +38,8 @@ export async function POST(request: Request) {
       );
     }
 
-    const body: Tier2ExtractionRequest = await request.json();
-
-    if (!body.messages || body.messages.length === 0) {
-      return NextResponse.json(
-        { error: 'No messages provided' },
-        { status: 400 }
-      );
-    }
-
-    // Build prompt
-    const prompt = buildExtractionPrompt(body);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const body: any = await request.json();
 
     // Initialize generic LLM client with the appropriate provider
     const llmClient = new LLMClient({
@@ -51,6 +48,48 @@ export async function POST(request: Request) {
       model: EXTRACTION_MODELS[provider],
     });
 
+    // --- Soul extraction mode ---
+    if (body.mode === 'soul') {
+      const soulBody = body as SoulExtractionRequest;
+
+      if (!soulBody.sentMessages || soulBody.sentMessages.length === 0) {
+        return NextResponse.json(
+          { error: 'No sent messages provided for soul extraction' },
+          { status: 400 }
+        );
+      }
+
+      console.log(`[API:extract] Soul extraction: ${soulBody.sentMessages.length} messages, ${soulBody.existingTraits?.length || 0} existing traits`);
+
+      const prompt = buildSoulExtractionPrompt(soulBody);
+      const response = await llmClient.chat({
+        messages: [{ role: 'user', content: prompt }],
+        maxTokens: 2048,
+      });
+
+      const traits = parseSoulExtractionResponse(
+        response.content,
+        soulBody.existingTraits || []
+      );
+
+      console.log(`[API:extract] Soul extraction complete: ${traits.length} traits extracted`);
+
+      return NextResponse.json({ traits });
+    }
+
+    // --- Standard contact extraction mode ---
+    const contactBody = body as Tier2ExtractionRequest;
+
+    if (!contactBody.messages || contactBody.messages.length === 0) {
+      return NextResponse.json(
+        { error: 'No messages provided' },
+        { status: 400 }
+      );
+    }
+
+    // Build prompt
+    const prompt = buildExtractionPrompt(contactBody);
+
     // Call LLM API
     const response = await llmClient.chat({
       messages: [{ role: 'user', content: prompt }],
@@ -58,7 +97,7 @@ export async function POST(request: Request) {
     });
 
     // Parse the response
-    const result = parseExtractionResponse(response.content, body);
+    const result = parseExtractionResponse(response.content, contactBody);
 
     return NextResponse.json(result);
   } catch (error) {

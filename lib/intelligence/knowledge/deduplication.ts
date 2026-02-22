@@ -6,6 +6,8 @@
 
 import { ContactFact, FactCategory } from './types';
 
+const LOG_PREFIX = '[Deduplication]';
+
 // ============================================
 // DEDUPLICATION RESULT
 // ============================================
@@ -334,6 +336,8 @@ export function deduplicateFacts(
   existing: ContactFact[],
   incoming: ContactFact[]
 ): DeduplicationResult {
+  console.log(`${LOG_PREFIX} deduplicateFacts: ${existing.length} existing + ${incoming.length} incoming`);
+
   const mergedFacts: ContactFact[] = [];
   const supersededFacts: ContactFact[] = [];
   const contradictions: Contradiction[] = [];
@@ -363,6 +367,7 @@ export function deduplicateFacts(
         // High similarity - merge/update
         matched = true;
         processedIncoming.add(incomingFact.id);
+        console.log(`${LOG_PREFIX}   DUPLICATE (${similarity.toFixed(2)}): "${incomingFact.content.slice(0, 60)}" ≈ "${existingFact.content.slice(0, 60)}" → merging`);
 
         // Update the existing fact with new confirmation
         const updatedFact: ContactFact = {
@@ -374,9 +379,19 @@ export function deduplicateFacts(
         mergedFacts.push(updatedFact);
         break;
       } else if (detectContradiction(existingFact, incomingFact)) {
+        // Guard: never supersede user-verified facts with AI-extracted ones
+        if (existingFact.userVerified) {
+          matched = true;
+          processedIncoming.add(incomingFact.id);
+          console.log(`${LOG_PREFIX}   CONTRADICTION but existing is USER-VERIFIED — keeping existing: "${existingFact.content.slice(0, 60)}"`);
+          mergedFacts.push(existingFact);
+          break;
+        }
+
         // Contradiction detected
         matched = true;
         processedIncoming.add(incomingFact.id);
+        console.log(`${LOG_PREFIX}   CONTRADICTION: "${incomingFact.content.slice(0, 60)}" vs "${existingFact.content.slice(0, 60)}"`);
 
         const resolution = resolveContradiction(existingFact, incomingFact);
         contradictions.push(resolution);
@@ -418,6 +433,12 @@ export function deduplicateFacts(
     }
   }
 
+  const newFactCount = incoming.filter(f => !existing.some(
+    e => calculateSimilarity(e.content, f.content) > 0.85
+  )).length;
+
+  console.log(`${LOG_PREFIX} ✓ Result: ${mergedFacts.length} kept, ${newFactCount} new, ${supersededFacts.length} superseded, ${contradictions.length} contradictions`);
+
   return {
     mergedFacts,
     supersededFacts,
@@ -426,9 +447,7 @@ export function deduplicateFacts(
       kept: mergedFacts.length,
       superseded: supersededFacts.length,
       contradictions: contradictions.length,
-      newFacts: incoming.filter(f => !existing.some(
-        e => calculateSimilarity(e.content, f.content) > 0.85
-      )).length,
+      newFacts: newFactCount,
     },
   };
 }
@@ -542,4 +561,40 @@ export function mergeAndPruneFacts(
       pruned: pruneResult.pruned.length,
     },
   };
+}
+
+// ============================================
+// SINGLE-ARRAY DEDUPLICATION
+// ============================================
+
+/**
+ * Deduplicate a single array of facts (for cleaning up existing data)
+ * Keeps the fact with highest confidence when duplicates are found
+ */
+export function deduplicateFactsArray(facts: ContactFact[]): ContactFact[] {
+  if (facts.length <= 1) return facts;
+
+  const uniqueFacts: ContactFact[] = [];
+
+  for (const fact of facts) {
+    // Check if this fact is similar to any we've already kept
+    const existingSimilar = uniqueFacts.findIndex(
+      (existing) =>
+        existing.category === fact.category &&
+        calculateSimilarity(existing.content, fact.content) > 0.85
+    );
+
+    if (existingSimilar === -1) {
+      // No similar fact found, add this one
+      uniqueFacts.push(fact);
+    } else {
+      // Similar fact exists - keep the one with higher confidence
+      const existing = uniqueFacts[existingSimilar];
+      if (fact.confidence > existing.confidence) {
+        uniqueFacts[existingSimilar] = fact;
+      }
+    }
+  }
+
+  return uniqueFacts;
 }

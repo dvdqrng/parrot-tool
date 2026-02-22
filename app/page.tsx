@@ -11,6 +11,7 @@ import { ErrorState } from '@/components/dashboard/error-state';
 import { LoadingState } from '@/components/dashboard/loading-state';
 import { BottomNavigation, MainView } from '@/components/dashboard/bottom-navigation';
 import { GlobalStream } from '@/components/intelligence/global-stream';
+import { AttentionSummary } from '@/components/intelligence/attention-summary';
 import { ContactsView } from '@/components/contacts-view';
 import { FilterDialog } from '@/components/filter-dialog';
 import { GroupByDialog } from '@/components/group-by-dialog';
@@ -582,6 +583,25 @@ export default function Home() {
     setSelectedCard(card);
   }, []);
 
+  // Handle attention summary click — find matching card and select it
+  const handleAttentionSelect = useCallback((chatId: string) => {
+    const allMessages = [...unreadMessages, ...sentMessages];
+    const msg = allMessages.find(m => m.chatId === chatId);
+    if (msg) {
+      const card: KanbanCard = {
+        id: msg.id,
+        type: 'message',
+        message: msg,
+        title: msg.chatName || msg.senderName,
+        preview: msg.text || '',
+        timestamp: msg.timestamp,
+        platform: msg.platform || 'unknown',
+        avatarUrl: avatars[msg.chatId] || msg.senderAvatarUrl,
+      };
+      setSelectedCard(card);
+    }
+  }, [unreadMessages, sentMessages, avatars]);
+
   // Handle delete draft from card (in kanban board)
   const handleDeleteDraftFromCard = useCallback((card: KanbanCard) => {
     if (card.type === 'draft' && card.draft) {
@@ -792,7 +812,10 @@ export default function Home() {
 
           {/* Bottom nav with AI stream on top */}
           <div className="flex flex-col items-center gap-2">
-            <GlobalStream />
+            <div className="flex items-center gap-2">
+              <GlobalStream />
+              <AttentionSummary onSelectChat={handleAttentionSelect} />
+            </div>
             <BottomNavigation
               onNewContact={() => {
                 setFilterDialogOpen(false);

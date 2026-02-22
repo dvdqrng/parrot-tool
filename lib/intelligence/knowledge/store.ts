@@ -10,6 +10,7 @@ import {
   StyleFingerprint,
 } from './types';
 import { UserIntelligence, createDefaultUserIntelligence } from '../user-state/types';
+import { UserSoul, createDefaultSoul } from '../user-state/soul';
 import { Agent, AgentLifecycle } from '../agents/types';
 
 // ============================================
@@ -22,6 +23,7 @@ export class IntelligenceDB extends Dexie {
   agents!: Table<Agent, string>;
   styleMatrix!: Table<{ id: string; data: Record<string, StyleFingerprint> }, string>;
   extractionQueue!: Table<ExtractionQueueItem, string>;
+  soul!: Table<UserSoul, string>;
 
   constructor() {
     super('BeeperIntelligence');
@@ -32,6 +34,15 @@ export class IntelligenceDB extends Dexie {
       agents: 'id, type, lifecycle, contextId, lastActiveAt',
       styleMatrix: 'id',
       extractionQueue: 'id, chatId, priority, scheduledFor',
+    });
+
+    this.version(2).stores({
+      contacts: 'id, updatedAt',
+      userState: 'id',
+      agents: 'id, type, lifecycle, contextId, lastActiveAt',
+      styleMatrix: 'id',
+      extractionQueue: 'id, chatId, priority, scheduledFor',
+      soul: 'id',
     });
   }
 }
@@ -421,6 +432,44 @@ export const styleMatrixStore = {
       await this.set(current);
     } catch (e) {
       console.error('Failed to update style:', e);
+    }
+  },
+};
+
+// ============================================
+// SOUL STORE
+// ============================================
+
+export const soulStore = {
+  async get(): Promise<UserSoul> {
+    try {
+      const db = getIntelligenceDb();
+      const soul = await db.soul.get('soul');
+      return soul || createDefaultSoul();
+    } catch {
+      return createDefaultSoul();
+    }
+  },
+
+  async set(soul: UserSoul): Promise<void> {
+    try {
+      const db = getIntelligenceDb();
+      await db.soul.put({
+        ...soul,
+        id: 'soul',
+        updatedAt: new Date().toISOString(),
+      });
+    } catch (e) {
+      console.error('Failed to set soul:', e);
+    }
+  },
+
+  async clear(): Promise<void> {
+    try {
+      const db = getIntelligenceDb();
+      await db.soul.clear();
+    } catch (e) {
+      console.error('Failed to clear soul:', e);
     }
   },
 };

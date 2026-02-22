@@ -42,6 +42,8 @@ export interface Tier2ExtractionRequest {
 
 import { getApiKey, getActiveProvider } from '@/lib/intelligence-settings';
 
+const LOG_PREFIX = '[Tier2LLM]';
+
 export async function extractTier2(
   request: Tier2ExtractionRequest
 ): Promise<Tier2ExtractionResult> {
@@ -49,6 +51,14 @@ export async function extractTier2(
     // Get provider and API key from localStorage settings
     const provider = getActiveProvider();
     const apiKey = getApiKey(provider);
+
+    console.log(`${LOG_PREFIX} extractTier2: ${request.messages.length} messages for ${request.contactName} (${request.platform})`, {
+      chatId: request.chatId,
+      existingFacts: request.existingFacts?.length || 0,
+      existingRelationship: request.existingRelationship?.type || 'none',
+      provider,
+      hasApiKey: !!apiKey,
+    });
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -72,9 +82,19 @@ export async function extractTier2(
     }
 
     const result = await response.json();
+
+    console.log(`${LOG_PREFIX} ✓ extractTier2 result for ${request.contactName}:`, {
+      newFacts: result.facts?.length || 0,
+      relationship: result.relationship?.type || 'unknown',
+      relationshipConfidence: result.relationship?.confidence?.toFixed(2) || '0',
+      actionItems: result.actionItems?.length || 0,
+      topics: result.topics?.slice(0, 5) || [],
+      hasSummary: !!result.summary,
+    });
+
     return result;
   } catch (error) {
-    console.error('Tier 2 extraction failed:', error);
+    console.error(`${LOG_PREFIX} extractTier2 FAILED:`, error);
     // Return empty result on failure
     return {
       facts: [],
@@ -95,14 +115,16 @@ export async function extractTier2(
 // PROMPT BUILDING
 // ============================================
 
+// Batch size for processing - how many messages per extraction call
+export const EXTRACTION_BATCH_SIZE = 100;
+
 export function buildExtractionPrompt(
   request: Tier2ExtractionRequest
 ): string {
   const { contactName, platform, messages, existingFacts } = request;
 
-  // Format messages for context
+  // Process ALL messages passed in (batching happens in background worker)
   const messageContext = messages
-    .slice(-50) // Last 50 messages
     .map(m => {
       const sender = m.isFromMe ? 'Me' : contactName;
       const time = new Date(m.timestamp).toLocaleString();
@@ -110,9 +132,9 @@ export function buildExtractionPrompt(
     })
     .join('\n');
 
-  // Format existing facts
+  // Format existing facts - show them so LLM knows what NOT to re-extract
   const existingFactsContext = existingFacts?.length
-    ? `\nExisting facts about ${contactName}:\n${existingFacts.map(f => `- ${f.category}: ${f.content}`).join('\n')}`
+    ? `\n\nALREADY KNOWN FACTS (DO NOT re-extract these - only extract NEW information):\n${existingFacts.map(f => `- [${f.category}] ${f.content}`).join('\n')}`
     : '';
 
   return `Analyze this conversation between me and ${contactName} on ${platform}.
@@ -121,8 +143,9 @@ CONVERSATION:
 ${messageContext}
 ${existingFactsContext}
 
-Extract the following in JSON format:
+Extract NEW facts from this conversation that are NOT already in the "ALREADY KNOWN FACTS" list above.
 
+Return JSON in this format:
 {
   "facts": [
     {
@@ -148,11 +171,13 @@ Extract the following in JSON format:
 }
 
 Rules:
-1. Only extract facts that are clearly stated or strongly implied
-2. For action items, distinguish between firm commitments ("I'll send it tomorrow") vs soft ("we should hang out sometime") vs social pleasantries ("let's catch up soon")
-3. Relationship type should reflect the overall tone and content of conversations
-4. Be conservative with confidence scores
-5. Focus on facts that would be useful for future conversations
+1. CRITICAL: Do NOT re-extract facts that are already in the ALREADY KNOWN FACTS list above
+2. Only extract facts that are clearly stated or strongly implied
+3. For action items, distinguish between firm commitments ("I'll send it tomorrow") vs soft ("we should hang out sometime") vs social pleasantries ("let's catch up soon")
+4. Relationship type should reflect the overall tone and content of conversations
+5. Be conservative with confidence scores
+6. Focus on facts that would be useful for future conversations
+7. If no new facts are found, return an empty facts array: "facts": []
 
 Respond ONLY with valid JSON.`;
 }

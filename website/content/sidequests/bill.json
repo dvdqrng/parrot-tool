@@ -1,0 +1,59 @@
+{
+  "title": "Bill",
+  "tagline": "AI Bill splitting with your friends",
+  "category": "Fintech",
+  "date": "2024-01",
+  "status": "reached 10k users",
+  "logo": "/sidequests/bill/logo.png",
+  "platform": "ios",
+  "screenshots": [
+    "/sidequests/bill/screenshot-1.png",
+    "/sidequests/bill/screenshot-2.png",
+    "/sidequests/bill/screenshot-3.png"
+  ],
+  "announcement": "Thank you 10K Downloads in 2025",
+  "pills": [
+    {
+      "icon": "users",
+      "text": "For you and your friends"
+    },
+    {
+      "icon": "plane",
+      "text": "Perfect for traveling"
+    }
+  ],
+  "features": [
+    {
+      "icon": "users",
+      "title": "One App for the whole Gang",
+      "description": "Split all Bills for the Group with only one Person having the App."
+    },
+    {
+      "icon": "camera",
+      "title": "Scan Bills with your camera",
+      "description": "With on device OCR and local AI models Bill App supports fully offline Bill scanning and analysis."
+    },
+    {
+      "icon": "currency",
+      "title": "Multi Currency Support",
+      "description": "Bill App detects and converts 36 currency on device."
+    },
+    {
+      "icon": "pdf",
+      "title": "PDF Export",
+      "description": "Share your split bill with your friends in your groupchat by sharing a PDF file."
+    }
+  ],
+  "actions": {
+    "primary": {
+      "icon": "phone",
+      "label": "For iOS",
+      "href": "https://apps.apple.com/bw/app/bill-ai/id6740485275"
+    },
+    "secondary": {
+      "icon": "apple",
+      "label": "Download",
+      "href": "https://apps.apple.com/bw/app/bill-ai/id6740485275"
+    }
+  }
+}

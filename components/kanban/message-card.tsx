@@ -40,6 +40,8 @@ interface MessageCardProps {
   onHide?: (card: KanbanCard) => void;
   onSend?: (card: KanbanCard) => void;
   onDeleteDraft?: (card: KanbanCard) => void;
+  attentionScore?: number;
+  attentionUrgency?: 'critical' | 'high' | 'medium' | 'low';
 }
 
 // Convert file:// URLs to proxied API URLs
@@ -51,7 +53,7 @@ function getAvatarSrc(url?: string): string | undefined {
   return url;
 }
 
-function MessageCardComponent({ card, onClick, onArchive, onUnarchive, onHide, onSend, onDeleteDraft }: MessageCardProps) {
+function MessageCardComponent({ card, onClick, onArchive, onUnarchive, onHide, onSend, onDeleteDraft, attentionUrgency }: MessageCardProps) {
   const timeAgo = (() => {
     try {
       return formatDistanceToNow(new Date(card.timestamp), { addSuffix: true });
@@ -257,7 +259,18 @@ function MessageCardComponent({ card, onClick, onArchive, onUnarchive, onHide, o
             )}
             <p className="line-clamp-2 text-xs text-muted-foreground">{card.preview}</p>
           </div>
-          <span className="text-xs text-muted-foreground">{timeAgo}</span>
+          <div className="flex items-center gap-1">
+            {(attentionUrgency === 'critical' || attentionUrgency === 'high') && (
+              <span
+                className={cn(
+                  "inline-block h-1.5 w-1.5 rounded-full shrink-0",
+                  attentionUrgency === 'critical' ? "bg-red-500" : "bg-amber-500"
+                )}
+                title={attentionUrgency === 'critical' ? 'Needs immediate attention' : 'Needs attention'}
+              />
+            )}
+            <span className="text-xs text-muted-foreground">{timeAgo}</span>
+          </div>
         </div>
       </div>
     </KanbanItem>
@@ -275,6 +288,7 @@ export const MessageCard = memo(MessageCardComponent, (prevProps, nextProps) => 
     prevProps.card.preview === nextProps.card.preview &&
     prevProps.card.title === nextProps.card.title &&
     prevProps.card.unreadCount === nextProps.card.unreadCount &&
-    prevMedia === nextMedia
+    prevMedia === nextMedia &&
+    prevProps.attentionUrgency === nextProps.attentionUrgency
   );
 });

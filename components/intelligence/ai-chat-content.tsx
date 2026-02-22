@@ -27,7 +27,7 @@ import {
 import { cn } from '@/lib/utils';
 import { hasApiKey as checkHasApiKey } from '@/lib/intelligence-settings';
 import { StreamOfConsciousness } from './stream-of-consciousness';
-import type { CompanionMessage, QuickAction } from './ai-companion-panel';
+import type { CompanionMessage, CompanionSuggestion, QuickAction } from './ai-companion-panel';
 
 // ============================================
 // INTERNAL COMPONENTS
@@ -70,24 +70,27 @@ function AssistantMessage({
   message,
   onApplyDraft,
   onDismiss,
+  onSuggestionClick,
 }: {
   message: CompanionMessage;
   onApplyDraft?: (draft: string) => void;
   onDismiss?: () => void;
+  onSuggestionClick?: (suggestion: CompanionSuggestion) => void;
 }) {
   const isDraft = message.type === 'draft' && message.metadata?.draftText;
   const isInsight = message.type === 'insight';
   const isAction = message.type === 'action';
+  const suggestions = message.metadata?.suggestions;
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 10, scale: 0.98 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ duration: 0.2 }}
-      className="flex flex-col items-start"
+      className="flex flex-col items-start w-full"
     >
-      <div className="bg-muted rounded-2xl px-4 py-2 max-w-[85%] space-y-2">
-        <p className="text-xs whitespace-pre-wrap">{message.content}</p>
+      <div className="bg-muted rounded-2xl px-4 py-2 max-w-[85%] space-y-2 overflow-hidden">
+        <p className="text-xs whitespace-pre-wrap break-words">{message.content}</p>
 
         {isDraft && message.metadata?.draftText && (
           <div className="bg-background rounded-lg p-2 space-y-2">
@@ -108,7 +111,36 @@ function AssistantMessage({
           </div>
         )}
 
-        {isInsight && !message.metadata?.dismissed && (
+        {/* Suggestion buttons */}
+        {suggestions && suggestions.length > 0 && !message.metadata?.dismissed && (
+          <div className="flex flex-col gap-1.5 pt-1">
+            {suggestions.map((sug) => (
+              <button
+                key={sug.id}
+                className="flex items-start gap-2 w-full text-left text-xs px-2.5 py-2 rounded-lg border bg-background hover:bg-accent transition-colors"
+                onClick={() => onSuggestionClick?.(sug)}
+              >
+                <span className="shrink-0 mt-0.5">
+                  {sug.type === 'share_link' && (
+                    <svg className="w-3.5 h-3.5 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                    </svg>
+                  )}
+                  {sug.type === 'draft' && (
+                    <FileText className="w-3.5 h-3.5 text-muted-foreground" />
+                  )}
+                  {sug.type === 'send_message' && (
+                    <MessageSquare className="w-3.5 h-3.5 text-muted-foreground" />
+                  )}
+                </span>
+                <span className="break-words">{sug.label}</span>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Insight actions (only show "Got it" if no suggestions) */}
+        {isInsight && !message.metadata?.dismissed && (!suggestions || suggestions.length === 0) && (
           <Button size="sm" variant="ghost" className="h-6 px-2" onClick={onDismiss}>
             Got it
           </Button>
@@ -218,6 +250,7 @@ interface AiChatContentProps {
   onSendMessage: (content: string) => Promise<void>;
   onApplyDraft?: (draft: string) => void;
   onDismissInsight?: (messageId: string) => void;
+  onSuggestionClick?: (suggestion: CompanionSuggestion) => void;
   isLoading?: boolean;
   isThinking?: boolean;
   chatId?: string;
@@ -231,6 +264,7 @@ export function AiChatContent({
   onSendMessage,
   onApplyDraft,
   onDismissInsight,
+  onSuggestionClick,
   isLoading = false,
   isThinking = false,
   chatId,
@@ -323,8 +357,8 @@ export function AiChatContent({
       </AnimatePresence>
 
       {/* Messages */}
-      <ScrollArea className="flex-1 min-h-0" ref={scrollRef}>
-        <div className="p-4 space-y-3">
+      <ScrollArea className="flex-1 min-h-0 [&_[data-slot=scroll-area-viewport]]:!overflow-x-hidden" ref={scrollRef}>
+        <div className="p-4 space-y-3 w-full overflow-hidden">
           {/* API Key Warning */}
           {!hasApiKey && (
             <div className="flex flex-col items-center justify-center py-4 text-center bg-muted rounded-lg p-4">
@@ -371,6 +405,7 @@ export function AiChatContent({
                       message={msg}
                       onApplyDraft={onApplyDraft}
                       onDismiss={() => onDismissInsight?.(msg.id)}
+                      onSuggestionClick={onSuggestionClick}
                     />
                   );
                 } else if (msg.role === 'user') {

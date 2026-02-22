@@ -20,6 +20,24 @@ interface SearchRequest {
   chatId: string;
   query: string;
   contactName?: string;
+  contactIntelligence?: {
+    facts?: Array<{
+      category: string;
+      content: string;
+      confidence: number;
+      isActive?: boolean;
+    }>;
+    actionItems?: Array<{
+      content: string;
+      status: string;
+      commitment?: string;
+    }>;
+    relationship?: {
+      type: string;
+      confidence: number;
+    };
+    summary?: string;
+  };
   recentMessages?: Array<{
     id: string;
     text: string;
@@ -31,7 +49,7 @@ interface SearchRequest {
 
 function buildSearchPrompt(req: SearchRequest): string {
   const parts: string[] = [
-    `You are a helpful assistant that searches through conversation history.`,
+    `You are a helpful assistant that searches through conversation history and contact knowledge.`,
     `The user is looking for: "${req.query}"`,
     ``,
   ];
@@ -39,6 +57,37 @@ function buildSearchPrompt(req: SearchRequest): string {
   if (req.contactName) {
     parts.push(`## Conversation with: ${req.contactName}`);
     parts.push(``);
+  }
+
+  // Include extracted knowledge about the contact
+  const intel = req.contactIntelligence;
+  if (intel) {
+    const activeFacts = intel.facts?.filter(f => f.isActive !== false) || [];
+    if (activeFacts.length > 0) {
+      parts.push(`## Known Facts about ${req.contactName || 'this contact'}`);
+      activeFacts.forEach(f => {
+        parts.push(`- [${f.category}] ${f.content} (confidence: ${f.confidence})`);
+      });
+      parts.push(``);
+    }
+
+    if (intel.actionItems && intel.actionItems.length > 0) {
+      parts.push(`## Action Items`);
+      intel.actionItems.forEach(a => {
+        parts.push(`- [${a.status}] ${a.content}${a.commitment ? ` (${a.commitment})` : ''}`);
+      });
+      parts.push(``);
+    }
+
+    if (intel.relationship) {
+      parts.push(`## Relationship: ${intel.relationship.type} (confidence: ${intel.relationship.confidence})`);
+      parts.push(``);
+    }
+
+    if (intel.summary) {
+      parts.push(`## Summary: ${intel.summary}`);
+      parts.push(``);
+    }
   }
 
   if (req.recentMessages && req.recentMessages.length > 0) {
@@ -52,14 +101,15 @@ function buildSearchPrompt(req: SearchRequest): string {
   }
 
   parts.push(`## Instructions`);
-  parts.push(`1. Search the messages for content matching the user's query`);
-  parts.push(`2. Return relevant matches with their message numbers and brief context`);
-  parts.push(`3. If nothing matches, say so and suggest alternative search terms`);
-  parts.push(`4. Be concise and helpful`);
+  parts.push(`1. Search BOTH the Known Facts and the Messages for content matching the user's query`);
+  parts.push(`2. If the answer is in the Known Facts, cite it directly`);
+  parts.push(`3. If found in messages, return relevant matches with their message numbers and brief context`);
+  parts.push(`4. If nothing matches, say so and suggest alternative search terms`);
+  parts.push(`5. Be concise and helpful`);
   parts.push(``);
   parts.push(`Format your response as:`);
   parts.push(`- A brief summary of what you found (or didn't find)`);
-  parts.push(`- List of matching messages with [number] and relevant excerpt`);
+  parts.push(`- Relevant facts or matching messages with context`);
 
   return parts.join('\n');
 }
@@ -97,15 +147,43 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // If no messages to search, do a simple text search
+    // Search extracted facts first (free, instant)
+    log('Searching extracted facts...', {
+      hasFacts: !!body.contactIntelligence?.facts?.length,
+      factCount: body.contactIntelligence?.facts?.length || 0,
+      hasActionItems: !!body.contactIntelligence?.actionItems?.length,
+      hasRelationship: !!body.contactIntelligence?.relationship,
+    });
+    const factResults = localFactSearch(body.query, body.contactIntelligence);
+    if (factResults.length > 0) {
+      log('✓ FACT SEARCH HIT - found matches in extracted facts', {
+        count: factResults.length,
+        matches: factResults.map(f => `[${f.category}] ${f.content.slice(0, 50)}`),
+      });
+      const factText = factResults
+        .map(f => `- **${f.category}**: ${f.content}`)
+        .join('\n');
+
+      // If we have a clear fact match, return it directly
+      if (!body.recentMessages || body.recentMessages.length === 0) {
+        log('Returning fact-only results (no messages to search)');
+        return NextResponse.json({
+          content: `From what I know about ${body.contactName || 'this contact'}:\n\n${factText}`,
+          metadata: { type: 'search', source: 'facts' },
+        });
+      }
+    } else {
+      log('No fact matches found, falling through to message search');
+    }
+
+    // If no messages to search, return fact results or nothing
     if (!body.recentMessages || body.recentMessages.length === 0) {
       log('No messages to search');
       return NextResponse.json({
-        content: "I don't have any messages to search through. Try loading more conversation history first.",
-        metadata: {
-          type: 'search',
-          results: [],
-        },
+        content: factResults.length > 0
+          ? `From what I know about ${body.contactName || 'this contact'}:\n\n${factResults.map(f => `- **${f.category}**: ${f.content}`).join('\n')}`
+          : "I don't have any messages or facts to search through. Try loading more conversation history first.",
+        metadata: { type: 'search', results: [] },
       });
     }
 
@@ -131,7 +209,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Use LLM for semantic search
-    log('Using LLM for semantic search...');
+    log('Local search insufficient, using LLM for semantic search...', {
+      localResultCount: simpleResults.length,
+      factResultCount: factResults.length,
+    });
     let searchResult = '';
 
     if (provider === 'openai') {
@@ -185,6 +266,44 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+/**
+ * Search extracted facts for a query
+ */
+function localFactSearch(
+  query: string,
+  intel?: SearchRequest['contactIntelligence']
+): Array<{ category: string; content: string }> {
+  if (!intel?.facts) return [];
+
+  const queryLower = query.toLowerCase();
+  const queryWords = queryLower.split(/\s+/).filter(w => w.length > 2);
+
+  return intel.facts
+    .filter(f => f.isActive !== false)
+    .filter(f => {
+      const contentLower = f.content.toLowerCase();
+      const categoryLower = f.category.toLowerCase();
+
+      // Exact phrase match
+      if (contentLower.includes(queryLower)) return true;
+
+      // Category match + any word
+      if (categoryLower.includes(queryLower)) return true;
+
+      // All query words match
+      if (queryWords.length > 1 && queryWords.every(w => contentLower.includes(w))) return true;
+
+      // At least half the words match (fuzzy)
+      if (queryWords.length >= 2) {
+        const matchCount = queryWords.filter(w => contentLower.includes(w)).length;
+        if (matchCount >= Math.ceil(queryWords.length / 2)) return true;
+      }
+
+      return false;
+    })
+    .map(f => ({ category: f.category, content: f.content }));
 }
 
 /**

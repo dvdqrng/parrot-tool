@@ -24,6 +24,7 @@ import {
   FactCategory,
 } from '@/lib/intelligence/knowledge/types';
 import { contactStore } from '@/lib/intelligence/knowledge/store';
+import { deduplicateFactsArray } from '@/lib/intelligence/knowledge/deduplication';
 import {
   Search,
   RefreshCw,
@@ -39,6 +40,12 @@ import {
   Phone,
   Target,
   Lightbulb,
+  Trash2,
+  Pencil,
+  Pin,
+  Plus,
+  Check,
+  X,
 } from 'lucide-react';
 
 const CATEGORY_ICONS: Record<FactCategory, React.ReactNode> = {
@@ -82,6 +89,37 @@ export function KnowledgeExplorer() {
       setIsLoading(false);
     }
   }, [selectedContact]);
+
+  // Deduplicate all contacts' facts
+  const deduplicateAll = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      let totalRemoved = 0;
+      for (const contact of contacts) {
+        if (!contact.facts || contact.facts.length <= 1) continue;
+
+        const uniqueFacts = deduplicateFactsArray(contact.facts);
+        const removed = contact.facts.length - uniqueFacts.length;
+
+        if (removed > 0) {
+          totalRemoved += removed;
+          await contactStore.upsert({
+            ...contact,
+            facts: uniqueFacts,
+          });
+        }
+      }
+
+      if (totalRemoved > 0) {
+        console.log(`Removed ${totalRemoved} duplicate facts`);
+        await loadContacts();
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to deduplicate');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [contacts, loadContacts]);
 
   useEffect(() => {
     loadContacts();
@@ -138,6 +176,9 @@ export function KnowledgeExplorer() {
           <Badge variant="outline">
             {activeFacts}/{totalFacts} facts active
           </Badge>
+          <Button variant="outline" size="sm" onClick={deduplicateAll}>
+            Deduplicate
+          </Button>
           <Button variant="outline" size="sm" onClick={loadContacts}>
             <RefreshCw className="w-4 h-4 mr-2" />
             Refresh
@@ -234,7 +275,58 @@ export function KnowledgeExplorer() {
               {selectedContact ? (
                 <div className="divide-y">
                   {filteredFacts?.map((fact) => (
-                    <FactCard key={fact.id} fact={fact} />
+                    <FactCard
+                      key={fact.id}
+                      fact={fact}
+                      onDelete={async () => {
+                        if (!selectedContact) return;
+                        console.log('[KnowledgeExplorer] DELETE fact:', {
+                          factId: fact.id,
+                          content: fact.content.slice(0, 50),
+                          category: fact.category,
+                          contact: selectedContact.displayName,
+                        });
+                        const updatedFacts = selectedContact.facts.map(f =>
+                          f.id === fact.id ? { ...f, isActive: false } : f
+                        );
+                        await contactStore.upsert({ ...selectedContact, facts: updatedFacts });
+                        setSelectedContact({ ...selectedContact, facts: updatedFacts });
+                        console.log('[KnowledgeExplorer] Fact deactivated successfully');
+                      }}
+                      onEdit={async (newContent) => {
+                        if (!selectedContact) return;
+                        console.log('[KnowledgeExplorer] EDIT fact:', {
+                          factId: fact.id,
+                          oldContent: fact.content.slice(0, 50),
+                          newContent: newContent.slice(0, 50),
+                          category: fact.category,
+                          contact: selectedContact.displayName,
+                        });
+                        const updatedFacts = selectedContact.facts.map(f =>
+                          f.id === fact.id ? { ...f, content: newContent, userEdited: true } : f
+                        );
+                        await contactStore.upsert({ ...selectedContact, facts: updatedFacts });
+                        setSelectedContact({ ...selectedContact, facts: updatedFacts });
+                        console.log('[KnowledgeExplorer] Fact edited successfully (userEdited=true)');
+                      }}
+                      onToggleVerified={async () => {
+                        if (!selectedContact) return;
+                        const newVerified = !fact.userVerified;
+                        console.log('[KnowledgeExplorer] TOGGLE PIN fact:', {
+                          factId: fact.id,
+                          content: fact.content.slice(0, 50),
+                          wasVerified: fact.userVerified,
+                          nowVerified: newVerified,
+                          contact: selectedContact.displayName,
+                        });
+                        const updatedFacts = selectedContact.facts.map(f =>
+                          f.id === fact.id ? { ...f, userVerified: newVerified } : f
+                        );
+                        await contactStore.upsert({ ...selectedContact, facts: updatedFacts });
+                        setSelectedContact({ ...selectedContact, facts: updatedFacts });
+                        console.log(`[KnowledgeExplorer] Fact ${newVerified ? 'pinned (protected from AI overwrite)' : 'unpinned'}`);
+                      }}
+                    />
                   ))}
                   {(!filteredFacts || filteredFacts.length === 0) && (
                     <div className="p-4 text-center text-muted-foreground text-sm">
@@ -261,13 +353,70 @@ export function KnowledgeExplorer() {
 // FACT CARD
 // ============================================
 
-function FactCard({ fact }: { fact: ExtractedFact }) {
+function FactCard({
+  fact,
+  onDelete,
+  onEdit,
+  onToggleVerified,
+}: {
+  fact: ExtractedFact;
+  onDelete?: () => void;
+  onEdit?: (newContent: string) => void;
+  onToggleVerified?: () => void;
+}) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editContent, setEditContent] = useState(fact.content);
+
   return (
     <div className={`p-3 ${!fact.isActive ? 'opacity-50' : ''}`}>
       <div className="flex items-start gap-2">
         <div className="mt-0.5">{CATEGORY_ICONS[fact.category]}</div>
         <div className="flex-1 min-w-0">
-          <div className="text-sm">{fact.content}</div>
+          {isEditing ? (
+            <div className="flex items-center gap-1">
+              <Input
+                value={editContent}
+                onChange={(e) => setEditContent(e.target.value)}
+                className="text-xs h-7"
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    onEdit?.(editContent);
+                    setIsEditing(false);
+                  } else if (e.key === 'Escape') {
+                    setEditContent(fact.content);
+                    setIsEditing(false);
+                  }
+                }}
+              />
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6"
+                onClick={() => { onEdit?.(editContent); setIsEditing(false); }}
+              >
+                <Check className="w-3 h-3" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6"
+                onClick={() => { setEditContent(fact.content); setIsEditing(false); }}
+              >
+                <X className="w-3 h-3" />
+              </Button>
+            </div>
+          ) : (
+            <div className="text-sm flex items-center gap-1">
+              {fact.content}
+              {fact.userVerified && (
+                <Pin className="w-3 h-3 text-blue-500 inline-block flex-shrink-0" />
+              )}
+              {fact.userEdited && (
+                <Pencil className="w-2.5 h-2.5 text-muted-foreground inline-block flex-shrink-0" />
+              )}
+            </div>
+          )}
           <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
             <Badge variant="outline" className="text-xs">
               {fact.category}
@@ -282,6 +431,39 @@ function FactCard({ fact }: { fact: ExtractedFact }) {
               <CheckCircle className="w-3 h-3 text-green-500" />
             ) : (
               <XCircle className="w-3 h-3 text-red-500" />
+            )}
+
+            {/* Action buttons */}
+            {fact.isActive && (
+              <div className="ml-auto flex items-center gap-0.5">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-5 w-5"
+                  title={fact.userVerified ? 'Unpin fact' : 'Pin fact (protects from AI overwrite)'}
+                  onClick={onToggleVerified}
+                >
+                  <Pin className={`w-3 h-3 ${fact.userVerified ? 'text-blue-500' : ''}`} />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-5 w-5"
+                  title="Edit fact"
+                  onClick={() => setIsEditing(true)}
+                >
+                  <Pencil className="w-3 h-3" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-5 w-5"
+                  title="Delete fact"
+                  onClick={onDelete}
+                >
+                  <Trash2 className="w-3 h-3 text-destructive" />
+                </Button>
+              </div>
             )}
           </div>
           {fact.sourceContext && (

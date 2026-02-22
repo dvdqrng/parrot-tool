@@ -8,7 +8,7 @@
  */
 
 import { eventBus, emitError, IntelligenceEvent } from './event-bus';
-import { extractionQueueStore, contactStore, agentStore } from './knowledge/store';
+import { extractionQueueStore, contactStore, agentStore, userStateStore, soulStore } from './knowledge/store';
 import { aiLog } from './activity-log';
 import { getTriggerScheduler, startTriggerScheduler, stopTriggerScheduler } from './triggers/scheduler';
 import { getOrchestrator } from './agents/orchestrator';
@@ -20,11 +20,16 @@ import {
   analyzeConversationContext,
 } from './proactive-engine';
 import { processAmbientStream } from './user-state/ambient-processor';
-import { extractTier2, Tier2ExtractionRequest } from './extraction/tier2-llm';
+import { extractTier2, Tier2ExtractionRequest, EXTRACTION_BATCH_SIZE } from './extraction/tier2-llm';
+import { sampleMessagesForSoulExtraction, mergeSoulTraits } from './extraction/soul-extractor';
+import { classifyRelationship } from './extraction/relationship-classifier';
+import { extractTier1 } from './extraction/tier1-local';
 import { metrics } from './instrumentation/metrics';
-import { hasApiKey } from '@/lib/intelligence-settings';
+import { buildAttentionSignal, rankChats, AttentionScore } from './attention-model';
+import { hasApiKey, getApiKey, getActiveProvider } from '@/lib/intelligence-settings';
 import { getMessagesByIds, getMessagesByChatId, getCrmContactByChatId, loadCachedMessages } from '@/lib/storage';
 import { createDefaultContactIntelligence, ContactIntelligence } from './knowledge/types';
+import { deduplicateFacts as deduplicateFactsWithExisting } from './knowledge/deduplication';
 
 // ============================================
 // LOGGING
@@ -50,6 +55,8 @@ export interface WorkerConfig {
   ambientProcessingIntervalMs: number;
   agentMaintenanceIntervalMs: number;
   proactiveCheckIntervalMs: number;
+  globalScanIntervalMs: number;
+  soulExtractionIntervalMs: number;
   maxExtractionRetries: number;
 }
 
@@ -59,11 +66,10 @@ const DEFAULT_CONFIG: WorkerConfig = {
   ambientProcessingIntervalMs: 5 * 60 * 1000, // 5 minutes
   agentMaintenanceIntervalMs: 10 * 60 * 1000, // 10 minutes
   proactiveCheckIntervalMs: 60 * 1000, // 1 minute
+  globalScanIntervalMs: 15 * 60 * 1000, // 15 minutes
+  soulExtractionIntervalMs: 30 * 60 * 1000, // 30 minutes
   maxExtractionRetries: 3,
 };
-
-// Only process chats with activity in the last 7 days
-const RECENCY_THRESHOLD_MS = 7 * 24 * 60 * 60 * 1000;
 
 // ============================================
 // WORKER STATE
@@ -75,8 +81,11 @@ interface WorkerState {
   lastAmbientProcessing: number;
   lastAgentMaintenance: number;
   lastProactiveCheck: number;
+  lastGlobalScan: number;
+  lastSoulExtraction: number;
   activeChats: Set<string>; // chatIds currently being viewed
   pendingExtractionMessages: Map<string, string[]>; // chatId -> messageIds pending extraction
+  lastAttentionScores: AttentionScore[]; // cached from last global scan
   errors: Array<{ timestamp: string; source: string; message: string }>;
 }
 
@@ -98,8 +107,11 @@ export class IntelligenceBackgroundWorker {
       lastAmbientProcessing: 0,
       lastAgentMaintenance: 0,
       lastProactiveCheck: 0,
+      lastGlobalScan: 0,
+      lastSoulExtraction: 0,
       activeChats: new Set(),
       pendingExtractionMessages: new Map(),
+      lastAttentionScores: [],
       errors: [],
     };
   }
@@ -118,6 +130,9 @@ export class IntelligenceBackgroundWorker {
     });
 
     this.state.isRunning = true;
+
+    // Enable event bus debug mode for testing
+    eventBus.setDebugMode(true);
 
     // Start the trigger scheduler
     startTriggerScheduler();
@@ -204,7 +219,19 @@ export class IntelligenceBackgroundWorker {
         this.state.lastProactiveCheck = now;
       }
 
-      // 4. Run agent lifecycle maintenance if due
+      // 4. Run global attention scan if due
+      if (now - this.state.lastGlobalScan >= this.config.globalScanIntervalMs) {
+        await this.globalProactiveScan();
+        this.state.lastGlobalScan = now;
+      }
+
+      // 5. Run soul extraction if due
+      if (now - this.state.lastSoulExtraction >= this.config.soulExtractionIntervalMs) {
+        await this.runSoulExtraction();
+        this.state.lastSoulExtraction = now;
+      }
+
+      // 6. Run agent lifecycle maintenance if due
       if (now - this.state.lastAgentMaintenance >= this.config.agentMaintenanceIntervalMs) {
         await this.runAgentMaintenance();
         this.state.lastAgentMaintenance = now;
@@ -425,6 +452,17 @@ export class IntelligenceBackgroundWorker {
       case 'messages_loaded':
         aiLog.observation('worker', `Loaded ${(event as any).count} messages from history`, chatId);
         break;
+      case 'global_attention_update':
+        const scores = (event as any).scores || [];
+        const highCount = scores.filter((s: any) => s.score >= 60).length;
+        if (highCount > 0) {
+          aiLog.observation('worker', `Global scan: ${highCount} chat(s) need attention`);
+        }
+        break;
+      case 'soul_updated':
+        const soulEvent = event as any;
+        aiLog.knowledge(`Soul updated: ${soulEvent.newTraits} new traits (${soulEvent.traitCount} total)`, '');
+        break;
       case 'worker_started':
         aiLog.system('Background worker started');
         break;
@@ -457,9 +495,10 @@ export class IntelligenceBackgroundWorker {
 
       for (const item of items) {
         try {
-          // Skip if chat is not recent (might have been queued before recency check was added)
-          if (!this.isChatRecent(item.chatId)) {
-            log('processExtractionQueue', `Skipping ${item.chatId} - no recent activity`);
+          // Skip if queue item is very old (>30 days) - stale queue entries
+          const itemAge = Date.now() - new Date(item.createdAt).getTime();
+          if (itemAge > 30 * 24 * 60 * 60 * 1000) {
+            log('processExtractionQueue', `Skipping ${item.chatId} - queue item is ${Math.round(itemAge / (24 * 60 * 60 * 1000))} days old`);
             await extractionQueueStore.markComplete(item.id);
             continue;
           }
@@ -496,25 +535,87 @@ export class IntelligenceBackgroundWorker {
           const contactName = crmContact?.displayName || messages[0]?.senderName || 'Unknown';
           const platform = crmContact?.platformLinks?.[0]?.platform || messages[0]?.platform || 'unknown';
 
-          log('processExtractionQueue', `Extracting from ${messages.length} messages for ${contactName}`);
+          // Sort messages chronologically (oldest first)
+          messages.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 
-          // Build extraction request
-          const request: Tier2ExtractionRequest = {
-            chatId: item.chatId,
-            contactId: item.contactId,
-            contactName,
-            platform,
-            messages,
-            existingFacts,
-            existingRelationship,
-          };
+          log('processExtractionQueue', `Extracting from ${messages.length} messages for ${contactName} in batches of ${EXTRACTION_BATCH_SIZE}`);
 
-          // Run extraction
-          const result = await extractTier2(request);
+          // Process messages in batches to cover full history
+          const totalBatches = Math.ceil(messages.length / EXTRACTION_BATCH_SIZE);
+          let allFacts: typeof existingFacts = [...existingFacts];
+          let currentRelationship = existingRelationship;
+          let allActionItems: ContactIntelligence['actionItems'] = existingContact?.actionItems || [];
+          let latestSummary = '';
+          let allTopics: string[] = [];
 
-          if (result.facts.length > 0 || result.actionItems.length > 0) {
-            log('processExtractionQueue', `Extracted ${result.facts.length} facts, ${result.actionItems.length} action items`);
+          for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
+            const batchStart = batchIndex * EXTRACTION_BATCH_SIZE;
+            const batchEnd = Math.min(batchStart + EXTRACTION_BATCH_SIZE, messages.length);
+            const batchMessages = messages.slice(batchStart, batchEnd);
 
+            aiLog.thought('knowledge', `Processing batch ${batchIndex + 1}/${totalBatches} (messages ${batchStart + 1}-${batchEnd} of ${messages.length})`, item.chatId);
+
+            // Build extraction request for this batch
+            const request: Tier2ExtractionRequest = {
+              chatId: item.chatId,
+              contactId: item.contactId,
+              contactName,
+              platform,
+              messages: batchMessages,
+              existingFacts: allFacts, // Pass accumulated facts for context
+              existingRelationship: currentRelationship,
+            };
+
+            // Run extraction on this batch
+            const result = await extractTier2(request);
+
+            // Accumulate results - deduplicate new facts against accumulated facts
+            if (result.facts.length > 0) {
+              // Deduplicate this batch's facts against what we've accumulated so far
+              const batchDedupeResult = deduplicateFactsWithExisting(allFacts, result.facts);
+              allFacts = batchDedupeResult.mergedFacts;
+              log('processExtractionQueue', `Batch ${batchIndex + 1}: ${result.facts.length} raw facts → ${batchDedupeResult.stats.newFacts} new unique facts`);
+            }
+            if (result.actionItems.length > 0) {
+              allActionItems = [...allActionItems, ...result.actionItems];
+            }
+            if (result.relationship.confidence > (currentRelationship?.confidence || 0)) {
+              currentRelationship = result.relationship;
+            }
+            if (result.summary) {
+              latestSummary = result.summary;
+            }
+            if (result.topics.length > 0) {
+              allTopics = [...new Set([...allTopics, ...result.topics])];
+            }
+
+            // Small delay between batches to avoid rate limiting
+            if (batchIndex < totalBatches - 1) {
+              await new Promise(resolve => setTimeout(resolve, 500));
+            }
+          }
+
+          // Run free heuristic relationship classification as complement to LLM
+          log('processExtractionQueue', `Running heuristic relationship classifier on ${messages.length} messages...`);
+          const tier1Results = messages.map(m => extractTier1(m));
+          const heuristicRelationship = classifyRelationship(messages, tier1Results, existingRelationship);
+          log('processExtractionQueue', `✓ HEURISTIC RESULT: ${heuristicRelationship.type} (confidence: ${heuristicRelationship.confidence.toFixed(2)})`);
+          log('processExtractionQueue', `  LLM relationship: ${currentRelationship?.type || 'none'} (confidence: ${currentRelationship?.confidence?.toFixed(2) || '0'})`);
+
+          // Use heuristic if LLM didn't produce a confident result
+          if (!currentRelationship || currentRelationship.confidence < heuristicRelationship.confidence) {
+            currentRelationship = heuristicRelationship;
+            log('processExtractionQueue', `  → Using HEURISTIC (higher confidence)`);
+          } else {
+            log('processExtractionQueue', `  → Keeping LLM result (higher confidence)`);
+          }
+
+          // allFacts is already deduplicated from batch processing
+          const uniqueFacts = allFacts;
+          const totalNewFacts = uniqueFacts.length - existingFacts.length;
+          log('processExtractionQueue', `Total extraction: ${totalNewFacts} new facts (${uniqueFacts.length} unique after dedup)`);
+
+          if (totalNewFacts > 0 || allActionItems.length > (existingContact?.actionItems?.length || 0)) {
             // Store in contact intelligence store
             const contactIntelligence: ContactIntelligence = existingContact || createDefaultContactIntelligence({
               id: item.contactId,
@@ -530,24 +631,25 @@ export class IntelligenceBackgroundWorker {
               updatedAt: new Date().toISOString(),
             });
 
-            // Merge new facts with existing
+            // Update with all accumulated facts
             const updatedIntelligence: ContactIntelligence = {
               ...contactIntelligence,
-              facts: [...contactIntelligence.facts, ...result.facts],
-              relationship: result.relationship,
-              actionItems: [...contactIntelligence.actionItems, ...result.actionItems],
-              summary: result.summary || contactIntelligence.summary,
+              facts: uniqueFacts,
+              relationship: currentRelationship || contactIntelligence.relationship,
+              actionItems: allActionItems,
+              summary: latestSummary || contactIntelligence.summary,
               lastExtractionAt: new Date().toISOString(),
             };
 
             await contactStore.upsert(updatedIntelligence);
+            aiLog.knowledge(`Extracted ${totalNewFacts} facts from ${messages.length} messages`, item.chatId, contactName, { factCount: uniqueFacts.length });
           }
 
           await extractionQueueStore.markComplete(item.id);
           eventBus.emit({
             type: 'extraction_complete',
             chatId: item.chatId,
-            facts: result.facts,
+            facts: uniqueFacts.slice(-10), // Last 10 facts for the event
           });
 
         } catch (error) {
@@ -574,30 +676,49 @@ export class IntelligenceBackgroundWorker {
    * Run ambient processing on sent messages
    */
   private async runAmbientProcessing(): Promise<void> {
-    if (!hasApiKey()) {
-      return;
-    }
-
     try {
       log('runAmbientProcessing', 'Running ambient stream processing...');
 
-      // Get sent messages from storage
-      // Note: In practice, this would come from BeeperDataProvider or a store
-      const sentMessages: any[] = []; // TODO: Wire up to actual sent messages
+      // Get sent messages from cached storage (last 48 hours for ambient window)
+      const allMessages = loadCachedMessages();
+      const cutoff = Date.now() - 48 * 60 * 60 * 1000; // 48-hour window
+      const sentMessages = allMessages.filter(m =>
+        m.isFromMe &&
+        new Date(m.timestamp).getTime() > cutoff
+      );
+
+      log('runAmbientProcessing', `Loaded ${allMessages.length} total cached messages, ${sentMessages.length} sent in last 48h`);
 
       if (sentMessages.length === 0) {
+        log('runAmbientProcessing', 'No sent messages in 48h window - skipping ambient processing');
         return;
       }
+
+      const uniqueChats = new Set(sentMessages.map(m => m.chatId));
+      log('runAmbientProcessing', `Processing ${sentMessages.length} sent messages across ${uniqueChats.size} chats`);
 
       const updates = await processAmbientStream(sentMessages);
       const topicsFound = updates.activeTopics?.length || 0;
 
       if (Object.keys(updates).length > 0) {
+        // Persist user state to IndexedDB
+        log('runAmbientProcessing', '✓ AMBIENT RESULTS - persisting to IndexedDB', {
+          topicsFound,
+          distributedInfo: updates.distributedInfo?.length || 0,
+          activeContexts: updates.activeContexts?.length || 0,
+          communicationMode: updates.communicationMode,
+          topics: updates.activeTopics?.slice(0, 5).map(t => t.topic) || [],
+          contexts: updates.activeContexts?.map(c => c.label) || [],
+        });
+        await userStateStore.update(updates);
+
         eventBus.emit({ type: 'user_state_updated', updates });
         eventBus.emit({ type: 'ambient_processing_complete', topicsFound });
+      } else {
+        log('runAmbientProcessing', 'Ambient processing returned no updates');
       }
 
-      log('runAmbientProcessing', 'Ambient processing complete', { topicsFound });
+      log('runAmbientProcessing', 'Ambient processing complete');
 
     } catch (error) {
       logError('runAmbientProcessing', 'Ambient processing failed', error);
@@ -605,30 +726,120 @@ export class IntelligenceBackgroundWorker {
   }
 
   /**
+   * Run soul extraction — samples sent messages across all chats,
+   * sends to LLM for identity trait extraction, merges into UserSoul.
+   */
+  private async runSoulExtraction(): Promise<void> {
+    if (!hasApiKey()) {
+      log('runSoulExtraction', 'No API key — skipping soul extraction');
+      return;
+    }
+
+    try {
+      log('runSoulExtraction', 'Starting soul extraction...');
+
+      // 1. Load and sample messages
+      const allMessages = loadCachedMessages();
+      const sampled = sampleMessagesForSoulExtraction(allMessages);
+
+      if (sampled.length === 0) {
+        log('runSoulExtraction', 'No substantive sent messages — skipping');
+        return;
+      }
+
+      const uniqueChats = new Set(sampled.map(m => m.chatId));
+      log('runSoulExtraction', `Sampled ${sampled.length} messages across ${uniqueChats.size} chats`);
+
+      // 2. Load current soul
+      const currentSoul = await soulStore.get();
+      const existingTraits = currentSoul.extractedTraits || [];
+
+      log('runSoulExtraction', `Current soul has ${existingTraits.filter(t => t.isActive).length} active traits (${existingTraits.filter(t => t.userVerified).length} pinned)`);
+
+      // 3. Call extraction API
+      const provider = getActiveProvider();
+      const apiKey = getApiKey(provider);
+
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'x-ai-provider': provider,
+      };
+      if (apiKey) {
+        headers['x-ai-key'] = apiKey;
+      }
+
+      const response = await fetch('/api/intelligence/extract', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          mode: 'soul',
+          sentMessages: sampled.map(m => ({
+            text: m.text,
+            chatId: m.chatId,
+            timestamp: m.timestamp,
+          })),
+          existingTraits: existingTraits.filter(t => t.isActive),
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(`Soul extraction API failed: ${response.status} - ${errorData.error || 'Unknown'}`);
+      }
+
+      const result = await response.json();
+      const newTraits = result.traits || [];
+
+      log('runSoulExtraction', `LLM returned ${newTraits.length} traits`);
+
+      // 4. Merge with existing traits
+      const { mergedTraits, newCount, updatedCount } = mergeSoulTraits(existingTraits, newTraits);
+
+      log('runSoulExtraction', `Merge result: ${newCount} new, ${updatedCount} updated, ${mergedTraits.length} total`);
+
+      // 5. Save updated soul
+      const updatedSoul = {
+        ...currentSoul,
+        extractedTraits: mergedTraits,
+        lastExtractionAt: new Date().toISOString(),
+      };
+      await soulStore.set(updatedSoul);
+
+      // 6. Emit event
+      eventBus.emit({
+        type: 'soul_updated',
+        traitCount: mergedTraits.filter(t => t.isActive).length,
+        newTraits: newCount,
+      });
+
+      aiLog.knowledge(
+        `Soul extraction: ${newCount} new traits, ${updatedCount} confirmed (${mergedTraits.filter(t => t.isActive).length} total)`,
+        '',
+        undefined,
+        { newCount, updatedCount, totalTraits: mergedTraits.filter(t => t.isActive).length }
+      );
+
+      log('runSoulExtraction', '✓ Soul extraction complete');
+
+    } catch (error) {
+      logError('runSoulExtraction', 'Soul extraction failed', error);
+    }
+  }
+
+  /**
    * Check for proactive opportunities across active chats
-   * Only checks chats with recent activity (last 7 days)
+   * Active chats are those where the companion is currently open
    */
   private async checkProactiveOpportunities(): Promise<void> {
     if (this.state.activeChats.size === 0) {
       return;
     }
 
-    // Filter to only recent active chats
-    const recentActiveChats = Array.from(this.state.activeChats).filter(chatId =>
-      this.isChatRecent(chatId)
-    );
-
-    if (recentActiveChats.length === 0) {
-      log('checkProactiveOpportunities', 'No recent active chats to check');
-      return;
-    }
-
     log('checkProactiveOpportunities', 'Checking proactive opportunities', {
       activeChats: this.state.activeChats.size,
-      recentActiveChats: recentActiveChats.length,
     });
 
-    for (const chatId of recentActiveChats) {
+    for (const chatId of this.state.activeChats) {
       await this.checkProactiveForChat(chatId, 'scheduled_check');
     }
   }
@@ -676,6 +887,131 @@ export class IntelligenceBackgroundWorker {
       }
     } catch (error) {
       logError('checkProactiveForChat', `Proactive check failed for ${chatId}`, error);
+    }
+  }
+
+  /**
+   * Global proactive scan — scores ALL chats with recent activity for attention.
+   * Runs every globalScanIntervalMs (default 15 min).
+   * No LLM calls — uses pure local scoring from attention-model.ts.
+   * Only considers chats with messages in the last 7 days, capped at 50 chats.
+   */
+  private async globalProactiveScan(): Promise<void> {
+    try {
+      // Load all cached messages once (not per-chat)
+      const allMessages = loadCachedMessages();
+      const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+
+      // Filter to last 7 days and group by chatId
+      const chatMessageMap = new Map<string, typeof allMessages>();
+      for (const msg of allMessages) {
+        if (new Date(msg.timestamp).getTime() < sevenDaysAgo) continue;
+        const arr = chatMessageMap.get(msg.chatId) || [];
+        arr.push(msg);
+        chatMessageMap.set(msg.chatId, arr);
+      }
+
+      if (chatMessageMap.size === 0) {
+        log('globalProactiveScan', 'No chats with recent activity to scan');
+        return;
+      }
+
+      // Sort chats by most recent message, cap at 50
+      const chatsByRecency = Array.from(chatMessageMap.entries())
+        .map(([chatId, msgs]) => ({
+          chatId,
+          msgs,
+          latestTimestamp: Math.max(...msgs.map(m => new Date(m.timestamp).getTime())),
+        }))
+        .sort((a, b) => b.latestTimestamp - a.latestTimestamp)
+        .slice(0, 50);
+
+      log('globalProactiveScan', `Scanning ${chatsByRecency.length} chats with activity in last 7 days (${chatMessageMap.size} total)`);
+
+      // Load user state once before the loop
+      const userState = await userStateStore.get();
+      const signals = [];
+
+      for (const { chatId, msgs } of chatsByRecency) {
+        try {
+          // Sort by time and take last 20 messages
+          const chatMessages = msgs
+            .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+            .slice(-20);
+
+          if (chatMessages.length === 0) continue;
+
+          // Load contact intelligence for relationship type
+          const contact = await contactStore.getByChatId(chatId);
+          const relationshipType = contact?.relationship?.type || 'unknown';
+          const pendingActions = contact?.actionItems?.filter(a => a.status === 'pending').length || 0;
+
+          // Check if this chat overlaps with any active context
+          const activeContextOverlap = userState?.activeContexts?.some(
+            ctx => ctx.relatedContacts.includes(chatId) && ctx.status === 'active'
+          ) || false;
+
+          const signalInput = {
+            chatId,
+            contactName: contact?.displayName,
+            messages: chatMessages.map(m => ({
+              text: m.text,
+              isFromMe: m.isFromMe,
+              timestamp: m.timestamp,
+            })),
+            relationshipType,
+            pendingActionItems: pendingActions,
+            activeContextOverlap,
+          };
+
+          log('globalProactiveScan', `Building signal for ${contact?.displayName || chatId}`, {
+            messageCount: chatMessages.length,
+            relationshipType,
+            pendingActions,
+            activeContextOverlap,
+            lastMsgFrom: chatMessages[chatMessages.length - 1]?.isFromMe ? 'me' : 'them',
+            lastMsgAge: Math.round((Date.now() - new Date(chatMessages[chatMessages.length - 1]?.timestamp).getTime()) / 60000) + 'min',
+          });
+
+          const signal = buildAttentionSignal(signalInput);
+          signals.push(signal);
+        } catch (e) {
+          logError('globalProactiveScan', `Failed to build signal for ${chatId}`, e);
+        }
+      }
+
+      // Rank all chats
+      const scores = rankChats(signals);
+      this.state.lastAttentionScores = scores;
+
+      const highAttention = scores.filter(s => s.score >= 60);
+
+      log('globalProactiveScan', `Scan complete`, {
+        totalScanned: signals.length,
+        highAttention: highAttention.length,
+        topScores: scores.slice(0, 3).map(s => ({
+          chatId: s.chatId,
+          score: s.score,
+          urgency: s.urgency,
+          reason: s.reason,
+        })),
+      });
+
+      // Emit global attention update
+      eventBus.emit({
+        type: 'global_attention_update',
+        scores,
+        timestamp: new Date().toISOString(),
+      });
+
+      if (highAttention.length > 0) {
+        aiLog.decision(
+          'worker',
+          `${highAttention.length} chat(s) need attention: ${highAttention.map(s => `${s.contactName || s.chatId} (${s.score})`).join(', ')}`,
+        );
+      }
+    } catch (error) {
+      logError('globalProactiveScan', 'Global scan failed', error);
     }
   }
 
@@ -738,6 +1074,13 @@ export class IntelligenceBackgroundWorker {
   }
 
   /**
+   * Get last computed attention scores
+   */
+  getLastAttentionScores(): AttentionScore[] {
+    return this.state.lastAttentionScores;
+  }
+
+  /**
    * Manually trigger a tick (for testing)
    */
   async manualTick(): Promise<void> {
@@ -761,35 +1104,10 @@ export class IntelligenceBackgroundWorker {
   }
 
   /**
-   * Check if a chat has recent activity (within 7 days)
-   */
-  private isChatRecent(chatId: string): boolean {
-    const messages = loadCachedMessages();
-    const chatMessages = messages.filter(m => m.chatId === chatId);
-
-    if (chatMessages.length === 0) return false;
-
-    // Find the most recent message in this chat
-    const mostRecent = chatMessages.reduce((latest, msg) => {
-      const msgTime = new Date(msg.timestamp).getTime();
-      return msgTime > latest ? msgTime : latest;
-    }, 0);
-
-    const cutoff = Date.now() - RECENCY_THRESHOLD_MS;
-    return mostRecent > cutoff;
-  }
-
-  /**
    * Queue a message for extraction (batched per chat)
-   * Only queues if the chat has recent activity (last 7 days)
+   * Messages arriving via event bus are inherently recent - they just happened.
    */
   private queueMessageForExtraction(chatId: string, messageId: string): void {
-    // Skip if chat is not recent (no activity in last 7 days)
-    if (!this.isChatRecent(chatId)) {
-      log('queueMessageForExtraction', `Skipping ${chatId} - no recent activity`);
-      return;
-    }
-
     const pending = this.state.pendingExtractionMessages.get(chatId) || [];
     if (!pending.includes(messageId)) {
       pending.push(messageId);

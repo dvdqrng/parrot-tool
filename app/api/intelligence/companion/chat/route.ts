@@ -3,6 +3,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
 import { ContactIntelligence } from '@/lib/intelligence/knowledge/types';
 import { UserIntelligence } from '@/lib/intelligence/user-state/types';
+import { UserSoul, renderSoulBlock } from '@/lib/intelligence/user-state/soul';
 import { AIProvider } from '@/lib/intelligence-settings';
 
 /**
@@ -29,6 +30,8 @@ interface ChatRequest {
   }>;
   contactIntelligence?: ContactIntelligence;
   userState?: UserIntelligence;
+  soul?: UserSoul;
+  projectedFacts?: Array<{ content: string; category: string }>;
   recentMessages?: Array<{
     id: string;
     text: string;
@@ -37,6 +40,12 @@ interface ChatRequest {
     senderName?: string;
   }>;
   draftText?: string;
+  chatLanguage?: string;
+  attentionContext?: {
+    score: number;
+    urgency: string;
+    reason: string;
+  };
 }
 
 function buildSystemPrompt(req: ChatRequest): string {
@@ -45,6 +54,13 @@ function buildSystemPrompt(req: ChatRequest): string {
     `You are friendly, concise, and proactive. You help draft replies, summarize conversations, and provide insights.`,
     ``,
   ];
+
+  // Soul/identity block (injected first, before contact context)
+  const soulBlock = renderSoulBlock(req.soul);
+  if (soulBlock) {
+    parts.push(soulBlock);
+    parts.push(``);
+  }
 
   // Add contact context
   if (req.contactName) {
@@ -56,8 +72,14 @@ function buildSystemPrompt(req: ChatRequest): string {
     parts.push(``);
   }
 
-  // Add contact intelligence
-  if (req.contactIntelligence) {
+  // Add contact intelligence — use projected facts if available
+  if (req.projectedFacts && req.projectedFacts.length > 0) {
+    parts.push(`## Known Facts About ${req.contactName || 'Contact'}`);
+    req.projectedFacts.forEach((fact) => {
+      parts.push(`- ${fact.content} (${fact.category})`);
+    });
+    parts.push(``);
+  } else if (req.contactIntelligence) {
     const intel = req.contactIntelligence;
 
     if (intel.facts && intel.facts.length > 0) {
@@ -70,6 +92,10 @@ function buildSystemPrompt(req: ChatRequest): string {
         });
       parts.push(``);
     }
+  }
+
+  if (req.contactIntelligence) {
+    const intel = req.contactIntelligence;
 
     if (intel.relationship) {
       parts.push(`## Relationship`);
@@ -89,11 +115,11 @@ function buildSystemPrompt(req: ChatRequest): string {
     }
   }
 
-  // Add user state context
+  // Add user state context (projected contexts are pre-filtered by caller)
   if (req.userState) {
     if (req.userState.activeContexts && req.userState.activeContexts.length > 0) {
       parts.push(`## User's Active Contexts`);
-      req.userState.activeContexts.slice(0, 3).forEach((ctx) => {
+      req.userState.activeContexts.forEach((ctx) => {
         const summary = ctx.keyFacts?.length > 0
           ? ctx.keyFacts.map(f => f.label).join(', ')
           : 'Active';
@@ -107,6 +133,56 @@ function buildSystemPrompt(req: ChatRequest): string {
       parts.push(`Mode: ${req.userState.communicationMode}`);
       parts.push(``);
     }
+
+    // Distributed info: things shared with others but not this contact
+    if (req.userState.distributedInfo && req.userState.distributedInfo.length > 0) {
+      const relevant = req.userState.distributedInfo.filter(
+        d => d.sharedWith.length > 0 && req.chatId && !d.sharedWith.includes(req.chatId)
+      );
+      if (relevant.length > 0) {
+        parts.push(`## Info Shared With Others But Not This Contact`);
+        relevant.slice(0, 3).forEach(d => {
+          parts.push(`- ${d.content} (shared with ${d.sharedWith.length} other contact(s))`);
+        });
+        parts.push(`Use this to surface relevant context the user might want to share here too.`);
+        parts.push(``);
+      }
+    }
+
+    // Canonical explanations: how the user typically explains things
+    if (req.userState.canonicalExplanations && req.userState.canonicalExplanations.length > 0) {
+      parts.push(`## How the User Typically Explains Things`);
+      req.userState.canonicalExplanations.slice(0, 3).forEach(e => {
+        parts.push(`- "${e.topic}": ${e.shortVersion}`);
+      });
+      parts.push(``);
+    }
+
+    // Active topics: what the user is currently focused on
+    if (req.userState.activeTopics && req.userState.activeTopics.length > 0) {
+      parts.push(`## User's Active Topics`);
+      req.userState.activeTopics.slice(0, 5).forEach(t => {
+        parts.push(`- ${t.topic} (discussed ${t.frequency} times recently)`);
+      });
+      parts.push(``);
+    }
+
+    // Current priorities
+    if (req.userState.currentPriorities && req.userState.currentPriorities.length > 0) {
+      parts.push(`## User's Current Priorities`);
+      req.userState.currentPriorities.forEach(p => {
+        parts.push(`- ${p.label}`);
+      });
+      parts.push(``);
+    }
+  }
+
+  // Attention context
+  if (req.attentionContext && req.attentionContext.score >= 30) {
+    parts.push(`## Attention Level`);
+    parts.push(`This conversation has ${req.attentionContext.urgency} priority (score: ${req.attentionContext.score}/100)`);
+    parts.push(`Reason: ${req.attentionContext.reason}`);
+    parts.push(``);
   }
 
   // Add recent messages
@@ -126,11 +202,20 @@ function buildSystemPrompt(req: ChatRequest): string {
     parts.push(``);
   }
 
+  // Language
+  if (req.chatLanguage && req.chatLanguage !== 'English') {
+    parts.push(`## Language`);
+    parts.push(`This conversation is in ${req.chatLanguage}. ALWAYS respond in ${req.chatLanguage}. All drafts, suggestions, and insights must be in ${req.chatLanguage}.`);
+    parts.push(``);
+  }
+
   // Instructions
   parts.push(`## Guidelines`);
   parts.push(`- Be concise and helpful`);
   parts.push(`- When drafting replies, match the tone and style appropriate for the relationship`);
-  parts.push(`- Proactively surface relevant information from the contact's profile`);
+  parts.push(`- Proactively surface relevant information — especially facts this contact doesn't know yet`);
+  parts.push(`- If the user is explaining something they've explained before, reference their usual phrasing`);
+  parts.push(`- Align suggestions with the user's current priorities when relevant`);
   parts.push(`- If asked to summarize, focus on key points and action items`);
   parts.push(`- Keep responses under 200 words unless specifically asked for more detail`);
 
@@ -153,6 +238,23 @@ export async function POST(request: NextRequest) {
       historyLength: body.conversationHistory?.length || 0,
       hasContactIntelligence: !!body.contactIntelligence,
       hasUserState: !!body.userState,
+    });
+
+    // --- TEST LOGS: Soul + Projection ---
+    log('Soul injection check', {
+      hasSoul: !!body.soul,
+      soulName: body.soul?.name || '(none)',
+      toneKeywords: body.soul?.toneKeywords || [],
+      formality: body.soul?.defaultFormality || 'unset',
+      neverDo: body.soul?.neverDo?.length || 0,
+      alwaysDo: body.soul?.alwaysDo?.length || 0,
+      hasCustomPrompt: !!body.soul?.customSystemPrompt,
+    });
+    log('Projected facts check', {
+      hasProjectedFacts: !!body.projectedFacts,
+      projectedFactCount: body.projectedFacts?.length || 0,
+      projectedFacts: body.projectedFacts?.map(f => `[${f.category}] ${f.content.slice(0, 40)}`),
+      fallbackFactCount: body.contactIntelligence?.facts?.filter(f => f.isActive)?.length || 0,
     });
 
     // Use API key from request body (from localStorage) or fall back to env
@@ -191,7 +293,13 @@ export async function POST(request: NextRequest) {
     let content = '';
 
     const systemPrompt = buildSystemPrompt(body);
-    log('System prompt built', { length: systemPrompt.length });
+    const soulBlockRendered = renderSoulBlock(body.soul);
+    log('System prompt built', {
+      length: systemPrompt.length,
+      soulBlockPresent: systemPrompt.includes('## About the User'),
+      soulBlockLength: soulBlockRendered.length,
+      promptPreview: systemPrompt.slice(0, 200),
+    });
 
     if (provider === 'openai') {
       log('Calling OpenAI...');

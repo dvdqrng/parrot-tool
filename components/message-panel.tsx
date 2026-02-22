@@ -3,6 +3,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useChatHistory } from '@/hooks/use-chat-history';
 import { useCompanion } from '@/hooks/use-companion';
+import { useOrbState } from '@/hooks/use-orb-state';
 import { formatDistanceToNow } from 'date-fns';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -10,6 +11,7 @@ import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { KanbanCard, CrmContactProfile, CrmTag } from '@/lib/types';
+import type { CompanionSuggestion } from '@/components/intelligence/ai-companion-panel';
 import { getPlatformInfo } from '@/lib/beeper-client';
 import { Loader2, ChevronUp, Users, X, PanelRight } from 'lucide-react';
 import { MessageBottomSection } from '@/components/message-bottom-section';
@@ -87,11 +89,15 @@ export function MessagePanel({
     }
   }, [defaultSidePanelOpen]);
 
+  // Track companion message count for auto-open logic
+  const prevCompanionMsgCountRef = useRef(0);
+
   // Reset side panel when card changes (don't persist across conversations)
   useEffect(() => {
     if (!defaultSidePanelOpen) {
       setIsSidePanelOpen(false);
     }
+    prevCompanionMsgCountRef.current = 0; // Reset so AI tab auto-opens for new chat
   }, [card?.id, defaultSidePanelOpen]);
 
   const isOpen = card !== null;
@@ -132,11 +138,28 @@ export function MessagePanel({
     onApplyDraft: setDraftText,
   });
 
+  // Orb visual state — derived from event bus activity
+  const { orbState, orbLabel } = useOrbState(chatId || null, companion.isEnabled, companion.hasActivity);
+
   // Sync AI enabled state with history loader
   // When AI is enabled, trigger full history loading for extraction
   useEffect(() => {
     setAiEnabledForHistory(companion.isEnabled);
   }, [companion.isEnabled]);
+
+  // Auto-open side panel to AI tab when companion produces its first insight
+  useEffect(() => {
+    if (
+      companion.isEnabled &&
+      companion.messages.length > 0 &&
+      prevCompanionMsgCountRef.current === 0 &&
+      !isSidePanelOpen
+    ) {
+      setIsSidePanelOpen(true);
+      setSidePanelTab('ai-chat');
+    }
+    prevCompanionMsgCountRef.current = companion.messages.length;
+  }, [companion.isEnabled, companion.messages.length, isSidePanelOpen]);
 
   // Initialize draft text when panel opens
   useEffect(() => {
@@ -216,6 +239,32 @@ export function MessagePanel({
       }
     };
   }, [draftText, chatId, onSaveDraft, onClearDraft]);
+
+  // Handle suggestion button clicks from the AI companion
+  const handleSuggestionClick = useCallback((suggestion: CompanionSuggestion) => {
+    switch (suggestion.type) {
+      case 'draft':
+        // Ask the companion to draft a specific message
+        companion.sendMessage(`Draft a message: ${suggestion.prompt}`);
+        break;
+      case 'share_link':
+        // Apply the link directly to the draft input
+        if (suggestion.payload) {
+          setDraftText(suggestion.payload);
+        }
+        break;
+      case 'send_message':
+        // Apply the message text to the draft input
+        if (suggestion.payload) {
+          setDraftText(suggestion.payload);
+        }
+        break;
+      case 'custom':
+        // Send as a message to the companion
+        companion.sendMessage(suggestion.prompt || suggestion.label);
+        break;
+    }
+  }, [companion]);
 
   const initials = title
     .split(' ')
@@ -361,8 +410,8 @@ export function MessagePanel({
               sendSuccess={sendSuccess}
               onSend={handleSend}
               // AI Companion - orb button inline with send
-              isAiEnabled={companion.isEnabled}
-              hasCompanionActivity={companion.hasActivity}
+              orbState={orbState}
+              orbLabel={orbLabel}
               onToggleEnabled={companion.toggleEnabled}
             />
           </div>
@@ -400,6 +449,7 @@ export function MessagePanel({
               onSendMessage={companion.sendMessage}
               onApplyDraft={companion.applyDraft}
               onDismissInsight={companion.dismissInsight}
+              onSuggestionClick={handleSuggestionClick}
               isLoading={companion.isLoading}
               isThinking={companion.isThinking}
               chatId={chatId}

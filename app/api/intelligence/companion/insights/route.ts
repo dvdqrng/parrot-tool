@@ -16,6 +16,7 @@ interface InsightsRequest {
   chatId: string;
   contactName?: string;
   platform?: string;
+  chatLanguage?: string;
   contactIntelligence?: ContactIntelligence;
   userState?: UserIntelligence;
   recentMessages?: Array<{
@@ -124,6 +125,13 @@ function buildInsightsPrompt(req: InsightsRequest): string {
       });
       parts.push(``);
     }
+  }
+
+  // Language
+  if (req.chatLanguage && req.chatLanguage !== 'English') {
+    parts.push(`## Language`);
+    parts.push(`This conversation is in ${req.chatLanguage}. Respond in ${req.chatLanguage}.`);
+    parts.push(``);
   }
 
   parts.push(`## Instructions`);

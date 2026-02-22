@@ -40,6 +40,7 @@ import {
   agentStore,
 } from '@/lib/intelligence/knowledge/store';
 import { StreamOfConsciousness } from '@/components/intelligence/stream-of-consciousness';
+import { MemoryPanel } from '@/components/intelligence/memory-panel';
 import {
   getActivityStats,
   clearActivityLog,
@@ -245,6 +246,11 @@ export default function IntelligenceSettingsPage() {
           Configure AI-powered features and view system status
         </p>
       </div>
+
+      {/* Memory & Identity */}
+      <MemoryPanel />
+
+      <Separator />
 
       {/* Provider Selection */}
       <Card>

@@ -1,6 +1,7 @@
 'use client';
 
 import { ManualInputSection } from '@/components/message-input/manual-input-section';
+import { OrbState } from '@/hooks/use-orb-state';
 
 interface MessageBottomSectionProps {
   chatId: string | null;
@@ -11,8 +12,8 @@ interface MessageBottomSectionProps {
   sendSuccess: boolean;
   onSend: () => void;
   // AI Companion props
-  isAiEnabled?: boolean;
-  hasCompanionActivity?: boolean;
+  orbState?: OrbState;
+  orbLabel?: string;
   onToggleEnabled?: () => void;
 }
 
@@ -22,8 +23,8 @@ export function MessageBottomSection({
   isSending,
   sendSuccess,
   onSend,
-  isAiEnabled = false,
-  hasCompanionActivity = false,
+  orbState = 'off',
+  orbLabel,
   onToggleEnabled,
 }: MessageBottomSectionProps) {
   return (
@@ -33,8 +34,8 @@ export function MessageBottomSection({
       isSending={isSending}
       sendSuccess={sendSuccess}
       onSend={onSend}
-      isAiEnabled={isAiEnabled}
-      hasCompanionActivity={hasCompanionActivity}
+      orbState={orbState}
+      orbLabel={orbLabel}
       onToggleEnabled={onToggleEnabled}
     />
   );

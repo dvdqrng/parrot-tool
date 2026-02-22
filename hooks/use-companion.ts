@@ -12,7 +12,7 @@
  */
 
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { CompanionMessage } from '@/components/intelligence/ai-companion-panel';
+import { CompanionMessage, CompanionSuggestion } from '@/components/intelligence/ai-companion-panel';
 import { ContactIntelligence } from '@/lib/intelligence/knowledge/types';
 import {
   getApiKey,
@@ -24,7 +24,6 @@ import {
   shouldSuggestDraft,
   detectActionItems,
   generateProactiveDraft,
-  analyzeConversationContext,
 } from '@/lib/intelligence/proactive-engine';
 import { aiLog } from '@/lib/intelligence/activity-log';
 import {
@@ -38,6 +37,11 @@ import {
 import { eventBus, emitCompanionOpened } from '@/lib/intelligence/event-bus';
 import { getOrchestrator } from '@/lib/intelligence/agents/orchestrator';
 import { getConversationAgent } from '@/lib/intelligence/agents/dynamic/conversation-agent';
+import { contactStore, soulStore, userStateStore } from '@/lib/intelligence/knowledge/store';
+import { UserSoul } from '@/lib/intelligence/user-state/soul';
+import { UserIntelligence } from '@/lib/intelligence/user-state/types';
+import { projectContext } from '@/lib/intelligence/context-projection';
+import { useGlobalAttention } from '@/hooks/use-global-attention';
 
 // ============================================
 // TYPES
@@ -118,11 +122,62 @@ export function useCompanion({
   const hasRunInitialAnalysisRef = useRef<boolean>(false);
   const isAnalyzingRef = useRef<boolean>(false);
 
-  // Initialize the persistent cache on mount
+  // Attention scores (from global heartbeat scan)
+  const { scores: attentionScores } = useGlobalAttention();
+
+  // Soul + user state refs (loaded once, cached)
+  const soulRef = useRef<UserSoul | null>(null);
+  const userStateRef = useRef<UserIntelligence | null>(null);
+
+  // Initialize the persistent cache + load soul/user state on mount
   useEffect(() => {
-    initializeCache().then(() => {
+    initializeCache().then(async () => {
+      // Load soul and user state from IndexedDB (cached in refs for all API calls)
+      try {
+        const [soul, userState] = await Promise.all([
+          soulStore.get(),
+          userStateStore.get(),
+        ]);
+        soulRef.current = soul;
+        userStateRef.current = userState || null;
+        console.log('[Companion] Soul loaded:', {
+          hasName: !!soul?.name,
+          name: soul?.name || '(empty)',
+          hasBio: !!soul?.bio,
+          toneKeywords: soul?.toneKeywords?.length || 0,
+          alwaysDo: soul?.alwaysDo?.length || 0,
+          neverDo: soul?.neverDo?.length || 0,
+          formality: soul?.defaultFormality || 'unset',
+          hasCustomPrompt: !!soul?.customSystemPrompt,
+        });
+        console.log('[Companion] User state loaded:', {
+          activeContexts: userState?.activeContexts?.length || 0,
+          activeTopics: userState?.activeTopics?.length || 0,
+          distributedInfo: userState?.distributedInfo?.length || 0,
+          communicationMode: userState?.communicationMode || 'unknown',
+        });
+      } catch (e) {
+        console.error('[Companion] Failed to load soul/user state:', e);
+      }
       setIsInitialized(true);
     });
+  }, []);
+
+  // Refresh cached soul when background extraction updates it
+  useEffect(() => {
+    const unsubscribe = eventBus.on('soul_updated', async () => {
+      try {
+        const updatedSoul = await soulStore.get();
+        soulRef.current = updatedSoul;
+        console.log('[Companion] Soul auto-refreshed after extraction:', {
+          activeTraits: updatedSoul?.extractedTraits?.filter(t => t.isActive)?.length || 0,
+          hasName: !!updatedSoul?.name,
+        });
+      } catch (e) {
+        console.error('[Companion] Failed to refresh soul after extraction:', e);
+      }
+    });
+    return unsubscribe;
   }, []);
 
   // Subscribe to global enabled state changes
@@ -171,11 +226,310 @@ export function useCompanion({
   }, [chatId, contactName, platform, recentMessages, draftText]);
 
   // ============================================
+  // LANGUAGE DETECTION
+  // ============================================
+
+  /**
+   * Detect the dominant language from recent messages.
+   * Uses word-frequency heuristics on padded text to avoid regex boundary issues.
+   */
+  const detectedLanguage = (() => {
+    if (recentMessages.length === 0) return undefined;
+    // Sample up to 15 non-empty messages
+    const sample = recentMessages
+      .filter(m => m.text && m.text.trim().length > 3)
+      .slice(-15)
+      .map(m => m.text);
+    if (sample.length === 0) return undefined;
+    // Pad with spaces so we can use simple ` word ` matching (handles start/end of string)
+    const combined = ` ${sample.join(' ').toLowerCase()} `;
+
+    // Count occurrences of function words using space-delimited matching
+    // This avoids regex \b issues with non-ASCII characters
+    const countWords = (words: string[]) => {
+      let total = 0;
+      for (const w of words) {
+        // Check for the word surrounded by spaces, punctuation, or common delimiters
+        const patterns = [` ${w} `, ` ${w},`, ` ${w}.`, ` ${w}!`, ` ${w}?`, ` ${w}\n`, `\n${w} `];
+        for (const p of patterns) {
+          if (combined.includes(p)) { total++; break; }
+        }
+      }
+      return total;
+    };
+
+    const germanWords = [
+      'ich', 'und', 'der', 'die', 'das', 'ist', 'nicht', 'ein', 'eine', 'mit',
+      'auf', 'auch', 'noch', 'hab', 'habe', 'wir', 'aber', 'schon', 'dann',
+      'wenn', 'jetzt', 'hier', 'mir', 'dir', 'mich', 'dich', 'für', 'über',
+      'kann', 'bin', 'bis', 'mal', 'grad', 'gerade', 'oder', 'weil', 'dass',
+      'war', 'hat', 'wie', 'nur', 'mein', 'dein', 'kein', 'keine', 'ja', 'nein',
+      'ok', 'gut', 'ganz', 'sehr', 'halt', 'eben', 'morgen', 'heute', 'gleich',
+    ];
+    const spanishWords = [
+      'que', 'por', 'para', 'con', 'una', 'los', 'las', 'del', 'esta', 'pero',
+      'como', 'más', 'todo', 'bien', 'tiene', 'hay', 'esto', 'ese', 'eso',
+      'muy', 'también', 'ahora', 'cuando', 'porque', 'donde', 'puede', 'otro',
+    ];
+    const frenchWords = [
+      'que', 'les', 'des', 'une', 'est', 'pas', 'pour', 'dans', 'qui', 'sur',
+      'avec', 'sont', 'mais', 'aussi', 'plus', 'cette', 'fait', 'bien', 'tout',
+      'très', 'peut', 'quand', 'comme', 'ici', 'donc', 'encore', 'alors',
+    ];
+    const dutchWords = [
+      'het', 'een', 'van', 'dat', 'niet', 'ook', 'wel', 'maar', 'voor', 'nog',
+      'met', 'zijn', 'naar', 'hebben', 'deze', 'die', 'dan', 'toen', 'werd',
+    ];
+
+    const scores: [string, number][] = [
+      ['German', countWords(germanWords)],
+      ['Spanish', countWords(spanishWords)],
+      ['French', countWords(frenchWords)],
+      ['Dutch', countWords(dutchWords)],
+    ];
+    const best = scores.sort((a, b) => b[1] - a[1])[0];
+    // If at least 2 function words match, call it that language
+    const result = best[1] >= 2 ? best[0] : 'English';
+    console.log('[Companion] Language detection:', { result, scores: scores.map(s => `${s[0]}:${s[1]}`), sampleSize: sample.length });
+    return result;
+  })();
+
+  // ============================================
+  // API CALLS
+  // ============================================
+
+  const callCompanionApi = useCallback(
+    async (
+      endpoint: 'chat' | 'draft' | 'insights',
+      payload: Record<string, unknown>
+    ): Promise<{ content: string; metadata?: Record<string, unknown> } | null> => {
+      // Determine which agent is making this call
+      const agentType = endpoint === 'draft' ? 'drafter' : endpoint === 'insights' ? 'analyzer' : 'companion';
+
+      try {
+        if (!hasApiKey()) {
+          aiLog.error('companion', 'No API key configured', chatId || undefined);
+          return {
+            content:
+              "I need an API key to help you. Please add your API key in Settings → Intelligence.",
+            metadata: { type: 'system' },
+          };
+        }
+
+        const provider = getActiveProvider();
+        const apiKey = getApiKey();
+
+        // Log the API call
+        aiLog.apiCall(agentType, `/api/intelligence/companion/${endpoint}`, chatId || undefined, {
+          provider,
+          messageCount: recentMessages.length,
+          hasContactIntelligence: !!contactIntelligence,
+        });
+
+        // Run context projection to select relevant facts
+        const projectionInput = contactIntelligence?.facts ? {
+          recentMessages: recentMessages.slice(-3).map(m => ({
+            text: m.text,
+            isFromMe: m.isFromMe,
+          })),
+          userIntent: (payload as Record<string, unknown>).intent as string | undefined,
+          contactFacts: contactIntelligence.facts,
+          userState: userStateRef.current,
+          chatId: chatId || undefined,
+        } : null;
+
+        console.log('[Companion] Context projection input:', {
+          hasFacts: !!contactIntelligence?.facts,
+          totalFacts: contactIntelligence?.facts?.length || 0,
+          recentMsgCount: recentMessages.slice(-3).length,
+          recentMsgPreview: recentMessages.slice(-3).map(m => m.text.slice(0, 40)),
+          hasUserState: !!userStateRef.current,
+          userIntent: (payload as Record<string, unknown>).intent || '(none)',
+        });
+
+        const projected = projectionInput ? projectContext(projectionInput) : null;
+
+        if (projected) {
+          console.log('[Companion] Context projection result:', {
+            selectedFacts: projected.relevantFacts.length,
+            factDetails: projected.relevantFacts.map(f => ({
+              content: f.content.slice(0, 50),
+              category: f.category,
+            })),
+            scoring: projected.scoring.slice(0, 5).map(s => ({
+              score: s.score.toFixed(2),
+              reason: s.reason,
+            })),
+            relevantContexts: projected.relevantContexts.length,
+          });
+        } else {
+          console.log('[Companion] Context projection: skipped (no facts available)');
+        }
+
+        const startTime = Date.now();
+        const response = await fetch(`/api/intelligence/companion/${endpoint}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            provider,
+            apiKey,
+            chatId,
+            contactName,
+            platform,
+            contactIntelligence,
+            soul: soulRef.current,
+            projectedFacts: projected?.relevantFacts.map(f => ({
+              content: f.content,
+              category: f.category,
+            })),
+            // Send projected user state (filtered contexts + distributed info) if available
+            userState: projected && userStateRef.current
+              ? {
+                  ...userStateRef.current,
+                  activeContexts: projected.relevantContexts,
+                  distributedInfo: projected.relevantDistributedInfo,
+                }
+              : userStateRef.current,
+            // Attention context for this chat (from global heartbeat scan)
+            attentionContext: (() => {
+              const attn = chatId ? attentionScores.find(s => s.chatId === chatId) : undefined;
+              return attn ? { score: attn.score, urgency: attn.urgency, reason: attn.reason } : undefined;
+            })(),
+            recentMessages: recentMessages.slice(-20),
+            draftText,
+            chatLanguage: detectedLanguage,
+            ...payload,
+          }),
+        });
+        const duration = Date.now() - startTime;
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          aiLog.error(agentType, `API returned ${response.status}`, chatId || undefined, { errorData });
+          if (response.status === 401) {
+            return {
+              content:
+                'Your API key appears to be invalid. Please check it in Settings → Intelligence.',
+              metadata: { type: 'system' },
+            };
+          }
+          throw new Error(
+            errorData.error || `Request failed with status ${response.status}`
+          );
+        }
+
+        const result = await response.json();
+
+        // Log the successful response
+        aiLog.apiResponse(agentType, `/api/intelligence/companion/${endpoint}`, duration, chatId || undefined, {
+          type: result.metadata?.type,
+          contentLength: result.content?.length || 0,
+          hasDraft: !!result.metadata?.draftText,
+        });
+
+        // Log specific outcomes
+        if (result.metadata?.type === 'draft' && result.metadata?.draftText) {
+          aiLog.draft(`Generated: "${result.metadata.draftText.slice(0, 50)}..."`, chatId || '', contactName);
+        } else if (result.metadata?.type === 'insight') {
+          aiLog.insight(result.content?.slice(0, 100) || 'Insight generated', chatId || undefined, contactName);
+        }
+
+        return result;
+      } catch (err) {
+        console.error(`[Companion] ${endpoint} API error:`, err);
+        aiLog.error(agentType, `${endpoint} failed: ${err instanceof Error ? err.message : 'Unknown'}`, chatId || undefined);
+        setError(err instanceof Error ? err.message : 'Failed to connect to AI');
+        return null;
+      }
+    },
+    [chatId, contactName, platform, contactIntelligence, recentMessages, draftText, attentionScores]
+  );
+
+  // ============================================
   // PROACTIVE BEHAVIORS
   // ============================================
 
   /**
-   * Run initial analysis when AI is enabled
+   * Parse structured suggestions from LLM response.
+   * Extracts the text before ---SUGGESTIONS--- and parses each suggestion line.
+   */
+  const parseSuggestionsFromResponse = useCallback((content: string): {
+    text: string;
+    suggestions: CompanionSuggestion[];
+  } => {
+    const suggestionsStart = content.indexOf('---SUGGESTIONS---');
+    const suggestionsEnd = content.indexOf('---END---');
+
+    if (suggestionsStart === -1) {
+      return { text: content.trim(), suggestions: [] };
+    }
+
+    const text = content.slice(0, suggestionsStart).trim();
+    const suggestionsBlock = suggestionsEnd !== -1
+      ? content.slice(suggestionsStart + '---SUGGESTIONS---'.length, suggestionsEnd)
+      : content.slice(suggestionsStart + '---SUGGESTIONS---'.length);
+
+    const suggestions: CompanionSuggestion[] = [];
+    const lines = suggestionsBlock.split('\n').map(l => l.trim()).filter(Boolean);
+
+    for (const line of lines) {
+      const match = line.match(/^\[(\w+)\]\s+(.+)$/);
+      if (!match) continue;
+
+      const [, typeStr, rest] = match;
+      const id = `sug-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+
+      if (typeStr === 'draft') {
+        suggestions.push({
+          id,
+          label: rest,
+          type: 'draft',
+          prompt: rest,
+        });
+      } else if (typeStr === 'share_link') {
+        const pipeIdx = rest.indexOf('|');
+        if (pipeIdx !== -1) {
+          const label = rest.slice(0, pipeIdx).trim();
+          const url = rest.slice(pipeIdx + 1).trim();
+          suggestions.push({
+            id,
+            label,
+            type: 'share_link',
+            payload: url,
+          });
+        } else {
+          suggestions.push({
+            id,
+            label: rest,
+            type: 'share_link',
+            prompt: rest,
+          });
+        }
+      } else if (typeStr === 'send_message') {
+        const msgText = rest.startsWith('Send:') ? rest.slice(5).trim() : rest;
+        suggestions.push({
+          id,
+          label: msgText.length > 60 ? msgText.slice(0, 57) + '...' : msgText,
+          type: 'send_message',
+          payload: msgText,
+        });
+      } else {
+        suggestions.push({
+          id,
+          label: rest,
+          type: 'custom',
+          prompt: rest,
+        });
+      }
+    }
+
+    return { text, suggestions };
+  }, []);
+
+  /**
+   * Run initial analysis when AI is enabled.
+   * Uses callCompanionApi so the LLM gets full intelligence context
+   * (soul, contact facts, user state, attention, distributed info, etc.)
    */
   const runInitialAnalysis = useCallback(async () => {
     if (!chatId || isAnalyzingRef.current || !hasApiKey()) {
@@ -192,8 +546,6 @@ export function useCompanion({
     aiLog.thought('companion', `AI enabled for ${contactName || 'contact'}. Starting analysis...`, chatId, { messageCount: recentMessages.length });
 
     try {
-      const context = getProactiveContext();
-
       // Log what we're observing
       const lastMsg = recentMessages[recentMessages.length - 1];
       if (lastMsg && !lastMsg.isFromMe) {
@@ -207,82 +559,71 @@ export function useCompanion({
         type: 'chat',
       });
 
-      aiLog.thought('analyzer', 'Analyzing conversation context, mood, urgency, and suggesting actions...', chatId);
+      // Build an analysis prompt that asks for a proactive response with actionable suggestions
+      const lastIsFromContact = lastMsg && !lastMsg.isFromMe;
+      const langNote = detectedLanguage && detectedLanguage !== 'English'
+        ? `\n\nIMPORTANT: This conversation is in ${detectedLanguage}. Write your summary AND all suggestion labels in ${detectedLanguage}. Only the [tag] markers should stay in English.`
+        : '';
+      const analysisPrompt = lastIsFromContact
+        ? `Look at my recent conversation with ${contactName || 'this contact'}. Their last message may need a reply. Give me a brief summary of what's happening (2-3 sentences max).
 
-      // Analyze conversation context
-      const startTime = Date.now();
-      const analysis = await analyzeConversationContext(context);
-      const duration = Date.now() - startTime;
+Then list 2-4 specific actions I can take, formatted exactly like this:
+---SUGGESTIONS---
+[draft] Draft a reply about <specific topic>
+[draft] Suggest a <specific thing, e.g. restaurant, plan>
+[share_link] Share <description> | <actual URL if available>
+[send_message] Send: <exact message text>
+---END---
 
-      if (analysis) {
-        aiLog.apiResponse('analyzer', '/api/intelligence/companion/chat', duration, chatId, {
-          summary: analysis.summary,
-          mood: analysis.mood,
-          urgency: analysis.urgency,
-          suggestedAction: analysis.suggestedAction,
-        });
+Be specific — reference actual content from the conversation and any known context (links, places, facts). Only include share_link if there's an actual URL available in the context.${langNote}`
+        : `Look at my recent conversation with ${contactName || 'this contact'}. Summarize what's happening (2-3 sentences max).
 
-        aiLog.decision('companion', `Conversation mood: ${analysis.mood || 'neutral'}, Urgency: ${analysis.urgency || 'low'}`, chatId);
+Then list 2-4 specific actions I can take, formatted exactly like this:
+---SUGGESTIONS---
+[draft] Draft a message about <specific topic>
+[draft] Follow up on <specific thing>
+[share_link] Share <description> | <actual URL if available>
+[send_message] Send: <exact message text>
+---END---
 
-        let greeting = '';
+Be specific — reference actual content from the conversation and any known context (links, places, facts). Only include share_link if there's an actual URL available in the context.${langNote}`;
 
-        if (analysis.summary) {
-          greeting += analysis.summary;
-        }
+      // Use callCompanionApi so the LLM gets full intelligence context
+      const response = await callCompanionApi('chat', {
+        message: analysisPrompt,
+        conversationHistory: [],
+      });
 
-        if (analysis.urgency === 'high') {
-          aiLog.thought('proactive', 'High urgency detected - will offer to draft a quick response', chatId);
-          greeting += ' This seems urgent - want me to help draft a quick response?';
-        } else if (analysis.suggestedAction && analysis.suggestedAction !== 'no action needed') {
-          aiLog.thought('proactive', `Suggesting action: ${analysis.suggestedAction}`, chatId);
-          greeting += ` I suggest: ${analysis.suggestedAction}.`;
-        }
+      if (response?.content) {
+        // Parse suggestions from the structured section
+        const { text, suggestions } = parseSuggestionsFromResponse(response.content);
 
-        if (greeting) {
-          aiLog.insight(greeting, chatId, contactName);
+        aiLog.insight(text, chatId, contactName);
 
-          setMessages((prev) => {
-            const withoutThinking = prev.slice(0, -1);
-            return [
-              ...withoutThinking,
-              {
-                id: `msg-${Date.now()}`,
-                role: 'assistant',
-                content: greeting,
-                timestamp: new Date().toISOString(),
-                type: 'insight' as const,
-                metadata: {
-                  urgency: analysis.urgency,
-                  mood: analysis.mood,
-                },
-              },
-            ];
-          });
-        }
-
-        // If there's an unanswered message, proactively offer to draft
-        if (shouldSuggestDraft(context)) {
-          aiLog.observation('proactive', 'Detected unanswered message that may need a response', chatId);
-          setTimeout(() => {
-            aiLog.action('proactive', 'Offering to draft a reply', chatId);
-            addMessage({
-              role: 'assistant',
-              content:
-                "I notice there's a message that might need a response. Would you like me to help draft a reply?",
-              type: 'chat',
-            });
-          }, 1500);
-        }
-      } else {
-        aiLog.thought('companion', 'Analysis returned no structured data, using fallback greeting', chatId);
         setMessages((prev) => {
           const withoutThinking = prev.slice(0, -1);
           return [
             ...withoutThinking,
             {
               id: `msg-${Date.now()}`,
-              role: 'assistant',
-              content: `I'm monitoring ${contactName || 'this conversation'}. I'll help when needed.`,
+              role: 'assistant' as const,
+              content: text,
+              timestamp: new Date().toISOString(),
+              type: 'insight' as const,
+              metadata: suggestions.length > 0 ? { suggestions } : undefined,
+            },
+          ];
+        });
+      } else {
+        aiLog.thought('companion', 'Analysis returned no content, using fallback', chatId);
+        setMessages((prev) => {
+          const withoutThinking = prev.slice(0, -1);
+          return [
+            ...withoutThinking,
+            {
+              id: `msg-${Date.now()}`,
+              role: 'assistant' as const,
+              content: `I'm ready to help with ${contactName || 'this conversation'}. Ask me anything!`,
               timestamp: new Date().toISOString(),
               type: 'chat' as const,
             },
@@ -297,7 +638,7 @@ export function useCompanion({
           ...withoutThinking,
           {
             id: `msg-${Date.now()}`,
-            role: 'assistant',
+            role: 'assistant' as const,
             content: `I'm ready to help with ${contactName || 'this conversation'}. Ask me anything!`,
             timestamp: new Date().toISOString(),
             type: 'chat' as const,
@@ -308,7 +649,7 @@ export function useCompanion({
       setIsThinking(false);
       isAnalyzingRef.current = false;
     }
-  }, [chatId, contactName, recentMessages, addMessage, getProactiveContext]);
+  }, [chatId, contactName, recentMessages, addMessage, callCompanionApi]);
 
   /**
    * React to new messages from contact (runs in background when enabled)
@@ -430,6 +771,19 @@ export function useCompanion({
 
       // Always close panel when switching chats
       setIsPanelOpen(false);
+
+      // Load ContactIntelligence from IndexedDB for this chat
+      contactStore.getByChatId(chatId).then((intel) => {
+        if (intel) {
+          setContactIntelligence(intel);
+          aiLog.thought('companion', `Loaded intelligence for ${intel.displayName}: ${intel.facts?.length || 0} facts`, chatId);
+        } else {
+          setContactIntelligence(null);
+        }
+      }).catch((err) => {
+        console.error('Failed to load contact intelligence:', err);
+        setContactIntelligence(null);
+      });
     }
   }, [chatId, recentMessages.length, isInitialized]);
 
@@ -437,10 +791,11 @@ export function useCompanion({
   const runInitialAnalysisRef = useRef(runInitialAnalysis);
   runInitialAnalysisRef.current = runInitialAnalysis;
 
-  // Run analysis when AI becomes enabled (not when panel opens)
+  // Run analysis automatically when a chat is selected and has messages.
+  // Auto-enables AI so the companion is always proactive.
   useEffect(() => {
-    // Must have: initialized, enabled, chatId, API key, and messages
-    if (!isInitialized || !isEnabled || !chatId || !hasApiKey()) {
+    // Must have: initialized, chatId, API key, and messages
+    if (!isInitialized || !chatId || !hasApiKey()) {
       return;
     }
 
@@ -456,12 +811,19 @@ export function useCompanion({
 
     hasRunInitialAnalysisRef.current = true;
 
+    // Auto-enable AI for this chat if not already enabled
+    if (!isEnabled) {
+      setAiEnabled(chatId, true, contactName, platform);
+      setIsEnabled(true);
+      emitCompanionOpened(chatId, contactName, platform);
+    }
+
     // Small delay to ensure messages are fully loaded
     const timer = setTimeout(() => {
       runInitialAnalysisRef.current();
     }, 500);
     return () => clearTimeout(timer);
-  }, [isEnabled, chatId, isInitialized, recentMessages.length]);
+  }, [isEnabled, chatId, isInitialized, recentMessages.length, contactName, platform]);
 
   // React to new messages (when enabled)
   useEffect(() => {
@@ -470,98 +832,6 @@ export function useCompanion({
       handleNewMessage();
     }
   }, [isEnabled, recentMessages.length, handleNewMessage]);
-
-  // ============================================
-  // API CALLS
-  // ============================================
-
-  const callCompanionApi = useCallback(
-    async (
-      endpoint: 'chat' | 'draft' | 'insights',
-      payload: Record<string, unknown>
-    ): Promise<{ content: string; metadata?: Record<string, unknown> } | null> => {
-      // Determine which agent is making this call
-      const agentType = endpoint === 'draft' ? 'drafter' : endpoint === 'insights' ? 'analyzer' : 'companion';
-
-      try {
-        if (!hasApiKey()) {
-          aiLog.error('companion', 'No API key configured', chatId || undefined);
-          return {
-            content:
-              "I need an API key to help you. Please add your API key in Settings → Intelligence.",
-            metadata: { type: 'system' },
-          };
-        }
-
-        const provider = getActiveProvider();
-        const apiKey = getApiKey();
-
-        // Log the API call
-        aiLog.apiCall(agentType, `/api/intelligence/companion/${endpoint}`, chatId || undefined, {
-          provider,
-          messageCount: recentMessages.length,
-          hasContactIntelligence: !!contactIntelligence,
-        });
-
-        const startTime = Date.now();
-        const response = await fetch(`/api/intelligence/companion/${endpoint}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            provider,
-            apiKey,
-            chatId,
-            contactName,
-            platform,
-            contactIntelligence,
-            recentMessages: recentMessages.slice(-20),
-            draftText,
-            ...payload,
-          }),
-        });
-        const duration = Date.now() - startTime;
-
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          aiLog.error(agentType, `API returned ${response.status}`, chatId || undefined, { errorData });
-          if (response.status === 401) {
-            return {
-              content:
-                'Your API key appears to be invalid. Please check it in Settings → Intelligence.',
-              metadata: { type: 'system' },
-            };
-          }
-          throw new Error(
-            errorData.error || `Request failed with status ${response.status}`
-          );
-        }
-
-        const result = await response.json();
-
-        // Log the successful response
-        aiLog.apiResponse(agentType, `/api/intelligence/companion/${endpoint}`, duration, chatId || undefined, {
-          type: result.metadata?.type,
-          contentLength: result.content?.length || 0,
-          hasDraft: !!result.metadata?.draftText,
-        });
-
-        // Log specific outcomes
-        if (result.metadata?.type === 'draft' && result.metadata?.draftText) {
-          aiLog.draft(`Generated: "${result.metadata.draftText.slice(0, 50)}..."`, chatId || '', contactName);
-        } else if (result.metadata?.type === 'insight') {
-          aiLog.insight(result.content?.slice(0, 100) || 'Insight generated', chatId || undefined, contactName);
-        }
-
-        return result;
-      } catch (err) {
-        console.error(`[Companion] ${endpoint} API error:`, err);
-        aiLog.error(agentType, `${endpoint} failed: ${err instanceof Error ? err.message : 'Unknown'}`, chatId || undefined);
-        setError(err instanceof Error ? err.message : 'Failed to connect to AI');
-        return null;
-      }
-    },
-    [chatId, contactName, platform, contactIntelligence, recentMessages, draftText]
-  );
 
   // ============================================
   // USER ACTIONS
@@ -796,7 +1066,7 @@ export function useCompanion({
 
   const enable = useCallback(() => {
     if (!chatId) return;
-    setAiEnabled(chatId, true);
+    setAiEnabled(chatId, true, contactName, platform); // Pass contact info for extraction
     setIsEnabled(true);
     setIsPanelOpen(true); // Auto-open panel when AI is enabled
     hasRunInitialAnalysisRef.current = false; // Reset so analysis runs

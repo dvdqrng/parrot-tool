@@ -2273,6 +2273,181 @@ type ProactiveAction =
 
 ---
 
+## Phase 8.5: Auto-Soul Extraction (Post-Plan Addition)
+
+### Motivation
+
+The Soul/Identity layer originally required manual form entry for personality traits, communication style, etc. A key insight changed this: **the user is the common thread across every chat on the platform**. Years of sent messages across all conversations reveal personality, tone, communication patterns, values, and habits far more richly than any manual form.
+
+Auto-Soul Extraction samples the user's sent messages across all chats, sends them to an LLM for identity trait extraction, and merges results into the existing `UserSoul`. The Soul Editor transforms from a manual creation form into a review/edit UI.
+
+### 8.5.1 Extended UserSoul Type
+
+**File: `lib/intelligence/user-state/soul.ts`** (modified)
+
+Added `SoulTrait` interface and `extractedTraits` array to `UserSoul`:
+
+```typescript
+export type SoulTraitCategory =
+  | 'personality'
+  | 'communication_style'
+  | 'value'
+  | 'background'
+  | 'habit'
+  | 'preference'
+  | 'identity';
+
+export interface SoulTrait {
+  id: string;
+  category: SoulTraitCategory;
+  content: string;           // "Uses lowercase in casual chats"
+  confidence: number;        // 0-1
+  evidence: string[];        // Sample message snippets that support this
+  extractedAt: string;
+  userVerified?: boolean;    // Pinned by user — survives re-extraction
+  userEdited?: boolean;      // Content manually modified
+  isActive: boolean;
+}
+
+// Added to UserSoul interface:
+extractedTraits: SoulTrait[];
+lastExtractionAt?: string;
+```
+
+- `createDefaultSoul()` updated to include `extractedTraits: []`
+- `isSoulConfigured()` updated to also check `extractedTraits.filter(t => t.isActive).length > 0`
+- `renderSoulBlock()` updated to render extracted traits grouped by category (Personality, Communication Style, Values, Background, Habits, Preferences, Identity) after the existing manual fields
+
+### 8.5.2 Soul Extractor Module
+
+**File: `lib/intelligence/extraction/soul-extractor.ts`** (new)
+
+Complete extraction pipeline:
+
+```typescript
+// Message sampling - diversifies across chats, filters noise, prefers recent
+export function sampleMessagesForSoulExtraction(
+  allMessages: BeeperMessage[],
+  maxMessages?: number  // default 200
+): BeeperMessage[]
+
+// Prompt building - anonymizes conversations, lists existing traits to avoid re-extraction
+export function buildSoulExtractionPrompt(request: SoulExtractionRequest): string
+
+// Response parsing - validates categories, assigns IDs, skips duplicates of verified traits
+export function parseSoulExtractionResponse(
+  responseText: string,
+  existingTraits: SoulTrait[]
+): SoulTrait[]
+
+// Trait merging - preserves pinned/edited, boosts confidence on re-confirmation
+export function mergeSoulTraits(
+  existing: SoulTrait[],
+  incoming: SoulTrait[]
+): { mergedTraits: SoulTrait[]; newCount: number; updatedCount: number }
+```
+
+**Sampling strategy** (`sampleMessagesForSoulExtraction`):
+1. Filter to `isFromMe === true` only
+2. Filter out very short messages (< 15 chars — "ok", "thanks", "lol")
+3. Diversify across chats: round-robin sampling from each unique chatId
+4. 70% from last 30 days, 30% from older messages for stability
+5. Cap at `maxMessages` (default 200) to stay within token budget
+
+**Trait merging** (`mergeSoulTraits`):
+- `userVerified` traits are never overwritten
+- `userEdited` traits are never overwritten
+- Re-confirmed traits get confidence boost (+0.1, capped at 1.0)
+- Similarity detection uses word overlap ratio (>60% threshold)
+- Evidence arrays are deduplicated and capped at 5 items
+
+### 8.5.3 Soul Extraction API Route
+
+**File: `app/api/intelligence/extract/route.ts`** (modified)
+
+Added `mode: 'soul'` branch to existing extraction API:
+
+```typescript
+if (body.mode === 'soul') {
+  const prompt = buildSoulExtractionPrompt(body);
+  const response = await llmClient.chat({
+    messages: [{ role: 'user', content: prompt }],
+    maxTokens: 2048,
+  });
+  const traits = parseSoulExtractionResponse(response.content, body.existingTraits || []);
+  return NextResponse.json({ traits });
+}
+```
+
+Uses same cost-efficient models as contact extraction (Haiku / GPT-4o-mini).
+
+### 8.5.4 Background Worker Integration
+
+**File: `lib/intelligence/background-worker.ts`** (modified)
+
+Added `runSoulExtraction()` to the worker tick cycle:
+
+```typescript
+// In WorkerConfig:
+soulExtractionIntervalMs: number;  // default: 30 * 60 * 1000 (30 min)
+
+// In tick(), after global scan:
+if (now - this.state.lastSoulExtraction >= this.config.soulExtractionIntervalMs) {
+  await this.runSoulExtraction();
+  this.state.lastSoulExtraction = now;
+}
+```
+
+`runSoulExtraction()` flow:
+1. Loads all cached messages via `loadCachedMessages()`
+2. Samples with `sampleMessagesForSoulExtraction()`
+3. Loads current soul from `soulStore.get()`
+4. Calls `/api/intelligence/extract` with `mode: 'soul'`
+5. Merges new traits with `mergeSoulTraits()`
+6. Saves updated soul via `soulStore.set()`
+7. Emits `soul_updated` event
+
+### 8.5.5 Event Bus Extension
+
+**File: `lib/intelligence/event-bus.ts`** (modified)
+
+Added soul event type:
+
+```typescript
+| { type: 'soul_updated'; traitCount: number; newTraits: number }
+```
+
+### 8.5.6 Companion Soul Refresh
+
+**File: `hooks/use-companion.ts`** (modified)
+
+Subscribes to `soul_updated` event to refresh the cached soul reference, ensuring the next companion API call uses updated soul traits:
+
+```typescript
+useEffect(() => {
+  const unsubscribe = eventBus.on('soul_updated', async () => {
+    const updatedSoul = await soulStore.get();
+    soulRef.current = updatedSoul;
+  });
+  return unsubscribe;
+}, []);
+```
+
+### 8.5.7 Soul Editor UI Transformation
+
+**File: `components/intelligence/soul-editor.tsx`** (rewritten)
+
+Transformed from manual creation form to review/edit UI:
+
+- **Extracted traits section**: Grouped by category, sorted by pinned-first then confidence
+- **Per-trait actions**: Pin/unpin (sets `userVerified`), inline edit (sets `userEdited`), delete (sets `isActive: false`)
+- **Evidence display**: Expandable evidence snippets per trait with confidence badge
+- **Extraction status**: Shows trait count, last extraction time
+- **Manual overrides**: Collapsed under expandable "Manual Overrides" section (name, bio, toneKeywords, etc.)
+- **Auto-refresh**: Subscribes to `soul_updated` events
+
+---
+
 ## Phase 8: Observability & Debug (Week 24-26)
 
 ### 7.1 Debug Components
@@ -2343,11 +2518,13 @@ lib/intelligence/
     identity-linking.ts         ✅ Phase 2 - COMPLETE (cross-platform contact linking)
   user-state/
     types.ts                    ✅ Phase 1 - COMPLETE
+    soul.ts                     ✅ Phase 8.5 - COMPLETE (SoulTrait type, extractedTraits, renderSoulBlock with traits)
     ambient-processor.ts        ✅ Phase 4 - COMPLETE
     canonical-explanations.ts   ✅ Phase 4 - COMPLETE
   extraction/
     tier1-local.ts              ✅ Phase 1 - COMPLETE
     tier2-llm.ts                ✅ Phase 2 - COMPLETE
+    soul-extractor.ts           ✅ Phase 8.5 - COMPLETE (soul trait sampling, prompt, parsing, merging)
     relationship-classifier.ts  ✅ Phase 2 - COMPLETE
   style/
     model.ts                    ✅ Phase 3 - COMPLETE (includes fingerprinting)
@@ -2384,6 +2561,7 @@ components/intelligence/
   ai-orb-button.tsx             ✅ Phase 7 - COMPLETE
   ai-companion-panel.tsx        ✅ Phase 7 - COMPLETE
   stream-of-consciousness.tsx   ✅ Phase 7 - COMPLETE
+  soul-editor.tsx               ✅ Phase 8.5 - COMPLETE (review/edit UI for auto-extracted traits)
   debug/
     index.ts                    ✅ Phase 8 - COMPLETE
     user-state-dashboard.tsx    ✅ Phase 8 - COMPLETE
@@ -2463,6 +2641,16 @@ Note: `framer-motion` is for the AI Orb animations and smooth panel transitions.
 - [x] Proactive engine
 - [x] Activity log
 
+### Phase 8.5 Auto-Soul Extraction
+- [x] SoulTrait type and extractedTraits on UserSoul
+- [x] renderSoulBlock() renders traits grouped by category
+- [x] Soul extractor module (sampling, prompt, parsing, merging)
+- [x] Soul extraction mode in extract API route
+- [x] soul_updated event type
+- [x] Background worker soul extraction with time-gated tick
+- [x] Companion soul refresh on soul_updated event
+- [x] Soul Editor transformed to review/edit UI
+
 ### Phase 8 Observability & Debug
 - [x] Metrics collector
 - [x] User state dashboard
@@ -2535,8 +2723,9 @@ export default function RootLayout({ children }) {
 | 6 | Weeks 17-19 | Triggers System | ✅ COMPLETE |
 | **7** | **Weeks 20-23** | **AI Companion UI** | ✅ COMPLETE |
 | 8 | Weeks 24-26 | Observability & Debug | ✅ COMPLETE |
+| **8.5** | **Post-plan** | **Auto-Soul Extraction** | ✅ COMPLETE |
 
-**Total: ~26 weeks / 6 months**
+**Total: ~26 weeks + post-plan additions**
 
 ---
 
@@ -2918,9 +3107,19 @@ useEffect(() => {
 
 ---
 
-## Implementation Status: ~90% COMPLETE
+## Implementation Status: ~95% COMPLETE
 
 ### What's Built
+
+**Auto-Soul Extraction (Phase 8.5):**
+- Soul trait extraction from sent messages across all chats
+- Message sampling with diversity (round-robin across chats, 70/30 recent/older split)
+- LLM-based trait extraction (personality, communication_style, value, background, habit, preference, identity)
+- Trait merging with deduplication (word overlap >60%), confidence boosting on re-confirmation
+- User-pinned and user-edited traits preserved across re-extractions
+- Background worker integration with configurable interval
+- Soul Editor transformed from manual form to review/edit UI with pin/edit/delete per trait
+- Auto-refresh via soul_updated event bus integration
 
 **Core Infrastructure:**
 - IndexedDB storage with Dexie (contacts, user state, agents, triggers)
@@ -2985,3 +3184,5 @@ The AI Companion (Phase 7) is where users first experience the intelligence laye
 - The companion surfaces insights proactively
 
 Everything comes together in a friendly, proactive companion that feels like a knowledgeable friend who's been watching all your conversations.
+
+With Auto-Soul Extraction (Phase 8.5), the system also learns who *you* are — your personality, communication patterns, values, and habits — directly from your sent messages. This means the companion drafts replies that sound like you, not like a generic AI, and the soul profile improves automatically over time without manual configuration.

@@ -10,6 +10,7 @@ import { BeeperMessage } from '@/lib/types';
 import { ContactFact } from './knowledge/types';
 import { UserIntelligence } from './user-state/types';
 import { ProactiveAction } from './proactive-engine';
+import { AttentionScore } from './attention-model';
 
 // ============================================
 // EVENT TYPES
@@ -49,7 +50,7 @@ export type IntelligenceEvent =
   | { type: 'proactive_action_dismissed'; actionType: string; chatId?: string }
 
   // Trigger events
-  | { type: 'trigger_fired'; triggerId: string; triggerName: string }
+  | { type: 'trigger_fired'; triggerId: string; triggerName: string; actionType?: string; data?: Record<string, unknown> }
   | { type: 'trigger_created'; triggerId: string }
   | { type: 'trigger_deleted'; triggerId: string }
 
@@ -57,6 +58,12 @@ export type IntelligenceEvent =
   | { type: 'agent_spawned'; agentId: string; agentType: string; contextId?: string }
   | { type: 'agent_activated'; agentId: string }
   | { type: 'agent_deactivated'; agentId: string; newLifecycle: string }
+
+  // Global attention events
+  | { type: 'global_attention_update'; scores: AttentionScore[]; timestamp: string }
+
+  // Soul events
+  | { type: 'soul_updated'; traitCount: number; newTraits: number }
 
   // System events
   | { type: 'worker_started' }

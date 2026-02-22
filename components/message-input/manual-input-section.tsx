@@ -4,7 +4,8 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Loader2, Send, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { AiOrbButton } from '@/components/intelligence/ai-orb-button';
+import { AiMatrixButton } from '@/components/intelligence/ai-matrix-button';
+import { OrbState } from '@/hooks/use-orb-state';
 
 interface ManualInputSectionProps {
   draftText: string;
@@ -13,8 +14,8 @@ interface ManualInputSectionProps {
   sendSuccess: boolean;
   onSend: () => void;
   // AI Companion props
-  isAiEnabled?: boolean;
-  hasCompanionActivity?: boolean;
+  orbState?: OrbState;
+  orbLabel?: string;
   onToggleEnabled?: () => void;
 }
 
@@ -24,8 +25,8 @@ export function ManualInputSection({
   isSending,
   sendSuccess,
   onSend,
-  isAiEnabled = false,
-  hasCompanionActivity = false,
+  orbState = 'off',
+  orbLabel,
   onToggleEnabled,
 }: ManualInputSectionProps) {
   return (
@@ -50,10 +51,9 @@ export function ManualInputSection({
       <div className="flex gap-2 items-center">
         {/* AI Orb Button - inline with send */}
         {onToggleEnabled && (
-          <AiOrbButton
-            isEnabled={isAiEnabled}
-            isPanelOpen={false}
-            hasActivity={hasCompanionActivity}
+          <AiMatrixButton
+            orbState={orbState}
+            orbLabel={orbLabel}
             onToggleEnabled={onToggleEnabled}
             size="md"
           />

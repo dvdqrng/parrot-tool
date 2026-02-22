@@ -10,6 +10,8 @@ import { MessageCard } from './message-card';
 import { ColumnHeader } from './column-header';
 import { BeeperMessage, BeeperAttachment, Draft, KanbanCard, KanbanColumns, ColumnId, MediaType, KanbanGroupBy, StatusColumnId } from '@/lib/types';
 import { getPlatformInfo } from '@/lib/beeper-client';
+import { useGlobalAttention } from '@/hooks/use-global-attention';
+import type { AttentionScore } from '@/lib/intelligence/attention-model';
 
 // URL detection regex
 const URL_REGEX = /(https?:\/\/[^\s]+)/g;
@@ -142,9 +144,12 @@ function computePlatformColumns(
   chatInfo?: Record<string, ChatInfo>
 ): KanbanColumns {
   const columns: KanbanColumns = {};
+  const seenIds = new Set<string>();
 
-  // Helper to add a card to a platform column
+  // Helper to add a card to a platform column (with deduplication)
   const addToColumn = (platform: string, card: KanbanCard) => {
+    if (seenIds.has(card.id)) return; // Skip duplicates
+    seenIds.add(card.id);
     const normalizedPlatform = platform.toLowerCase() || 'unknown';
     if (!columns[normalizedPlatform]) {
       columns[normalizedPlatform] = [];
@@ -252,6 +257,17 @@ export function MessageBoard({
   onCancelSending,
 }: MessageBoardProps) {
   const isPlatformMode = groupBy === 'platform';
+
+  // Global attention scores for per-card indicators
+  const { scores: attentionScores } = useGlobalAttention();
+  const attentionMap = useMemo(() => {
+    const map = new Map<string, AttentionScore>();
+    for (const s of attentionScores) {
+      map.set(s.chatId, s);
+    }
+    return map;
+  }, [attentionScores]);
+
   // Store previous column arrays to reuse when content hasn't changed
   const prevColumnsRef = useRef<KanbanColumns>({
     unread: [],
@@ -448,17 +464,23 @@ export function MessageBoard({
                     </div>
                   ) : (
                     <>
-                      {(columns[columnId] || []).map((card) => (
-                        <MessageCard
-                          key={card.id}
-                          card={card}
-                          onClick={() => onCardClick(card)}
-                          onArchive={!isPlatformMode && columnId !== 'archived' ? onArchive : undefined}
-                          onUnarchive={!isPlatformMode && columnId === 'archived' ? onUnarchive : undefined}
-                          onHide={onHide}
-                          onDeleteDraft={onDeleteDraft}
-                        />
-                      ))}
+                      {(columns[columnId] || []).map((card) => {
+                        const chatId = card.message?.chatId || card.draft?.chatId;
+                        const attention = chatId ? attentionMap.get(chatId) : undefined;
+                        return (
+                          <MessageCard
+                            key={card.id}
+                            card={card}
+                            onClick={() => onCardClick(card)}
+                            onArchive={!isPlatformMode && columnId !== 'archived' ? onArchive : undefined}
+                            onUnarchive={!isPlatformMode && columnId === 'archived' ? onUnarchive : undefined}
+                            onHide={onHide}
+                            onDeleteDraft={onDeleteDraft}
+                            attentionScore={attention?.score}
+                            attentionUrgency={attention?.urgency}
+                          />
+                        );
+                      })}
                       {!isPlatformMode && columnId === 'unread' && hasMore && onLoadMore && (
                         <Button
                           variant="outline"

@@ -149,7 +149,15 @@ export function useChatHistory(
 
     setMessages(prev => {
       const existingIds = new Set(prev.map(m => m.id));
-      const unique = newMessages.filter(m => !existingIds.has(m.id));
+      // Deduplicate within newMessages and filter out already-existing IDs
+      const seenInBatch = new Set<string>();
+      const unique: ChatMessage[] = [];
+      for (const m of newMessages) {
+        if (!existingIds.has(m.id) && !seenInBatch.has(m.id)) {
+          seenInBatch.add(m.id);
+          unique.push(m);
+        }
+      }
       if (unique.length === 0) {
         allMessages = prev;
         return prev;

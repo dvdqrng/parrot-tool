@@ -36,10 +36,14 @@ const DEFAULT_CONFIG: AmbientProcessorConfig = {
 // MAIN PROCESSOR
 // ============================================
 
+const LOG_PREFIX = '[AmbientProcessor]';
+
 export async function processAmbientStream(
   sentMessages: BeeperMessage[],
   config: AmbientProcessorConfig = DEFAULT_CONFIG
 ): Promise<Partial<UserIntelligence>> {
+  console.log(`${LOG_PREFIX} processAmbientStream: ${sentMessages.length} sent messages, window: ${config.windowHours}h`);
+
   const windowStart = new Date(
     Date.now() - config.windowHours * 60 * 60 * 1000
   );
@@ -48,10 +52,14 @@ export async function processAmbientStream(
   );
 
   if (recentMessages.length === 0) {
+    console.log(`${LOG_PREFIX} No recent messages in window - returning default mode`);
     return {
       communicationMode: 'mixed',
     };
   }
+
+  const uniqueChats = new Set(recentMessages.map(m => m.chatId));
+  console.log(`${LOG_PREFIX} Processing ${recentMessages.length} messages across ${uniqueChats.size} chats`);
 
   // Extract tier 1 data from all messages
   const tier1Results = recentMessages.map(extractTier1);
@@ -71,6 +79,16 @@ export async function processAmbientStream(
     distributedInfo,
     recentMessages
   );
+
+  console.log(`${LOG_PREFIX} ✓ Ambient processing complete:`, {
+    topics: activeTopics.length,
+    topTopics: activeTopics.slice(0, 5).map(t => `${t.topic}(${t.frequency})`),
+    distributedInfo: distributedInfo.length,
+    sharedArtifacts: sharedArtifacts.length,
+    activeContexts: activeContexts.length,
+    contextLabels: activeContexts.map(c => c.label),
+    communicationMode,
+  });
 
   return {
     activeTopics,

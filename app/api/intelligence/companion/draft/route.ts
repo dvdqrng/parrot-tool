@@ -3,6 +3,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
 import { ContactIntelligence } from '@/lib/intelligence/knowledge/types';
 import { UserIntelligence } from '@/lib/intelligence/user-state/types';
+import { UserSoul, renderSoulBlock } from '@/lib/intelligence/user-state/soul';
 import { AIProvider } from '@/lib/intelligence-settings';
 
 /**
@@ -24,6 +25,8 @@ interface DraftRequest {
   platform?: string;
   contactIntelligence?: ContactIntelligence;
   userState?: UserIntelligence;
+  soul?: UserSoul;
+  projectedFacts?: Array<{ content: string; category: string }>;
   recentMessages?: Array<{
     id: string;
     text: string;
@@ -33,6 +36,12 @@ interface DraftRequest {
   }>;
   draftText?: string;
   intent?: string; // Optional user-specified intent
+  chatLanguage?: string;
+  attentionContext?: {
+    score: number;
+    urgency: string;
+    reason: string;
+  };
 }
 
 function buildDraftPrompt(req: DraftRequest): string {
@@ -40,6 +49,13 @@ function buildDraftPrompt(req: DraftRequest): string {
     `You are an expert at drafting conversational messages. Generate a natural, contextual reply.`,
     ``,
   ];
+
+  // Soul/identity block (injected first, before contact context)
+  const soulBlock = renderSoulBlock(req.soul);
+  if (soulBlock) {
+    parts.push(soulBlock);
+    parts.push(``);
+  }
 
   // Contact context
   if (req.contactName) {
@@ -65,11 +81,20 @@ function buildDraftPrompt(req: DraftRequest): string {
       parts.push(`- Punctuation: ${style.punctuation}`);
       parts.push(`- Emoji usage: ${style.emojiUsage}`);
       parts.push(`- Message style: ${style.messageBreaking}`);
+      if (style.avgMessageLength) {
+        parts.push(`- Average message length: ${style.avgMessageLength} chars`);
+      }
     }
   }
 
-  // Known facts
-  if (req.contactIntelligence?.facts && req.contactIntelligence.facts.length > 0) {
+  // Known facts — use projected facts if available, else fall back to raw facts
+  if (req.projectedFacts && req.projectedFacts.length > 0) {
+    parts.push(``);
+    parts.push(`## Known Facts`);
+    req.projectedFacts.forEach((fact) => {
+      parts.push(`- ${fact.content}`);
+    });
+  } else if (req.contactIntelligence?.facts && req.contactIntelligence.facts.length > 0) {
     parts.push(``);
     parts.push(`## Known Facts`);
     req.contactIntelligence.facts
@@ -90,13 +115,62 @@ function buildDraftPrompt(req: DraftRequest): string {
     });
   }
 
-  // User's active context
+  // User's active context (projected contexts are pre-filtered by caller)
   if (req.userState?.activeContexts && req.userState.activeContexts.length > 0) {
     parts.push(``);
     parts.push(`## User's Current Contexts`);
-    req.userState.activeContexts.slice(0, 2).forEach((ctx) => {
+    req.userState.activeContexts.forEach((ctx) => {
       parts.push(`- ${ctx.label}: ${ctx.status || 'Active'}`);
     });
+  }
+
+  // Distributed info: things shared with others but not this contact
+  if (req.userState?.distributedInfo && req.userState.distributedInfo.length > 0) {
+    const relevant = req.userState.distributedInfo.filter(
+      d => d.sharedWith.length > 0 && req.chatId && !d.sharedWith.includes(req.chatId)
+    );
+    if (relevant.length > 0) {
+      parts.push(``);
+      parts.push(`## Info Shared With Others But Not This Contact`);
+      relevant.slice(0, 3).forEach(d => {
+        parts.push(`- ${d.content} (shared with ${d.sharedWith.length} other contact(s))`);
+      });
+    }
+  }
+
+  // Canonical explanations
+  if (req.userState?.canonicalExplanations && req.userState.canonicalExplanations.length > 0) {
+    parts.push(``);
+    parts.push(`## How the User Typically Explains Things`);
+    req.userState.canonicalExplanations.slice(0, 3).forEach(e => {
+      parts.push(`- "${e.topic}": ${e.shortVersion}`);
+    });
+  }
+
+  // Active topics
+  if (req.userState?.activeTopics && req.userState.activeTopics.length > 0) {
+    parts.push(``);
+    parts.push(`## User's Active Topics`);
+    req.userState.activeTopics.slice(0, 5).forEach(t => {
+      parts.push(`- ${t.topic} (discussed ${t.frequency} times recently)`);
+    });
+  }
+
+  // Current priorities
+  if (req.userState?.currentPriorities && req.userState.currentPriorities.length > 0) {
+    parts.push(``);
+    parts.push(`## User's Current Priorities`);
+    req.userState.currentPriorities.forEach(p => {
+      parts.push(`- ${p.label}`);
+    });
+  }
+
+  // Attention context
+  if (req.attentionContext && req.attentionContext.score >= 30) {
+    parts.push(``);
+    parts.push(`## Attention Level`);
+    parts.push(`This conversation has ${req.attentionContext.urgency} priority (score: ${req.attentionContext.score}/100)`);
+    parts.push(`Reason: ${req.attentionContext.reason}`);
   }
 
   // Current draft (if editing)
@@ -114,13 +188,22 @@ function buildDraftPrompt(req: DraftRequest): string {
     parts.push(req.intent);
   }
 
+  // Language
+  if (req.chatLanguage && req.chatLanguage !== 'English') {
+    parts.push(``);
+    parts.push(`## Language`);
+    parts.push(`This conversation is in ${req.chatLanguage}. The draft MUST be written in ${req.chatLanguage}.`);
+  }
+
   parts.push(``);
   parts.push(`## Instructions`);
   parts.push(`1. Generate a natural, contextual reply that fits the conversation`);
   parts.push(`2. Match the tone and formality appropriate for this relationship`);
-  parts.push(`3. Keep it concise and natural - avoid being overly formal or robotic`);
+  parts.push(`3. Keep it concise and natural — avoid being overly formal or robotic`);
   parts.push(`4. If the platform has specific style norms, follow them`);
   parts.push(`5. Reference relevant facts when appropriate, but don't force it`);
+  parts.push(`6. If the user has shared related info with other contacts but not this one, consider weaving it in naturally`);
+  parts.push(`7. If explaining something the user has explained before, use their established phrasing`);
   parts.push(``);
   parts.push(`Respond with ONLY the draft message, nothing else. No quotes, no explanation.`);
 
@@ -143,6 +226,23 @@ export async function POST(request: NextRequest) {
       hasContactIntelligence: !!body.contactIntelligence,
       hasUserState: !!body.userState,
       intent: body.intent,
+    });
+
+    // --- TEST LOGS: Soul + Projection ---
+    log('Soul injection check', {
+      hasSoul: !!body.soul,
+      soulName: body.soul?.name || '(none)',
+      toneKeywords: body.soul?.toneKeywords || [],
+      formality: body.soul?.defaultFormality || 'unset',
+      neverDo: body.soul?.neverDo?.length || 0,
+      alwaysDo: body.soul?.alwaysDo?.length || 0,
+      hasCustomPrompt: !!body.soul?.customSystemPrompt,
+    });
+    log('Projected facts check', {
+      hasProjectedFacts: !!body.projectedFacts,
+      projectedFactCount: body.projectedFacts?.length || 0,
+      projectedFacts: body.projectedFacts?.map(f => `[${f.category}] ${f.content.slice(0, 40)}`),
+      fallbackFactCount: body.contactIntelligence?.facts?.filter(f => f.isActive)?.length || 0,
     });
 
     // Use API key from request body (from localStorage) or fall back to env
@@ -170,7 +270,13 @@ export async function POST(request: NextRequest) {
     let draftText = '';
 
     const prompt = buildDraftPrompt(body);
-    log('Prompt built', { promptLength: prompt.length });
+    const soulBlockRendered = renderSoulBlock(body.soul);
+    log('Prompt built', {
+      promptLength: prompt.length,
+      soulBlockPresent: prompt.includes('## About the User'),
+      soulBlockLength: soulBlockRendered.length,
+      promptPreview: prompt.slice(0, 200),
+    });
 
     if (provider === 'openai') {
       log('Calling OpenAI...');
