@@ -1,11 +1,11 @@
 'use client'
 
-import { useEffect } from 'react'
+import { Suspense, useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 
-export default function EmailConfirmedPage() {
+function EmailConfirmedContent() {
   const searchParams = useSearchParams()
   const error = searchParams.get('error')
 
@@ -69,6 +69,14 @@ export default function EmailConfirmedPage() {
         </CardContent>
       </Card>
     </div>
+  )
+}
+
+export default function EmailConfirmedPage() {
+  return (
+    <Suspense>
+      <EmailConfirmedContent />
+    </Suspense>
   )
 }
 
