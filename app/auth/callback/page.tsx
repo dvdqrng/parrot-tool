@@ -15,8 +15,7 @@ export default function AuthCallbackPage() {
 
   async function handleCallback() {
     try {
-      // Supabase sends tokens in the URL hash fragment (#access_token=...&type=signup)
-      // or as query parameters (?code=... for PKCE flow)
+      // Supabase implicit flow sends tokens in the URL hash fragment (#access_token=...&type=signup)
       const hashParams = new URLSearchParams(window.location.hash.substring(1))
       const queryParams = new URLSearchParams(window.location.search)
 
