@@ -1,4 +1,4 @@
-// Prisma schema for Parrot subscription system
+// Prisma schema for Parrot
 // Uses Supabase PostgreSQL as the database
 
 generator client {
@@ -18,37 +18,7 @@ model Profile {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  subscription Subscription?
-
   @@map("profiles")
-}
-
-// Subscription management
-model Subscription {
-  id                    String             @id @default(uuid()) @db.Uuid
-  userId                String             @unique @map("user_id") @db.Uuid
-  status                SubscriptionStatus @default(trialing)
-  trialEndsAt           DateTime?          @map("trial_ends_at")
-  stripeCustomerId      String?            @map("stripe_customer_id")
-  stripeSubscriptionId  String?            @map("stripe_subscription_id")
-  currentPeriodEndsAt   DateTime?          @map("current_period_ends_at")
-  canceledAt            DateTime?          @map("canceled_at")
-  createdAt             DateTime           @default(now()) @map("created_at")
-  updatedAt             DateTime           @updatedAt @map("updated_at")
-
-  profile Profile @relation(fields: [userId], references: [userId], onDelete: Cascade)
-
-  @@map("subscriptions")
-}
-
-enum SubscriptionStatus {
-  trialing
-  active
-  past_due
-  canceled
-  expired
-
-  @@map("subscription_status")
 }
 
 // App version management for updates

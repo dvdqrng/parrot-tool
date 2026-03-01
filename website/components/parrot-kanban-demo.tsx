@@ -7,8 +7,10 @@
 //   - drafts-focus: Conversation view with AI-drafted reply
 //   - context-panel: Message panel + contact intelligence sidebar
 //   - platform-view: Kanban grouped by platform with colored accents
-// Website version: uses a static CSS orb matching the app's AiOrbButton.
+// Website version: uses the real WebGL AiMatrixButton from the app.
 // ============================================
+
+import { AiMatrixButton } from './ai-matrix-button';
 
 type Platform = 'instagram' | 'twitter' | 'telegram' | 'whatsapp' | 'linkedin';
 
@@ -316,61 +318,6 @@ const heroConversation: DemoMessage[] = [
 ];
 
 // ============================================
-// STATIC ORB (matches AiOrbButton visuals without framer-motion)
-// ============================================
-
-type StaticOrbState = 'idle' | 'listening' | 'thinking' | 'learning' | 'ready';
-
-const STATIC_ORB_COLORS: Record<StaticOrbState, { dot: string; lit: string; center: string }> = {
-  idle:      { dot: '#7C3AED', lit: '#A78BFA', center: '#8B5CF6' },
-  listening: { dot: '#8B5CF6', lit: '#C084FC', center: '#A855F7' },
-  thinking:  { dot: '#6366F1', lit: '#60A5FA', center: '#818CF8' },
-  learning:  { dot: '#A855F7', lit: '#FBBF24', center: '#F59E0B' },
-  ready:     { dot: '#6366F1', lit: '#34D399', center: '#10B981' },
-};
-
-function StaticOrb({ state = 'idle', size = 'sm' }: { state?: StaticOrbState; size?: 'sm' | 'md' }) {
-  const sizeMap = { sm: 24, md: 28 };
-  const px = sizeMap[size];
-  const colors = STATIC_ORB_COLORS[state];
-  const cx = px / 2;
-  const cy = px / 2;
-  const r1 = px * 0.15;
-  const r2 = px * 0.28;
-  const r3 = px * 0.42;
-  const dotSize = px * 0.08;
-
-  const dots: Array<{ x: number; y: number; r: number; o: number; fill: string }> = [];
-  // Center dot uses center color
-  dots.push({ x: cx, y: cy, r: dotSize * 1.3, o: 1, fill: colors.center });
-  // Ring 1: 6 dots — alternating dot/lit colors
-  for (let i = 0; i < 6; i++) {
-    const a = (i / 6) * Math.PI * 2 - Math.PI / 2;
-    dots.push({ x: cx + Math.cos(a) * r1, y: cy + Math.sin(a) * r1, r: dotSize, o: 0.9, fill: i % 2 === 0 ? colors.lit : colors.dot });
-  }
-  // Ring 2: 10 dots
-  for (let i = 0; i < 10; i++) {
-    const a = (i / 10) * Math.PI * 2 - Math.PI / 2;
-    dots.push({ x: cx + Math.cos(a) * r2, y: cy + Math.sin(a) * r2, r: dotSize * 0.85, o: 0.7, fill: i % 3 === 0 ? colors.lit : colors.dot });
-  }
-  // Ring 3: 14 dots
-  for (let i = 0; i < 14; i++) {
-    const a = (i / 14) * Math.PI * 2 - Math.PI / 2;
-    dots.push({ x: cx + Math.cos(a) * r3, y: cy + Math.sin(a) * r3, r: dotSize * 0.7, o: 0.5, fill: i % 4 === 0 ? colors.lit : colors.dot });
-  }
-
-  return (
-    <div className="shrink-0 rounded-full" style={{ width: px, height: px }}>
-      <svg width={px} height={px} viewBox={`0 0 ${px} ${px}`}>
-        {dots.map((d, i) => (
-          <circle key={i} cx={d.x} cy={d.y} r={d.r} fill={d.fill} opacity={d.o} />
-        ))}
-      </svg>
-    </div>
-  );
-}
-
-// ============================================
 // SHARED SUB-COMPONENTS
 // ============================================
 
@@ -547,7 +494,7 @@ function KanbanView({ maxCards }: { maxCards?: number }) {
             Type your reply...
           </div>
           <div className="flex items-center gap-2">
-            <StaticOrb state="listening" size="sm" />
+            <AiMatrixButton orbState="listening" size="sm" />
             <div className="flex-1" />
             <button className="bg-zinc-200 text-zinc-400 rounded-lg px-3 py-1.5 text-[11px] font-medium flex items-center gap-1.5">
               <SendIcon className="h-3 w-3" />
@@ -608,7 +555,7 @@ function ConversationDraftView() {
           <p className="text-xs text-zinc-800 leading-relaxed">{conversation1Draft}</p>
         </div>
         <div className="flex items-center gap-2.5 mt-3">
-          <StaticOrb state="ready" size="sm" />
+          <AiMatrixButton orbState="ready" size="sm" />
           <div className="flex-1" />
           <button className="bg-zinc-900 text-white rounded-lg px-4 py-2 text-xs font-medium flex items-center gap-1.5 hover:bg-zinc-800 transition-colors">
             <SendIcon className="h-3 w-3" />
@@ -668,7 +615,7 @@ function MessagePanelWithContextView() {
         {/* Input placeholder */}
         <div className="p-4 border-t border-zinc-100">
           <div className="flex items-center gap-2.5">
-            <StaticOrb state="thinking" size="sm" />
+            <AiMatrixButton orbState="thinking" size="sm" />
             <div className="flex-1 bg-zinc-50 rounded-lg px-3 py-2 text-xs text-zinc-400 border border-zinc-100">
               Type your reply...
             </div>

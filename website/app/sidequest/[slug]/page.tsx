@@ -4,6 +4,7 @@ import { TopNav } from "@/components/top-nav"
 // import { DownloadButton } from "@/components/download-button"
 import { getSidequest, getSidequestSlugs, getAllSidequests } from "@/lib/sidequests"
 import { ParrotKanbanDemo } from "@/components/parrot-kanban-demo"
+import { PlatformFlowDiagram } from "@/components/platform-flow-diagram"
 
 function ActionIcon({ type }: { type: string }) {
   const icons: Record<string, React.ReactNode> = {
@@ -232,6 +233,23 @@ export default async function SidequestPage({ params }: { params: Promise<{ slug
         </section>
       )}
 
+      {/* How it works — Platform Flow Diagram */}
+      {slug === "parrot" && (
+        <section className="container mx-auto px-4 sm:px-6 max-w-6xl py-20">
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-zinc-100 rounded-full text-xs mb-6">
+            <FeatureIcon type="globe" className="w-3.5 h-3.5" />
+            <span>How it works</span>
+          </div>
+          <h2 className="text-3xl sm:text-4xl font-semibold tracking-tight leading-tight mb-4 max-w-2xl">
+            10 platforms. One brain.
+          </h2>
+          <p className="text-lg opacity-40 max-w-xl mb-12">
+            Every message flows through Parrot's intelligence layer — extracting context, learning your style, and preparing a reply before you even open the thread.
+          </p>
+          <PlatformFlowDiagram />
+        </section>
+      )}
+
       {/* Feature Sections */}
       {sidequest.featureSections && sidequest.featureSections.map((section, index) => (
         <section key={index} className="container mx-auto px-4 sm:px-6 max-w-6xl py-20">
@@ -282,7 +300,7 @@ export default async function SidequestPage({ params }: { params: Promise<{ slug
           </div>
 
           <h2 className="text-3xl sm:text-4xl font-semibold tracking-tight mb-4">
-            Built for people who are drowning in DMs.
+            Who it's for.
           </h2>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-12">

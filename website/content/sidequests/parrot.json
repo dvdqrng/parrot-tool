@@ -1,7 +1,7 @@
 {
   "title": "Parrot",
   "tagline": "You have 2,000 unread DMs.",
-  "subtagline": "Parrot pulls every conversation \u2014 Instagram, WhatsApp, LinkedIn, X, Telegram, Discord \u2014 into one inbox and gives you the context, drafts, and tools to reply in seconds instead of minutes.",
+  "subtagline": "Parrot pulls every conversation — Instagram, WhatsApp, LinkedIn, X, Telegram, Discord — into one inbox with AI drafts that sound like you.",
   "category": "Productivity",
   "date": "2025-01",
   "status": "alpha testing",
@@ -13,56 +13,54 @@
   "valueProps": [
     {
       "title": "Your inbox is a graveyard.",
-      "description": "You have messages scattered across 6 apps. Some are weeks old. The people who sent them have already moved on. Parrot pulls everything into one screen so nothing dies in a tab you forgot to check."
+      "description": "Messages scattered across 6 apps, some weeks old. Parrot pulls everything into one screen so nothing slips through."
     },
     {
       "title": "Reply in seconds, not minutes.",
-      "description": "Parrot reads the conversation, pulls in context from past interactions, and drafts a reply in your voice. You tweak it, hit send, move on. What used to take 2 minutes per message now takes 5 seconds."
+      "description": "Parrot drafts a reply in your voice using conversation context. You tweak it, hit send, move on."
     },
     {
       "title": "Know who matters. Act on it.",
-      "description": "Not all DMs are equal. Parrot tracks every interaction across platforms \u2014 who's been engaging for months, who just found you, who's going cold. So when you sit down to reply, you know exactly where to spend your energy."
+      "description": "Tracks interactions across platforms — who's engaged, who's going cold — so you know where to spend energy."
     }
   ],
   "audienceSections": [
     {
-      "title": "If you're a creator or influencer",
+      "title": "Creators & Influencers",
       "points": [
-        "Your DMs are where superfans live and brand deals start. But past 50K followers, you can't keep up.",
-        "Parrot gives you drafts for every message, full context on who's writing, and smart suggestions so you can reply to 100 DMs in the time it used to take for 10.",
-        "Auto-handle the \"what camera do you use?\" questions. Give your real attention to the conversations that matter."
+        "Past 50K followers, you can't keep up with DMs. Parrot gives you drafts, context, and smart suggestions to reply to 100 DMs in the time it takes for 10.",
+        "Auto-handle the repetitive questions. Give your real attention to the conversations that matter."
       ]
     },
     {
-      "title": "If you're a founder",
+      "title": "Founders",
       "points": [
-        "Every DM could be a customer, investor, or hire. But you're building a company, so your inbox gets triaged by urgency and everything else gets forgotten.",
-        "Parrot drafts replies in your voice, flags high-value conversations, and gives you a CRM view of every relationship \u2014 so you stop losing warm leads to slow replies."
+        "Every DM could be a customer, investor, or hire. Parrot drafts replies in your voice and flags high-value conversations with a CRM view of every relationship.",
+        "Stop losing warm leads to slow replies."
       ]
     },
     {
-      "title": "If you run community or sales",
+      "title": "Community & Sales",
       "points": [
-        "You're managing volume across platforms, often as a team.",
-        "Parrot gives you a kanban workflow (Unread \u2192 In Progress \u2192 Done), batch reply tools, and full conversation history across platforms.",
-        "Your team can move through hundreds of messages without dropping context, duplicating work, or letting anyone slip through."
+        "Kanban workflow (Unread → In Progress → Done) with batch reply tools and full conversation history across platforms.",
+        "Move through hundreds of messages without dropping context or letting anyone slip through."
       ]
     }
   ],
   "featureSections": [
     {
       "headline": "Your voice. Zero effort.",
-      "description": "Parrot learns how you actually write \u2014 your slang, your emoji habits, whether you start messages with \"yo\" or \"hey!\" It drafts replies that sound like you wrote them at 1am, not like a chatbot generated them. You review, tweak if you want, and send. Every reply is yours. Parrot just got you there faster.",
+      "description": "Parrot learns how you actually write — your slang, your emoji habits, your tone. It drafts replies that sound like you, not a chatbot.",
       "demo": "drafts-focus"
     },
     {
       "headline": "Everything you need. Before you ask.",
-      "description": "When you open a conversation, Parrot already knows what's going on: full history across platforms, who this person is, what you last talked about, and a suggested reply ready to go. It can pull relevant links from your clipboard, suggest attachments, and surface notes from your CRM \u2014 all before you type a single character.",
+      "description": "Open a conversation and the context is already there: full history, who this person is, what you last talked about, and a suggested reply ready to go.",
       "demo": "context-panel"
     },
     {
       "headline": "Six apps. One screen.",
-      "description": "You're not checking WhatsApp, then Instagram, then LinkedIn, then X, then Telegram, then Discord every morning. Nobody is. That's why messages pile up and people think you're ignoring them. Parrot pulls everything into one view \u2014 threaded, searchable, and organized \u2014 so you can clear your inbox in minutes, not hours.",
+      "description": "Stop checking WhatsApp, then Instagram, then LinkedIn every morning. Parrot pulls everything into one view — threaded, searchable, and organized.",
       "demo": "platform-view"
     }
   ],
@@ -82,22 +80,22 @@
     {
       "icon": "mic",
       "title": "Voice Drafts",
-      "description": "Replies that sound like you. Review, tweak, send. You stay in control."
+      "description": "Replies that sound like you wrote them. Review, tweak, and send."
     },
     {
       "icon": "sparkles",
       "title": "Smart Context",
-      "description": "Full conversation history, contact info, and CRM notes \u2014 surfaced automatically when you open a thread."
+      "description": "Conversation history and contact info surfaced when you open a thread."
     },
     {
       "icon": "inbox",
       "title": "Unified Inbox",
-      "description": "Every platform in one view. Stop switching between six apps."
+      "description": "Every platform in one view. No more tab-switching."
     },
     {
       "icon": "chart",
       "title": "Engagement Tracking",
-      "description": "See who's a superfan, who's slipping away, who you haven't replied to in 2 weeks."
+      "description": "See who's a superfan, who's slipping away, and who needs a reply."
     },
     {
       "icon": "globe",
@@ -107,7 +105,7 @@
     {
       "icon": "kanban",
       "title": "Kanban Workflow",
-      "description": "Drag conversations from Unread \u2192 In Progress \u2192 Done. Nothing gets lost."
+      "description": "Drag conversations: Unread → In Progress → Done."
     }
   ],
   "closingCta": {

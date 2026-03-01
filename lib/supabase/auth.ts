@@ -20,11 +20,6 @@ export async function signUp(email: string, password: string): Promise<{ user: A
     return { user: null, error: error.message }
   }
 
-  if (data.user) {
-    // Create profile and start trial
-    await createProfileWithTrial(data.user.id, email)
-  }
-
   return {
     user: data.user ? { id: data.user.id, email: data.user.email!, emailConfirmed: !!data.user.email_confirmed_at } : null,
     error: null,
@@ -71,23 +66,5 @@ export function onAuthStateChange(callback: (user: AuthUser | null) => void) {
     } else {
       callback(null)
     }
-  })
-}
-
-async function createProfileWithTrial(userId: string, email: string) {
-  const trialEndsAt = new Date()
-  trialEndsAt.setDate(trialEndsAt.getDate() + 7) // 7 day trial
-
-  // Create profile
-  await supabase.from('profiles').insert({
-    user_id: userId,
-    email,
-  })
-
-  // Create subscription with trial
-  await supabase.from('subscriptions').insert({
-    user_id: userId,
-    status: 'trialing',
-    trial_ends_at: trialEndsAt.toISOString(),
   })
 }

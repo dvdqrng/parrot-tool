@@ -13,7 +13,9 @@
       "/Users/davidquiring/Projects/beeper-kanban/public/platforms",
       "/Users/davidquiring/Projects/beeper-kanban/app/sidequest",
       "/Users/davidquiring/Projects/beeper-kanban/website/public/sidequests/parrot",
-      "/Users/davidquiring/Projects/beeper-kanban/website/public/sidequests/bill"
+      "/Users/davidquiring/Projects/beeper-kanban/website/public/sidequests/bill",
+      "/tmp",
+      "/Users/davidquiring/Projects/beeper-kanban/lib/supabase"
     ]
   }
 }

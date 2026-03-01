@@ -49,7 +49,7 @@ export function SignupForm({ onToggleMode }: SignupFormProps) {
       <CardHeader className="space-y-1">
         <CardTitle className="text-2xl font-bold">Create an account</CardTitle>
         <CardDescription>
-          Start your 7-day free trial of Parrot
+          Sign up for Parrot
         </CardDescription>
       </CardHeader>
       <form onSubmit={handleSubmit}>
@@ -95,12 +95,11 @@ export function SignupForm({ onToggleMode }: SignupFormProps) {
           </div>
           <p className="text-xs text-muted-foreground">
             By signing up, you agree to our Terms of Service and Privacy Policy.
-            Your 7-day free trial starts immediately.
           </p>
         </CardContent>
         <CardFooter className="flex flex-col gap-4">
           <Button type="submit" className="w-full" disabled={isLoading}>
-            {isLoading ? 'Creating account...' : 'Start free trial'}
+            {isLoading ? 'Creating account...' : 'Create account'}
           </Button>
           <p className="text-sm text-muted-foreground">
             Already have an account?{' '}

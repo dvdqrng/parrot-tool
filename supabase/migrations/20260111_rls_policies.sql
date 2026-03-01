@@ -1,6 +1,5 @@
 -- Enable Row Level Security on all tables
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
-ALTER TABLE subscriptions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE app_versions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE analytics_events ENABLE ROW LEVEL SECURITY;
 
@@ -17,20 +16,6 @@ CREATE POLICY "Users can update own profile"
 CREATE POLICY "Service role can insert profiles"
   ON profiles FOR INSERT
   WITH CHECK (true);
-
--- Subscriptions: Users can only read their own subscription
-CREATE POLICY "Users can view own subscription"
-  ON subscriptions FOR SELECT
-  USING (auth.uid() = user_id);
-
--- Service role can manage subscriptions (for Stripe webhooks)
-CREATE POLICY "Service role can insert subscriptions"
-  ON subscriptions FOR INSERT
-  WITH CHECK (true);
-
-CREATE POLICY "Service role can update subscriptions"
-  ON subscriptions FOR UPDATE
-  USING (true);
 
 -- App versions: Anyone can read (for update checks)
 CREATE POLICY "Anyone can view app versions"
@@ -51,17 +36,13 @@ CREATE POLICY "Service role can read analytics"
   ON analytics_events FOR SELECT
   USING (true);
 
--- Create a trigger to auto-create profile and subscription on user signup
+-- Create a trigger to auto-create profile on user signup
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS trigger AS $$
 BEGIN
   -- Create profile
   INSERT INTO public.profiles (id, user_id, email, updated_at)
   VALUES (gen_random_uuid(), new.id, new.email, now());
-
-  -- Create trial subscription (7 days)
-  INSERT INTO public.subscriptions (id, user_id, status, trial_ends_at, updated_at)
-  VALUES (gen_random_uuid(), new.id, 'trialing', now() + interval '7 days', now());
 
   RETURN new;
 END;

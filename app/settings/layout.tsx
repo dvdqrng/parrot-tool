@@ -18,7 +18,7 @@ const navItems: NavItem[] = [
     title: 'Account',
     href: '/settings/account',
     icon: User,
-    description: 'Account & subscription',
+    description: 'Your account',
   },
   {
     title: 'Platforms',

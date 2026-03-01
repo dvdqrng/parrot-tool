@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useCallback, useEffect, useMemo } from 'react';
-import Link from 'next/link';
 import { MessageBoard } from '@/components/kanban/message-board';
 import { OnboardingChecklist } from '@/components/onboarding/onboarding-checklist';
 import { MessagePanel } from '@/components/message-panel';
@@ -17,7 +16,6 @@ import { FilterDialog } from '@/components/filter-dialog';
 import { GroupByDialog } from '@/components/group-by-dialog';
 import type { Contact } from '@/app/api/beeper/contacts/route';
 import { useSettingsContext } from '@/contexts/settings-context';
-import { useAuth } from '@/contexts/auth-context';
 import { useBeeperData } from '@/hooks/use-beeper-data';
 import { useDrafts } from '@/hooks/use-drafts';
 import { useBatchSend } from '@/hooks/use-batch-send';
@@ -29,7 +27,6 @@ import { toast } from 'sonner';
 
 export default function Home() {
   const { settings, isLoaded: settingsLoaded, updateSettings, toggleAccount, selectAllAccounts, deselectAllAccounts } = useSettingsContext();
-  const { subscription } = useAuth();
 
   // Use unified Beeper data hook
   const {
@@ -771,15 +768,6 @@ export default function Home() {
 
         {/* Floating bottom bar with contacts overlay */}
         <div className="fixed bottom-6 left-[320px] -translate-x-1/2 z-10 flex flex-col items-center">
-          {/* Trial indicator */}
-          {subscription?.status === 'trialing' && subscription.daysRemaining !== null && (
-            <Link href="/settings/account" className="mb-2">
-              <div className="px-3 py-1.5 bg-amber-500/10 border border-amber-500/20 rounded-full text-xs text-amber-600 dark:text-amber-400 hover:bg-amber-500/20 transition-colors">
-                {subscription.daysRemaining} {subscription.daysRemaining === 1 ? 'day' : 'days'} left in trial
-              </div>
-            </Link>
-          )}
-
           {/* Contacts overlay - positioned above bottom bar */}
           <ContactsDialog
             open={contactsDialogOpen}

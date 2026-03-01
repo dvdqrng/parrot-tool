@@ -26,22 +26,22 @@
     {
       "icon": "users",
       "title": "One App for the whole Gang",
-      "description": "Split all Bills for the Group with only one Person having the App."
+      "description": "Split bills for the whole group — only one person needs the app."
     },
     {
       "icon": "camera",
       "title": "Scan Bills with your camera",
-      "description": "With on device OCR and local AI models Bill App supports fully offline Bill scanning and analysis."
+      "description": "On-device OCR and local AI models. Works fully offline, no internet needed."
     },
     {
       "icon": "currency",
       "title": "Multi Currency Support",
-      "description": "Bill App detects and converts 36 currency on device."
+      "description": "Automatically detects and converts 36 currencies on device."
     },
     {
       "icon": "pdf",
       "title": "PDF Export",
-      "description": "Share your split bill with your friends in your groupchat by sharing a PDF file."
+      "description": "Share the split as a clean PDF directly in your group chat."
     }
   ],
   "actions": {
