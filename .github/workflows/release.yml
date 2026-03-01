@@ -60,6 +60,6 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 
       - name: Publish release
-        run: gh release edit "${{ steps.version.outputs.version }}" --draft=false --latest --generate-notes
+        run: gh release edit "${{ steps.version.outputs.version }}" --draft=false --latest
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
