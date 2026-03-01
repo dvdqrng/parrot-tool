@@ -59,6 +59,11 @@
       "demo": "context-panel"
     },
     {
+      "headline": "Your network. Organized.",
+      "description": "Every contact across every platform — organized in one CRM with AI-extracted context so you never forget who someone is or what you talked about.",
+      "demo": "contacts-crm"
+    },
+    {
       "headline": "Six apps. One screen.",
       "description": "Stop checking WhatsApp, then Instagram, then LinkedIn every morning. Parrot pulls everything into one view — threaded, searchable, and organized.",
       "demo": "platform-view"

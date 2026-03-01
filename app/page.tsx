@@ -801,9 +801,9 @@ export default function Home() {
           {/* Bottom nav with AI stream on top */}
           <div className="flex flex-col items-center gap-2">
             <div className="flex items-center gap-2">
-              <GlobalStream />
               <AttentionSummary onSelectChat={handleAttentionSelect} />
             </div>
+            <GlobalStream />
             <BottomNavigation
               onNewContact={() => {
                 setFilterDialogOpen(false);

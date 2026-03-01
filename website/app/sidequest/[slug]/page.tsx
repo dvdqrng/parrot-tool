@@ -4,6 +4,7 @@ import { TopNav } from "@/components/top-nav"
 // import { DownloadButton } from "@/components/download-button"
 import { getSidequest, getSidequestSlugs, getAllSidequests } from "@/lib/sidequests"
 import { ParrotKanbanDemo } from "@/components/parrot-kanban-demo"
+import { ParrotContactsDemo } from "@/components/parrot-contacts-demo"
 import { PlatformFlowDiagram } from "@/components/platform-flow-diagram"
 
 function ActionIcon({ type }: { type: string }) {
@@ -255,8 +256,8 @@ export default async function SidequestPage({ params }: { params: Promise<{ slug
         <section key={index} className="container mx-auto px-4 sm:px-6 max-w-6xl py-20">
           {/* Label pill */}
           <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-zinc-100 rounded-full text-xs mb-6">
-            <FeatureIcon type={["mic", "sparkles", "inbox"][index] || "sparkles"} className="w-3.5 h-3.5" />
-            <span>{["Voice AI", "Smart Tools", "Unified Inbox"][index] || "Feature"}</span>
+            <FeatureIcon type={["mic", "sparkles", "users", "inbox"][index] || "sparkles"} className="w-3.5 h-3.5" />
+            <span>{["Voice AI", "Smart Tools", "Contacts CRM", "Unified Inbox"][index] || "Feature"}</span>
           </div>
 
           {/* Headline */}
@@ -270,7 +271,11 @@ export default async function SidequestPage({ params }: { params: Promise<{ slug
           </p>
 
           {/* Mockup / Interactive Demo */}
-          {section.demo ? (
+          {section.demo === 'contacts-crm' ? (
+            <div className="rounded-2xl overflow-hidden shadow-lg border border-zinc-200 bg-zinc-50 p-4">
+              <ParrotContactsDemo />
+            </div>
+          ) : section.demo ? (
             <div className="rounded-2xl overflow-hidden shadow-lg border border-zinc-200 bg-zinc-50 p-4">
               <ParrotKanbanDemo variant={section.demo as "full" | "drafts-focus" | "platform-view" | "context-panel"} />
             </div>
